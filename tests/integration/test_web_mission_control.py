@@ -92,7 +92,8 @@ def test_web_ui_is_served_and_arc_web_command_exists(tmp_path: Path) -> None:
     client = TestClient(create_web_app(repo=repo, project_id="ui-demo"))
     page = client.get("/")
     assert page.status_code == 200
-    assert "ARC Mission Control" in page.text
+    assert "ARC — Agent Orchestration Control" in page.text
+    assert "Orchestrators" in page.text
     assert client.get("/static/mission.js").status_code == 200
 
     result = CliRunner().invoke(cli_app, ["web", "--help"])
