@@ -28,16 +28,11 @@ class SandboxUnavailable(RuntimeError):
 class SandboxRunner:
     """Run commands in a hardened Docker container, fail-closed.
 
-    The old implementation executed directly on the host and merely pointed
-    HTTP proxy variables at localhost. That does not prevent raw sockets,
-    arbitrary host-file reads, or subprocess access. This runner requires a
-    real Docker boundary for sandboxed command execution.
-
-    The target repository is mounted read/write at ``/workspace`` because test
-    and build tools commonly create caches/artifacts. The host root filesystem,
-    credentials, and sibling paths are not mounted. Network is disabled by
-    default. For benchmark repositories with custom dependencies, supply a
-    prebuilt per-instance image via ``image=`` or ``ARC_SANDBOX_IMAGE``.
+    The repository is the only host path mounted into the container. Network is
+    disabled by default, capabilities are dropped, privilege escalation is
+    disabled, and CPU/memory/PID limits are enforced. The container runs with
+    the host uid/gid on POSIX so tools can create repository-local build/test
+    artifacts without granting root ownership on the host.
     """
 
     def __init__(
@@ -73,7 +68,7 @@ class SandboxRunner:
         )
         if inspect.returncode != 0:
             raise SandboxUnavailable(
-                f"sandbox image '{self.image}' is unavailable. Build the ARC image with "
+                f"sandbox image '{self.image}' is unavailable. Build it with "
                 "`docker build -f Dockerfile.runner -t arc-runner:latest .` or set "
                 "ARC_SANDBOX_IMAGE to a prebuilt benchmark image."
             )
@@ -126,14 +121,19 @@ class SandboxRunner:
             "--tmpfs",
             "/tmp:rw,noexec,nosuid,size=256m",
         ]
+        if os.name == "posix" and hasattr(os, "getuid") and hasattr(os, "getgid"):
+            docker_cmd.extend(["--user", f"{os.getuid()}:{os.getgid()}"])
         if not self.network_enabled:
             docker_cmd.extend(["--network", "none"])
 
-        # Do not inherit the host environment. Only explicit, non-secret values
+        # Never inherit the host environment. Only explicit non-secret values
         # supplied by the caller are forwarded.
         for key, value in sorted((env_vars or {}).items()):
             upper = key.upper()
-            if any(marker in upper for marker in ("TOKEN", "SECRET", "PASSWORD", "API_KEY", "PRIVATE_KEY")):
+            if any(
+                marker in upper
+                for marker in ("TOKEN", "SECRET", "PASSWORD", "API_KEY", "PRIVATE_KEY")
+            ):
                 raise SandboxUnavailable(f"refusing to forward secret-like env var: {key}")
             docker_cmd.extend(["--env", f"{key}={value}"])
 
@@ -157,8 +157,16 @@ class SandboxRunner:
                 duration_ms=(time.perf_counter() - start) * 1000.0,
             )
         except subprocess.TimeoutExpired as exc:
-            stdout = exc.stdout if isinstance(exc.stdout, str) else (exc.stdout.decode() if exc.stdout else "")
-            stderr = exc.stderr if isinstance(exc.stderr, str) else (exc.stderr.decode() if exc.stderr else "")
+            stdout = (
+                exc.stdout
+                if isinstance(exc.stdout, str)
+                else (exc.stdout.decode() if exc.stdout else "")
+            )
+            stderr = (
+                exc.stderr
+                if isinstance(exc.stderr, str)
+                else (exc.stderr.decode() if exc.stderr else "")
+            )
             return ExecutionResult(
                 command=command,
                 exit_code=-1,
