@@ -55,7 +55,7 @@ dev = [
 ]
 
 [project.scripts]
-arc = "cli.main:app"
+arc = "cli.entry:app"
 
 [tool.setuptools.packages.find]
 where = ["."]
