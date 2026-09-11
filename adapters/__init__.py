@@ -1,5 +1,6 @@
 """Agent adapters package."""
 
+from adapters.antigravity import AntigravityAgentAdapter
 from adapters.base import AgentAdapter, AgentBudget, AgentRunResult
 from adapters.claude import ClaudeAgentAdapter
 from adapters.codex import CodexAgentAdapter
@@ -12,6 +13,7 @@ __all__ = [
     "AgentRunResult",
     "CodexAgentAdapter",
     "ClaudeAgentAdapter",
+    "AntigravityAgentAdapter",
     "OpenCodeAgentAdapter",
     "OpenRouterAgentAdapter",
 ]
