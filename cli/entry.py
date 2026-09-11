@@ -9,7 +9,6 @@ import typer
 from rich import box
 from rich.console import Console
 from rich.panel import Panel
-from rich.prompt import Prompt
 from rich.table import Table
 
 from application.app import ArcApplication
@@ -22,6 +21,7 @@ from application.auth import (
 )
 from application.config import AgentProfile
 from cli.main import app
+from tui.login import choose_login_provider
 
 console = Console()
 auth_app = typer.Typer(help="Sign in, sign out, and inspect vendor-native authentication.", no_args_is_help=True)
@@ -39,31 +39,11 @@ def _brand() -> None:
     )
 
 
-def _auth_table() -> Table:
-    table = Table(box=box.SIMPLE_HEAVY, show_header=False, pad_edge=False)
-    table.add_column("#", style="bold cyan", width=3)
-    table.add_column("Provider", style="bold")
-    table.add_column("Authentication", style="dim")
-    table.add_column("Status", justify="right")
-    for index, spec in enumerate(supported_auth_providers(), start=1):
-        status = auth_status(spec.provider)
-        if status.authenticated:
-            state = "[bold green]● SIGNED IN[/bold green]"
-        elif status.installed:
-            state = "[yellow]○ SIGN IN[/yellow]"
-        else:
-            state = "[red]× NOT INSTALLED[/red]"
-        table.add_row(str(index), spec.display_name, spec.auth_method, state)
-    return table
-
-
 def _select_provider() -> str:
-    _brand()
-    console.print("[bold]Select login method[/bold]\n")
-    console.print(_auth_table())
-    console.print("\n[dim]Use 1–3, then press Enter. ARC opens the provider's own authentication flow.[/dim]")
-    choice = Prompt.ask("[bold cyan]>[/bold cyan]", choices=["1", "2", "3"], default="1")
-    return supported_auth_providers()[int(choice) - 1].provider
+    selected = choose_login_provider()
+    if not selected:
+        raise typer.Exit(0)
+    return selected
 
 
 def _register_profile(repo: Path, provider: str, profile_name: Optional[str], make_default: bool) -> None:
@@ -93,8 +73,7 @@ def login(
     selected = provider or _select_provider()
     try:
         spec = get_auth_spec(selected)
-        if provider:
-            _brand()
+        _brand()
         before = auth_status(spec.provider)
         if before.authenticated:
             console.print(f"[green]✓[/green] Already signed in to [bold]{spec.display_name}[/bold].")
