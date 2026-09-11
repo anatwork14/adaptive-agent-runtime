@@ -1,0 +1,42 @@
+runtime:
+  max_parallel_agents: 3
+  single_writer: true
+
+state:
+  sqlite_path: .arc/state.db
+  wal: true
+
+memory:
+  write_threshold: 2.5
+  enable_vector: true
+  enable_graph_relations: true
+  enable_llm_candidate_extraction: false
+  consolidation_interval_events: 100
+  archive_after_events: 2000
+
+context:
+  default_budget_tokens: 24000
+  min_authoritative_tokens: 3000
+  max_decision_tokens: 2000
+  max_code_tokens: 12000
+  max_assumption_tokens: 2000
+  max_failure_tokens: 2000
+  max_procedure_tokens: 2000
+  max_episode_tokens: 1000
+
+staleness:
+  reject_threshold: 0.8
+  revalidate_threshold: 0.3
+
+verification:
+  default: V0
+  high_risk: V2
+
+budget:
+  per_task_usd: 5.0
+  per_project_usd: 500.0
+
+isolation:
+  network: false
+  cpu_limit: 4
+  memory_limit_gb: 8

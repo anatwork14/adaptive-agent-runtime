@@ -1,0 +1,31 @@
+policy_name: default_deterministic
+description: Static deterministic budget allocation and retrieval routing
+
+budget_allocation:
+  c0_authoritative: 3000
+  c1_decisions: 2000
+  c2_code_evidence: 12000
+  c3_assumptions: 2000
+  c4_failures: 2000
+  c5_procedures: 2000
+  c6_episodes: 1000
+
+retrieval_priority:
+  - authoritative_lookup
+  - active_decisions_and_constraints
+  - exact_code_symbol_lookup
+  - dependency_linked_memory
+  - failures_and_procedures
+  - lexical_retrieval
+  - vector_retrieval
+
+scoring_weights:
+  semantic_relevance: 1.0
+  authority: 1.5
+  freshness: 1.2
+  scope_match: 1.0
+  dependency_match: 1.3
+  historical_utility: 0.8
+  confidence: 0.9
+  contradiction_risk: 2.0
+  token_cost: 0.001
