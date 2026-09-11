@@ -38,8 +38,10 @@ jobs:
       - name: Ruff correctness checks
         run: python -m ruff check . --select E9,F63,F7,F82
 
-      - name: Homepage JavaScript syntax
-        run: node --check docs/arc-site.js
+      - name: Browser JavaScript syntax
+        run: |
+          node --check docs/arc-site.js
+          node --check webui/static/mission.js
 
       - name: Tests
         run: python -m pytest -q

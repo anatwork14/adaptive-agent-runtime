@@ -17,6 +17,8 @@
   <strong><a href="docs/GETTING_STARTED.md">Getting started</a></strong>
   ·
   <strong><a href="docs/OPERATOR_GUIDE.md">Operator guide</a></strong>
+  ·
+  <strong><a href="docs/WEB_MISSION_CONTROL.md">Web Mission Control</a></strong>
 </p>
 
 ARC is a research-oriented runtime **and operator application** for coordinating coding agents without treating chat history, summaries, or vector memory as project truth.
@@ -27,9 +29,9 @@ The core rule is:
 
 Authoritative project state lives in an append-only event stream plus Git state. Memory is a rebuildable, versioned projection used to compile the smallest useful context for each task.
 
-ARC now exposes that runtime through a complete Typer CLI, live task monitoring, named agent profiles, and a Textual terminal Mission Control dashboard.
+ARC exposes that runtime through four synchronized operator surfaces: the Typer CLI, live `arc watch`, a Textual terminal Mission Control, and a localhost browser Mission Control powered by FastAPI + WebSocket events.
 
-**Status:** experimental / pre-alpha. The control-plane substrate, CLI v2, deterministic mock execution, transactional Git integration, and terminal dashboard are implemented. Real provider wrappers, semantic retrieval, stronger provider sandboxing, and repository-scale research evaluation remain active work.
+**Status:** experimental / pre-alpha. The control-plane substrate, CLI v2, deterministic mock execution, transactional Git integration, terminal dashboard, and localhost browser control plane are implemented. Real provider wrappers, semantic retrieval, stronger provider sandboxing, remote authentication/authorization, and repository-scale research evaluation remain active work.
 
 ---
 
@@ -63,10 +65,22 @@ arc events
 
 The built-in `mock` profile is a deterministic zero-credential agent used to validate the **real ARC execution path** without provider costs. It writes a real repository change which must still survive worktree isolation, candidate commit creation, verification, and the integration gate.
 
-Open the terminal application:
+Open terminal Mission Control:
 
 ```bash
 arc dashboard
+```
+
+Open browser Mission Control:
+
+```bash
+arc web --open
+```
+
+Default browser address:
+
+```text
+http://127.0.0.1:8787
 ```
 
 Or monitor a single mission:
@@ -77,7 +91,9 @@ arc watch T001
 
 ---
 
-## ARC Mission Control
+## Mission Control
+
+### Terminal Mission Control
 
 `arc dashboard` is a Textual TUI built on the same application layer as the CLI.
 
@@ -96,22 +112,31 @@ arc watch T001
 [g] run   [y] retry   [x] cancel   [r] refresh   [q] quit
 ```
 
-The dashboard shows:
+### Browser Mission Control
 
-- task DAG and execution state;
-- configured agent profiles and doctor status;
-- project version, budget, active memory, and leases;
-- selected-task metadata and recent event trail;
-- live append-only authoritative events;
-- operator actions routed through `ArcApplication`.
+`arc web` launches a localhost-first FastAPI control plane and responsive browser UI over the same `ArcApplication`.
 
-There is no separate TUI state database and no duplicated execution logic.
+It provides:
+
+- task DAG and mission detail;
+- named agent readiness / doctor state;
+- budget, state-version, memory, and lease telemetry;
+- task create/run/retry/cancel controls;
+- ContextPacket inspection;
+- live authoritative events over WebSocket;
+- local API docs at `/api/docs`.
+
+The browser currently has **no built-in authentication**, so ARC binds to `127.0.0.1` by default and refuses non-loopback exposure unless `--allow-remote` is explicitly supplied. `--allow-remote` is an opt-in safety override, not an authentication mechanism.
+
+See [docs/WEB_MISSION_CONTROL.md](docs/WEB_MISSION_CONTROL.md).
+
+There is no separate TUI/Web project database and no duplicated execution logic.
 
 ---
 
 ## CLI v2
 
-The main operator surface is now:
+The main operator surface is:
 
 ```text
 arc init
@@ -121,6 +146,7 @@ arc replay
 arc run TASK
 arc watch TASK
 arc dashboard
+arc web
 
 arc task create | list | show | run | retry | cancel
 arc agent list | add | remove | doctor
@@ -163,26 +189,27 @@ See [docs/OPERATOR_GUIDE.md](docs/OPERATOR_GUIDE.md) for the full command/config
 
 ## One application boundary
 
-CLI, TUI, and future APIs share one service layer:
+CLI, TUI, browser UI, and future APIs share one service layer:
 
 ```text
-                     ArcApplication
-                           │
-          ┌────────────────┼────────────────┐
-          │                │                │
-       Typer CLI       Textual TUI      future API
-          │                │                │
-          └────────────────┼────────────────┘
-                           ▼
-                      Orchestrator
-                    single writer
-                           │
-          event state + Git integration
+                           ArcApplication
+                                  │
+          ┌───────────────┬───────┼────────┬───────────────┐
+          │               │       │        │               │
+       Typer CLI       arc watch  Textual  FastAPI      future API
+                                  TUI      + WebSocket
+          │               │       │        │               │
+          └───────────────┴───────┼────────┴───────────────┘
+                                  ▼
+                             Orchestrator
+                           single execution writer
+                                  │
+                    event state + Git integration
 ```
 
 `ArcApplication` centralizes task lifecycle, agent/profile resolution, context inspection, project snapshots, and live event access. The existing `Orchestrator` remains the single authoritative execution writer.
 
-This prevents a future GUI from becoming a second implementation of the runtime.
+The browser server adds a single execution lock for web-triggered runs so one server instance does not launch competing integration mutations from two simultaneous button presses.
 
 ---
 
@@ -286,7 +313,7 @@ PASS → cherry-pick same candidate into integration
 FAIL → discard candidate integration attempt
 ```
 
-ARC also keeps `.arc/` out of Git status through the repository-local `.git/info/exclude`, so runtime metadata does not violate the gate's clean-tree invariant and no committed `.gitignore` edit is required.
+ARC keeps `.arc/` out of Git status through the repository-local `.git/info/exclude`, so runtime metadata does not violate the gate's clean-tree invariant and no committed `.gitignore` edit is required.
 
 ---
 
@@ -301,6 +328,8 @@ ARC also keeps `.arc/` out of Git status through the repository-local `.git/info
 | Named agent profiles + `agent doctor` | ✅ implemented |
 | Live `arc watch` | ✅ implemented |
 | Textual `arc dashboard` Mission Control | ✅ implemented |
+| FastAPI `arc web` browser Mission Control | ✅ implemented |
+| WebSocket authoritative event stream | ✅ implemented |
 | Versioned memory + provenance | ✅ implemented |
 | Memory materialization replay path | ✅ implemented |
 | Hard-budget context compiler | ✅ implemented |
@@ -312,9 +341,9 @@ ARC also keeps `.arc/` out of Git status through the repository-local `.git/info
 | Docker-backed command/test sandbox | ✅ implemented |
 | Codex / Claude / OpenCode CLI wrappers | 🧪 experimental |
 | Provider CLI credential/container boundary | 🚧 not complete |
+| Browser authentication / remote multi-user mode | 🚧 not complete |
 | Real semantic embedding provider | 🚧 not complete |
 | OpenRouter tool-using coding loop | 🚧 not complete |
-| Browser Mission Control GUI | 🗺️ next UI layer |
 | Repository-scale iso-cost benchmark | 🚧 not complete |
 | Learned risk / memory policies | 🚧 research stage |
 
@@ -326,8 +355,9 @@ ARC also keeps `.arc/` out of Git status through the repository-local `.git/info
 adaptive-agent-runtime/
 ├── application/    # shared app/service layer + config + agent resolution + events
 ├── adapters/       # provider CLI adapters + explicit MockAgentAdapter
-├── cli/            # Typer CLI v2
+├── cli/            # Typer CLI v2 + installed UI-aware entrypoint
 ├── tui/            # Textual terminal Mission Control
+├── webui/          # FastAPI + packaged localhost browser Mission Control
 ├── context/        # retrieval, ranking, allocation, compiler, staleness
 ├── memory/         # lifecycle, provenance, supersession, consolidation
 ├── runtime/        # orchestrator, gate, leases, recovery, replay, budgets
@@ -337,7 +367,7 @@ adaptive-agent-runtime/
 ├── indexes/        # FTS, deterministic vector baseline, symbols, relations
 ├── eval/           # baselines, faults, grading, statistics
 ├── tests/
-├── docs/           # website + operator documentation
+├── docs/           # public website + operator documentation
 └── final_adaptive_memory_context_runtime.md
 ```
 
@@ -363,16 +393,20 @@ with hidden tests, regression checks, context-pressure strata, and paired task a
 
 ## CI and testing
 
-The CI matrix runs on Python 3.11 and 3.12 and currently checks:
+The CI matrix runs on Python 3.11 and 3.12 and checks:
 
 - install/build of the packaged application;
 - correctness-focused Ruff rules;
-- homepage JavaScript syntax;
+- public-homepage and Web Mission Control JavaScript syntax;
 - the full pytest suite;
 - real Git worktree/candidate/gate integration with `MockAgentAdapter`;
 - CLI v2 lifecycle/profile flows;
 - authoritative retry/cancel semantics;
-- headless Textual dashboard startup.
+- headless Textual dashboard startup;
+- FastAPI snapshot/task/context/run flows;
+- WebSocket authoritative event streaming;
+- packaged Web UI static serving;
+- localhost-only web safety behavior.
 
 Run locally:
 
@@ -389,19 +423,21 @@ ARC executes code produced by AI agents. Treat that as untrusted-code execution.
 
 The command/test execution path can use Docker isolation with network disabled, dropped capabilities, resource limits, and a read-only root filesystem. Provider coding CLIs are still experimental host-mode because safely brokering provider authentication into isolated containers requires additional design.
 
+`arc web` is a local developer control surface, not an authenticated multi-user service. Keep the default loopback binding unless you put an appropriate trusted security boundary in front of it.
+
 Use disposable repositories/environments for experimental provider runs and do not expose valuable host credentials to untrusted generated code.
 
 ---
 
-## Website
+## Public website
 
-Interactive homepage:
+Interactive project homepage:
 
 ```text
 https://anatwork14.github.io/adaptive-agent-runtime/
 ```
 
-GitHub Pages deploys from `docs/` using `.github/workflows/pages.yml`.
+GitHub Pages deploys from `docs/` using `.github/workflows/pages.yml`. This public documentation site is separate from the local `arc web` control plane.
 
 ---
 

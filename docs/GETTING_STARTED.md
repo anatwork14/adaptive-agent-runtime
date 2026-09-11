@@ -1,6 +1,6 @@
 # ARC Getting Started
 
-ARC now exposes the normal operator flow directly through the CLI. You do not need to write Python just to create and run a task.
+ARC exposes the normal operator flow directly through the CLI, terminal Mission Control, and a localhost browser Mission Control. You do not need to write Python just to create and run a task.
 
 ## 1. Install
 
@@ -98,9 +98,9 @@ In another terminal:
 arc watch T001
 ```
 
-`arc watch` reads the same append-only authoritative event stream used by replay and the dashboard.
+`arc watch` reads the same append-only authoritative event stream used by replay and both Mission Control interfaces.
 
-## 7. Open Mission Control
+## 7. Open terminal Mission Control
 
 ```bash
 arc dashboard
@@ -110,15 +110,33 @@ Keyboard controls:
 
 ```text
 r  refresh
- g  run selected READY task
- y  retry selected failed/blocked task
- x  cancel selected task
- q  quit
+g  run selected READY task
+y  retry selected failed/blocked task
+x  cancel selected task
+q  quit
 ```
 
 The Textual TUI shows the task DAG, configured agents and readiness, project/budget state, active memory, task detail, and a live authoritative event log.
 
-## 8. Inspect what ARC used
+## 8. Open browser Mission Control
+
+```bash
+arc web --open
+```
+
+Then open:
+
+```text
+http://127.0.0.1:8787
+```
+
+The browser UI exposes the same project/task state plus interactive task creation, run/retry/cancel controls, context inspection, named agent profiles, and a live WebSocket event stream.
+
+It is intentionally localhost-only by default. ARC refuses a non-loopback bind unless you explicitly supply `--allow-remote`; the current UI has no built-in authentication, so do not expose it directly to an untrusted network.
+
+See [`WEB_MISSION_CONTROL.md`](WEB_MISSION_CONTROL.md) for API and security details.
+
+## 9. Inspect what ARC used
 
 ```bash
 arc events
@@ -134,7 +152,7 @@ For a specific memory:
 arc memory why M_44
 ```
 
-## 9. Run with Codex
+## 10. Run with Codex
 
 After `arc agent doctor builder` reports `READY`:
 
