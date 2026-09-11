@@ -1,16 +1,32 @@
 [build-system]
-requires = ["setuptools>=61.0"]
+requires = ["setuptools>=68.0", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
 name = "adaptive-agent-runtime"
 version = "0.1.0"
-description = "Reliable Context Control for Long-Horizon Multi-Agent Coding: Event-Sourced State, Versioned Adaptive Memory, and Risk-Aware Context Compilation"
+description = "Reliable context control for long-horizon multi-agent coding"
 readme = "README.md"
 requires-python = ">=3.11"
 license = { text = "Apache-2.0" }
 authors = [
-    { name = "ARC Team" }
+    { name = "ARC Contributors" }
+]
+keywords = [
+    "ai-agents",
+    "coding-agents",
+    "multi-agent",
+    "agent-memory",
+    "context-engineering",
+    "event-sourcing",
+]
+classifiers = [
+    "Development Status :: 2 - Pre-Alpha",
+    "License :: OSI Approved :: Apache Software License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Software Development :: Libraries :: Python Modules",
 ]
 dependencies = [
     "pydantic>=2.0.0",
@@ -20,11 +36,18 @@ dependencies = [
     "numpy>=1.24.0",
 ]
 
+[project.urls]
+Homepage = "https://anatwork14.github.io/adaptive-agent-runtime/"
+Repository = "https://github.com/anatwork14/adaptive-agent-runtime"
+Issues = "https://github.com/anatwork14/adaptive-agent-runtime/issues"
+
 [project.optional-dependencies]
 dev = [
     "pytest>=7.0.0",
     "pytest-asyncio>=0.21.0",
     "scipy>=1.10.0",
+    "ruff>=0.6.0",
+    "build>=1.2.0",
 ]
 
 [project.scripts]
@@ -32,10 +55,30 @@ arc = "cli.main:app"
 
 [tool.setuptools.packages.find]
 where = ["."]
-include = ["runtime*", "state*", "memory*", "indexes*", "context*", "isolation*", "adapters*", "verification*", "eval*", "cli*"]
+include = [
+    "runtime*",
+    "state*",
+    "memory*",
+    "indexes*",
+    "context*",
+    "isolation*",
+    "adapters*",
+    "verification*",
+    "eval*",
+    "cli*",
+]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 python_files = ["test_*.py"]
 python_classes = ["Test*"]
 python_functions = ["test_*"]
+
+[tool.ruff]
+target-version = "py311"
+line-length = 100
+exclude = ["final_adaptive_memory_context_runtime.md"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "B"]
+ignore = ["E501"]

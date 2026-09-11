@@ -1,6 +1,9 @@
-"""Execution sandbox / container runner for agent tasks."""
+"""Docker-backed execution sandbox for repository commands and test suites."""
+
+from __future__ import annotations
 
 import os
+import shutil
 import subprocess
 import time
 from dataclasses import dataclass
@@ -18,18 +21,68 @@ class ExecutionResult:
     timed_out: bool = False
 
 
+class SandboxUnavailable(RuntimeError):
+    """Raised when ARC cannot establish the requested isolation boundary."""
+
+
 class SandboxRunner:
-    """Runs commands in an isolated subprocess/container environment."""
+    """Run commands in a hardened Docker container, fail-closed.
+
+    The repository is the only host path mounted into the container. Network is
+    disabled by default, capabilities are dropped, privilege escalation is
+    disabled, and CPU/memory/PID limits are enforced. The container runs with
+    the host uid/gid on POSIX so tools can create repository-local build/test
+    artifacts without granting root ownership on the host.
+    """
 
     def __init__(
         self,
         workspace_path: str | Path,
         network_enabled: bool = False,
         timeout_seconds: int = 120,
+        image: Optional[str] = None,
+        cpus: float = 2.0,
+        memory: str = "4g",
+        pids_limit: int = 256,
     ) -> None:
         self.workspace_path = Path(workspace_path).resolve()
         self.network_enabled = network_enabled
         self.timeout_seconds = timeout_seconds
+        self.image = image or os.environ.get("ARC_SANDBOX_IMAGE", "arc-runner:latest")
+        self.cpus = cpus
+        self.memory = memory
+        self.pids_limit = pids_limit
+
+    def _docker(self) -> str:
+        docker = shutil.which("docker")
+        if docker is None:
+            raise SandboxUnavailable(
+                "Docker is required for ARC sandboxed execution. "
+                "Install Docker or configure a compatible execution backend; "
+                "ARC will not silently fall back to host subprocess execution."
+            )
+        inspect = subprocess.run(
+            [docker, "image", "inspect", self.image],
+            capture_output=True,
+            text=True,
+        )
+        if inspect.returncode != 0:
+            raise SandboxUnavailable(
+                f"sandbox image '{self.image}' is unavailable. Build it with "
+                "`docker build -f Dockerfile.runner -t arc-runner:latest .` or set "
+                "ARC_SANDBOX_IMAGE to a prebuilt benchmark image."
+            )
+        return docker
+
+    def _container_cwd(self, cwd: Path) -> str:
+        resolved = cwd.resolve()
+        try:
+            relative = resolved.relative_to(self.workspace_path)
+        except ValueError as exc:
+            raise SandboxUnavailable(
+                f"sandbox cwd {resolved} escapes workspace {self.workspace_path}"
+            ) from exc
+        return "/workspace" if str(relative) == "." else f"/workspace/{relative.as_posix()}"
 
     def run_command(
         self,
@@ -38,66 +91,87 @@ class SandboxRunner:
         env_vars: Optional[Dict[str, str]] = None,
         timeout: Optional[int] = None,
     ) -> ExecutionResult:
-        """Run a command inside the sandbox."""
-        exec_cwd = cwd or self.workspace_path
-        exec_env = os.environ.copy()
+        """Execute ``command`` in a least-privilege Docker container."""
+        if not command:
+            raise ValueError("sandbox command must not be empty")
+        docker = self._docker()
+        exec_cwd = (cwd or self.workspace_path).resolve()
+        container_cwd = self._container_cwd(exec_cwd)
 
-        # Security boundary: strip any host credentials / keys
-        for key in list(exec_env.keys()):
-            if "TOKEN" in key.upper() or "SECRET" in key.upper() or "KEY" in key.upper():
-                # Allow python/path/system vars
-                if key not in ("PATH", "SYSTEMROOT", "COMSPEC", "TEMP", "TMP"):
-                    del exec_env[key]
-
-        if env_vars:
-            exec_env.update(env_vars)
-
-        # In non-networked mode, inject dummy proxy or flag
+        docker_cmd: List[str] = [
+            docker,
+            "run",
+            "--rm",
+            "--init",
+            "--workdir",
+            container_cwd,
+            "--mount",
+            f"type=bind,src={self.workspace_path},dst=/workspace",
+            "--cap-drop",
+            "ALL",
+            "--security-opt",
+            "no-new-privileges",
+            "--pids-limit",
+            str(self.pids_limit),
+            "--cpus",
+            str(self.cpus),
+            "--memory",
+            self.memory,
+            "--read-only",
+            "--tmpfs",
+            "/tmp:rw,noexec,nosuid,size=256m",
+        ]
+        if os.name == "posix" and hasattr(os, "getuid") and hasattr(os, "getgid"):
+            docker_cmd.extend(["--user", f"{os.getuid()}:{os.getgid()}"])
         if not self.network_enabled:
-            exec_env["NO_NETWORK"] = "1"
-            exec_env["http_proxy"] = "http://127.0.0.1:0"
-            exec_env["https_proxy"] = "http://127.0.0.1:0"
+            docker_cmd.extend(["--network", "none"])
+
+        # Never inherit the host environment. Only explicit non-secret values
+        # supplied by the caller are forwarded.
+        for key, value in sorted((env_vars or {}).items()):
+            upper = key.upper()
+            if any(
+                marker in upper
+                for marker in ("TOKEN", "SECRET", "PASSWORD", "API_KEY", "PRIVATE_KEY")
+            ):
+                raise SandboxUnavailable(f"refusing to forward secret-like env var: {key}")
+            docker_cmd.extend(["--env", f"{key}={value}"])
+
+        docker_cmd.append(self.image)
+        docker_cmd.extend(command)
 
         timeout_sec = timeout or self.timeout_seconds
-        start_time = time.perf_counter()
-
+        start = time.perf_counter()
         try:
-            proc = subprocess.run(
-                command,
-                cwd=str(exec_cwd),
-                env=exec_env,
+            process = subprocess.run(
+                docker_cmd,
                 capture_output=True,
                 text=True,
                 timeout=timeout_sec,
             )
-            duration_ms = (time.perf_counter() - start_time) * 1000.0
             return ExecutionResult(
                 command=command,
-                exit_code=proc.returncode,
-                stdout=proc.stdout,
-                stderr=proc.stderr,
-                duration_ms=duration_ms,
-                timed_out=False,
+                exit_code=process.returncode,
+                stdout=process.stdout,
+                stderr=process.stderr,
+                duration_ms=(time.perf_counter() - start) * 1000.0,
             )
-        except subprocess.TimeoutExpired as e:
-            duration_ms = (time.perf_counter() - start_time) * 1000.0
-            stdout = e.stdout if isinstance(e.stdout, str) else (e.stdout.decode() if e.stdout else "")
-            stderr = e.stderr if isinstance(e.stderr, str) else (e.stderr.decode() if e.stderr else "")
+        except subprocess.TimeoutExpired as exc:
+            stdout = (
+                exc.stdout
+                if isinstance(exc.stdout, str)
+                else (exc.stdout.decode() if exc.stdout else "")
+            )
+            stderr = (
+                exc.stderr
+                if isinstance(exc.stderr, str)
+                else (exc.stderr.decode() if exc.stderr else "")
+            )
             return ExecutionResult(
                 command=command,
                 exit_code=-1,
                 stdout=stdout,
-                stderr=stderr + f"\nCommand timed out after {timeout_sec}s",
-                duration_ms=duration_ms,
+                stderr=stderr + f"\nSandbox command timed out after {timeout_sec}s",
+                duration_ms=(time.perf_counter() - start) * 1000.0,
                 timed_out=True,
-            )
-        except Exception as e:
-            duration_ms = (time.perf_counter() - start_time) * 1000.0
-            return ExecutionResult(
-                command=command,
-                exit_code=-1,
-                stdout="",
-                stderr=str(e),
-                duration_ms=duration_ms,
-                timed_out=False,
             )

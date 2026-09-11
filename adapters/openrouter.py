@@ -1,21 +1,23 @@
-"""OpenRouter unified model API adapter."""
+"""OpenRouter adapter boundary.
+
+OpenRouter exposes model inference, not a repository-editing coding-agent runtime
+by itself. ARC therefore refuses to pretend that a text completion is a real
+workspace patch. Use OpenRouter behind an actual tool-using agent command, or
+implement a dedicated tool loop before enabling this adapter for execution.
+"""
 
 from pathlib import Path
-from typing import Callable, Optional
+
 from adapters.base import AgentBudget, AgentRunResult
+from adapters.cli_process import AgentAdapterUnavailable
 from context.compiler import ContextPacket
 
 
 class OpenRouterAgentAdapter:
-    """Agent adapter querying models via OpenRouter endpoint."""
+    """Explicitly unsupported as a direct workspace executor for now."""
 
-    def __init__(
-        self,
-        model_name: str = "openai/gpt-4o-mini",
-        mock_handler: Optional[Callable[[ContextPacket, Path], AgentRunResult]] = None,
-    ) -> None:
+    def __init__(self, model_name: str = "openai/gpt-4o-mini") -> None:
         self.model_name = model_name
-        self.mock_handler = mock_handler
 
     async def run(
         self,
@@ -24,18 +26,9 @@ class OpenRouterAgentAdapter:
         workspace: Path,
         budget: AgentBudget,
     ) -> AgentRunResult:
-        if self.mock_handler:
-            return self.mock_handler(context, workspace)
-
-        return AgentRunResult(
-            status="completed",
-            patch_ref="HEAD",
-            diff=f"# OpenRouter patch for {context.task_id}\n",
-            summary=f"Resolved {context.goal} via {self.model_name}",
-            memory_references=list(context.memory_ids),
-            decisions=[],
-            assumptions=[],
-            tool_trace=[],
-            token_usage={"prompt_tokens": context.context_token_count, "completion_tokens": 350},
-            cost_usd=0.01,
+        raise AgentAdapterUnavailable(
+            "OpenRouter is a model gateway, not a filesystem coding-agent runtime. "
+            "ARC previously returned a fake textual diff here. Configure a real "
+            "tool-using agent/CLI that uses OpenRouter, then wrap it with "
+            "SubprocessCodingAgent instead."
         )

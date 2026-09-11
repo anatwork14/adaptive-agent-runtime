@@ -1,0 +1,27 @@
+FROM python:3.11-slim
+
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    PIP_DISABLE_PIP_VERSION_CHECK=1
+
+RUN useradd --create-home --uid 10001 arc
+
+WORKDIR /opt/arc
+COPY pyproject.toml README.md LICENSE ./
+COPY adapters ./adapters
+COPY cli ./cli
+COPY context ./context
+COPY eval ./eval
+COPY indexes ./indexes
+COPY isolation ./isolation
+COPY memory ./memory
+COPY runtime ./runtime
+COPY state ./state
+COPY verification ./verification
+
+RUN python -m pip install --no-cache-dir .[dev]
+
+USER arc
+WORKDIR /workspace
+
+CMD ["python", "-m", "pytest", "-q"]

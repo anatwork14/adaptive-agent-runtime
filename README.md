@@ -1,242 +1,372 @@
-# Reliable Context Control for Long-Horizon Multi-Agent Coding (`arc`)
+# ARC — Adaptive Agent Runtime
 
-> **Event-Sourced State, Versioned Adaptive Memory, and Risk-Aware Context Compilation**
+> **Reliable context control for long-horizon multi-agent coding.**
 
-[![Python 3.11+](https://img.shields.io/badge/python-3.11+-blue.svg)](https://www.python.org/downloads/)
-[![License: Apache 2.0](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](LICENSE)
-[![Tests](https://img.shields.io/badge/tests-30%20passed-brightgreen.svg)]()
+[![CI](https://github.com/anatwork14/adaptive-agent-runtime/actions/workflows/ci.yml/badge.svg)](https://github.com/anatwork14/adaptive-agent-runtime/actions/workflows/ci.yml)
+[![Python 3.11+](https://img.shields.io/badge/python-3.11%2B-3776ab.svg)](https://www.python.org/)
+[![License: Apache-2.0](https://img.shields.io/badge/license-Apache--2.0-6b7280.svg)](LICENSE)
+[![Website](https://img.shields.io/badge/site-GitHub%20Pages-88f7c5.svg)](https://anatwork14.github.io/adaptive-agent-runtime/)
+
+ARC is a research-oriented runtime for coordinating coding agents without treating chat history, summaries, or vector memory as project truth.
+
+The core rule is:
+
+> **Adaptive memory is never authoritative.**
+
+The authoritative project state is an append-only event stream plus git state. Memory is a rebuildable, versioned projection used to compile the smallest useful context for each task.
+
+**Project status:** experimental / pre-alpha. The control-plane architecture is implemented, but provider CLI compatibility, container-level isolation, semantic embeddings, and repository-scale evaluation are still active work. Do not run untrusted agent-generated code on a sensitive host yet.
 
 ---
 
-## 1. Architectural Foundation
+## Why ARC exists
 
-Adaptive Agent Runtime (`arc`) rejects the common failure mode of treating lossy summaries or unbounded vector databases as authoritative shared memory.
+Adding more coding agents creates new failure modes:
 
-Instead, `arc` enforces a strict separation of two planes:
+- Agent B receives stale assumptions from Agent A.
+- Transcript handoff becomes expensive and noisy.
+- Summaries silently lose constraints.
+- Vector retrieval returns facts that were already superseded.
+- Two agents duplicate the same exploration.
+- A patch is "verified" against the wrong repository tree.
+- Failed attempts disappear, so the next worker repeats them.
+
+ARC treats these as **state, context, and integration problems**, not prompt-engineering problems.
+
+---
+
+## Architecture
 
 ```text
-                  ┌──────────────────────────────────┐
-                  │      AUTHORITATIVE STATE PLANE   │
-                  │                                  │
-                  │ append-only events (SQLite WAL)  │
-                  │ task DAG + versions              │
-                  │ git refs / patch hashes          │
-                  │ leases + fencing tokens          │
-                  │ test/gate outcomes               │
-                  │ budgets                          │
-                  │ artifact provenance              │
-                  └───────────────┬──────────────────┘
-                                  │
-                       deterministic projections
-                                  │
-                                  ▼
-                  ┌──────────────────────────────────┐
-                  │         ADAPTIVE MEMORY PLANE    │
-                  │                                  │
-                  │ decisions                        │
-                  │ assumptions                      │
-                  │ failures                         │
-                  │ procedures                       │
-                  │ summaries                        │
-                  │ code-surface memories            │
-                  │ episodic traces                  │
-                  │ lexical/vector/graph indexes     │
-                  └───────────────┬──────────────────┘
-                                  │
-                           context compiler
-                                  │
-                                  ▼
-                         per-agent context
+                              USER / TASK SPEC
+                                     │
+                                     ▼
+                              versioned Task DAG
+                                     │
+                                     ▼
+                    ┌─────────────────────────────┐
+                    │ ORCHESTRATOR — single writer│
+                    └──────────────┬──────────────┘
+                                   │
+                  ┌────────────────┴────────────────┐
+                  ▼                                 ▼
+       AUTHORITATIVE STATE                 ADAPTIVE MEMORY
+       append-only events                  derived projection
+       task/version state                  provenance
+       leases + budgets                    validity intervals
+       candidate commits                   supersession
+       gate outcomes                       failure/procedure memory
+                  │                                 │
+                  └────────────────┬────────────────┘
+                                   ▼
+                           CONTEXT COMPILER
+                     hard budget + real code evidence
+                                   │
+                                   ▼
+                        immutable ContextPacket
+                                   │
+                                   ▼
+                       isolated agent worktree
+                                   │
+                                   ▼
+                         candidate git commit
+                                   │
+                                   ▼
+                    SERIALIZED INTEGRATION GATE
+                      cherry-pick candidate into
+                      temporary verification tree
+                                   │
+                         ┌─────────┴─────────┐
+                         ▼                   ▼
+                       reject             accept
+                                             │
+                                             ▼
+                                  cherry-pick into integration
 ```
 
-### Core Invariant
-> **Adaptive memory is never authoritative.**  
-> Any memory object may be compressed, superseded, forgotten, re-ranked, or deleted without changing project correctness. The authoritative event log is always sufficient to reconstruct complete project state.
+### Correctness boundary
+
+If deleting ARC's memory database/indexes would make you lose what **actually happened**, that information was stored in the wrong place.
+
+The event log must be sufficient to reconstruct authoritative project state. Derived memory can be rebuilt from recorded `memory.materialized` events without re-running a summarizer or model.
 
 ---
 
-## 2. System Invariants
+## What changed in the hardened runtime
 
-- **I1 — Single Authoritative Writer:** Only the orchestrator appends authoritative events. Agents submit requests to the orchestrator.
-- **I2 — Event Log as Ground Truth:** The append-only SQLite WAL event log is the sole source of truth.
-- **I3 — Derived Stores are Rebuildable:** Projections, FTS5 indexes, vector indexes, and memory relation graphs can be purged and rebuilt from the event stream.
-- **I4 — Strict Memory Provenance:** Any memory without one or more source event IDs is rejected.
-- **I5 — Temporal Validity:** Every memory has `valid_from_event`, optional `valid_to_event`, and `superseded_by`.
-- **I6 — Worktree Isolation:** Agents work in isolated git worktrees or sandbox containers.
-- **I7 — Serialized Integration Gate:** Patch integration is serialized through tiered verification stages (G0 Rebase/Staleness, G1 Syntax/Build, G2 Visible Tests, G3 Risk-Tiered Verification V0-V3).
-- **I8 — Immutable Dispatched Context:** Dispatched contexts receive an immutable `context_id`, `state_version`, and canonical SHA-256 `digest`.
-- **I9 — Context Reporting at Submission:** Every patch submission reports the context ID and state version under which it was generated.
-- **I10 — Hidden-Test Isolation:** Grading suites and hidden tests are never exposed to agent execution environments.
+The current branch/runtime addresses several prototype failure modes:
 
----
+### 1. The integration gate validates the actual patch
 
-## 3. Repository Structure
+Agent changes are first materialized as an immutable candidate commit.
+
+The gate then:
 
 ```text
-adaptive-agent-runtime/
-├── README.md
-├── pyproject.toml
-├── configs/
-│   ├── dev.yaml
-│   ├── eval.yaml
-│   └── policies/
-│       ├── default_policy.yaml
-│       └── risk_policy.yaml
-├── runtime/
-│   ├── orchestrator.py    # Single-writer orchestrator
-│   ├── scheduler.py       # Dependency-aware task scheduler
-│   ├── budgets.py         # Financial and token budget accountant
-│   ├── leases.py          # Optimistic leasing and fencing tokens
-│   ├── gate.py            # Serialized integration gate (G0-G3 / V0-V3)
-│   ├── recovery.py        # Automated fault recovery workflows
-│   └── replay.py          # Deterministic event log replay engine
-├── state/
-│   ├── events.py          # SQLite WAL append-only event store
-│   ├── projection.py      # Deterministic state projectors
-│   ├── models.py          # Pydantic models for authoritative state
-│   ├── schema.sql         # SQL schema definition
-│   └── hashing.py         # Canonical JSON and SHA-256 hashing
-├── memory/
-│   ├── models.py          # Typed memory models
-│   ├── candidates.py      # Deterministic candidate extraction triggers
-│   ├── lifecycle.py       # Memory persistence & coordinator
-│   ├── write_gate.py      # Scoring heuristic write gate
-│   ├── provenance.py      # Provenance verification (I4, I5)
-│   ├── conflicts.py       # Conflict classes (T0-T3) & supersession
-│   ├── consolidation.py   # Failure and procedure consolidation
-│   ├── forgetting.py      # Controlled archival and keep-scoring
-│   └── feedback.py        # Operational utility feedback store
-├── indexes/
-│   ├── lexical.py         # SQLite FTS5 full-text index
-│   ├── vector.py          # Local cosine similarity vector index
-│   ├── symbols.py         # AST code symbol extraction and lookup
-│   └── relations.py       # Memory relation graph index
-├── context/
-│   ├── request.py         # ContextRequest specification
-│   ├── retrieval.py       # Ordered strategy retrieval router
-│   ├── ranking.py         # Multi-criteria candidate scoring
-│   ├── allocator.py       # Class token budget allocator (C0-C6)
-│   ├── compiler.py        # ContextCompiler & immutable ContextPacket
-│   ├── staleness.py       # State-version staleness detector
-│   └── digest.py          # Canonical SHA-256 context packet digest
-├── isolation/
-│   ├── worktree.py        # Git worktree manager
-│   ├── container.py       # Subprocess / sandbox container runner
-│   └── checkpoints.py     # Checkpoint manager for rollback
-├── adapters/
-│   ├── base.py            # AgentAdapter protocol & AgentRunResult
-│   ├── codex.py           # Codex / GPT-4o adapter
-│   ├── claude.py          # Anthropic Claude adapter
-│   ├── opencode.py        # Open-weights / local model adapter
-│   └── openrouter.py      # OpenRouter API adapter
-├── verification/
-│   ├── static.py          # Syntax and static checks
-│   ├── reviewer.py        # Automated security boundary reviewer
-│   └── adversarial_tests.py # Test suite runner
-├── eval/
-│   ├── faults/injector.py # Memory fault injector (STALE_STATE, etc.)
-│   ├── grading/hidden_tests.py # Isolated grading runner
-│   ├── baselines/         # Baselines B0, B2, B3, B5, B7
-│   ├── runners/           # Benchmark experiment runner
-│   └── analysis/          # Bootstrap confidence intervals & statistics
-├── cli/
-│   └── main.py            # Typer CLI ('arc')
-└── tests/
-    ├── unit/              # 18 unit tests
-    ├── integration/       # 6 integration tests (IT1-IT6)
-    └── end_to_end/        # Full pipeline test
+candidate commit
+      ↓
+fresh gate worktree at current integration HEAD
+      ↓
+cherry-pick candidate
+      ↓
+static checks / configured visible tests / review
+      ↓
+PASS → cherry-pick same candidate into integration
+FAIL → discard candidate integration attempt
+```
+
+The gate no longer validates the unchanged main tree while the agent's work disappears in a temporary worktree.
+
+### 2. Mock agents are explicit
+
+`MockAgentAdapter` is used only for deterministic tests.
+
+Provider-named adapters no longer fabricate successful patches:
+
+- `CodexAgentAdapter` invokes a real Codex CLI or fails.
+- `ClaudeAgentAdapter` invokes a real Claude CLI or fails.
+- `OpenCodeAgentAdapter` invokes a real OpenCode CLI or fails.
+- `OpenRouterAgentAdapter` currently fails explicitly because a model gateway alone is not a filesystem coding-agent runtime.
+
+You can override provider commands with:
+
+```bash
+export ARC_CODEX_COMMAND='codex exec --full-auto -'
+export ARC_CLAUDE_COMMAND='claude -p'
+export ARC_OPENCODE_COMMAND='opencode run'
+```
+
+### 3. Context budgets are hard ceilings
+
+Risk changes how the budget is allocated; it does not silently create more tokens.
+
+Context packets contain:
+
+- task goal and acceptance criteria;
+- project constraints;
+- dependency state;
+- declared file surface;
+- versioned decisions / assumptions / failures / procedures;
+- actual repository code evidence where available;
+- SHA-256 hashes of source files;
+- project state version and immutable context digest.
+
+### 4. Memory replay is explicit
+
+Derived memory writes can be recorded as `memory.materialized` events.
+
+Replay restores the recorded output rather than calling an LLM again and hoping to regenerate the same summary.
+
+### 5. Fallback vector retrieval is deterministic
+
+The built-in fallback uses stable SHA-256 feature hashing. It is a **lexical baseline**, not a semantic embedding model.
+
+Any experiment claiming semantic retrieval should plug in a real pinned embedding provider and record the model/version.
+
+---
+
+## Current implementation status
+
+| Component | Status |
+|---|---|
+| SQLite WAL authoritative event store | ✅ implemented |
+| Deterministic project/task replay | ✅ implemented |
+| Versioned memory + provenance | ✅ implemented |
+| Memory materialization replay path | ✅ implemented |
+| Hard-budget context compiler | ✅ implemented |
+| Real repository code evidence + hashes | ✅ implemented |
+| Git worktree task isolation | ✅ implemented |
+| Immutable candidate commit | ✅ implemented |
+| Transactional integration gate | ✅ implemented |
+| Explicit mock test adapter | ✅ implemented |
+| Codex / Claude / OpenCode CLI wrappers | 🧪 experimental |
+| Container-level sandbox for untrusted agents | 🚧 not complete |
+| Real semantic embedding provider | 🚧 not complete |
+| OpenRouter tool-using coding loop | 🚧 not complete |
+| Repository-scale iso-cost benchmark | 🚧 not complete |
+| Learned risk / memory policies | 🚧 research stage |
+
+---
+
+## Quickstart
+
+Requirements:
+
+- Python 3.11+
+- Git
+- a clean git repository for agent execution
+
+Install from source:
+
+```bash
+git clone https://github.com/anatwork14/adaptive-agent-runtime.git
+cd adaptive-agent-runtime
+python -m venv .venv
+source .venv/bin/activate
+pip install -e ".[dev]"
+```
+
+Check the CLI:
+
+```bash
+arc --help
+```
+
+Run tests:
+
+```bash
+python -m pytest -q
+```
+
+Build the package:
+
+```bash
+python -m build
 ```
 
 ---
 
-## 4. CLI Quickstart (`arc`)
+## CLI concepts
 
-The system provides the `arc` command-line utility:
+The existing CLI exposes project state, event history, context compilation, memory inspection, and replay operations.
 
-### Initialize Project
+Examples:
+
 ```bash
 arc init . --project-id my_project
-```
-
-### View Project Status, Task DAG, and Budget
-```bash
 arc status
-```
-
-### View Authoritative Events
-```bash
 arc events --limit 20
-```
-
-### Compile Context for a Task
-```bash
 arc context build task_1 --agent codex
-```
-
-### Inspect Memory Provenance ("Killer Debugging Feature")
-```bash
 arc memory why M_DEC_1
-```
-Output:
-```text
-──────────────── Memory Provenance: M_DEC_1 ────────────────
-Type: decision
-Status: active
-Derived from Events: [12]
-Valid Interval: Event 12 -> current
-Content:
-  Decision: All auth APIs return Result[T], not tuples
-Access Count: 3
-```
-
-### Replay Event History from Scratch
-```bash
 arc replay
 ```
 
-### Consolidate Recurring Failures
-```bash
-arc memory consolidate
-```
+The intended debugging experience is provenance-first:
 
-### Rebuild Derived Indexes from Events
-```bash
-arc memory rebuild-index
+```text
+$ arc memory why M_77
+
+Memory M_77
+Type: decision
+Status: active
+Derived from: event 4812, event 4799
+Valid: event 4812 → current
+Delivered to: T17 / codex_2, T21 / claude_1
 ```
 
 ---
 
-## 5. Verification and Testing
+## Repository structure
 
-Run the full automated test suite:
-```bash
-python -m pytest tests/ -v
+```text
+adaptive-agent-runtime/
+├── adapters/       # real CLI adapters + explicit MockAgentAdapter
+├── cli/            # Typer CLI
+├── configs/        # runtime / evaluation policies
+├── context/        # retrieval, ranking, allocation, compiler, staleness
+├── eval/           # baselines, faults, grading, statistics
+├── indexes/        # FTS, deterministic vector baseline, symbols, relations
+├── isolation/      # git worktrees and execution boundaries
+├── memory/         # lifecycle, provenance, supersession, consolidation
+├── runtime/        # orchestrator, gate, leases, recovery, replay, budgets
+├── state/          # authoritative event store + deterministic projections
+├── verification/   # static checks, reviewer, test runner
+├── tests/
+├── docs/           # static GitHub Pages site
+└── final_adaptive_memory_context_runtime.md
 ```
-
-### Test Coverage Highlights:
-- **Unit Tests (`tests/unit/`):**
-  - Event store monotonicity, content hashing, payload validation
-  - Deterministic state projections, task DAG scheduling, leases, budgets
-  - Memory provenance enforcement (I4/I5), conflict detection (T0-T3)
-  - Lexical FTS5 search, vector embeddings, AST symbol lookups
-  - Context compiler budget compliance (AC4), digest stability, staleness detection (AC6)
-  - Typer CLI command invocations
-- **Integration Tests (`tests/integration/`):**
-  - **IT1 Cold Handoff:** Complete task transfer without transcript history
-  - **IT2 Superseded API:** Guaranteeing superseded facts are excluded (AC3)
-  - **IT3 Concurrent Dependency Change:** Detecting concurrent state drift
-  - **IT4 Failed Attempt Memory:** Generating and delivering failure recovery knowledge
-  - **IT5 Deterministic Replay:** Rebuilding complete state from scratch after index wipe (AC1, AC2)
-  - **IT6 Memory Archival:** Archiving low-value memories while preserving critical decisions
-- **End-to-End Tests (`tests/end_to_end/`):**
-  - Multi-agent pipeline with heterogeneous agents (Codex + Claude), fault injection, and benchmark experiment aggregation.
 
 ---
 
-## 6. Research Baselines
+## Research framing
 
-- **B0:** Single agent, full uninterrupted session.
-- **B2:** Static multi-agent transcript handoff.
-- **B3:** Static structured handoff without long-term memory (key baseline).
-- **B5:** Standard vector top-k memory (unversioned).
-- **B7:** Full proposed runtime (`arc`) with versioned adaptive memory and serialized integration gate.
+ARC asks a falsifiable question:
+
+> Can versioned, provenance-aware context control improve long-horizon coding reliability or reduce cost relative to transcript handoff, static structured handoff, and ordinary vector top-k memory **at matched cost**?
+
+Planned primary comparisons include:
+
+- single agent;
+- single-agent pipeline;
+- multi-agent transcript handoff;
+- static structured handoff;
+- rolling summary;
+- vector top-k memory;
+- event-sourced static memory;
+- full ARC context control.
+
+Primary outcome:
+
+```text
+resolved rate @ iso-cost
+```
+
+with hidden tests, regression checks, context-pressure strata, and paired task analysis.
+
+The project is deliberately designed so a negative result can still produce a useful characterization study.
+
+---
+
+## Website / GitHub Pages deployment
+
+The landing page lives in:
+
+```text
+docs/index.html
+```
+
+A Pages workflow is included at:
+
+```text
+.github/workflows/pages.yml
+```
+
+After merging the workflow to `main`:
+
+1. Open **Repository Settings → Pages**.
+2. Under **Build and deployment**, choose **GitHub Actions** as the source.
+3. Run the **Deploy Pages** workflow once if it does not start automatically.
+4. The site will be published at:
+
+```text
+https://anatwork14.github.io/adaptive-agent-runtime/
+```
+
+Future pushes to `main` that modify `docs/**` redeploy automatically.
+
+---
+
+## CI
+
+`.github/workflows/ci.yml` runs on pull requests and development branches:
+
+- Python 3.11 and 3.12;
+- correctness-focused Ruff checks;
+- pytest;
+- package build.
+
+Style cleanup is intentionally not a blocking gate while the prototype is being structurally hardened.
+
+---
+
+## Security
+
+ARC executes code produced by AI agents. Treat that as untrusted-code execution.
+
+The current provider CLI wrappers are **not yet a complete container security boundary**. Use disposable repositories/environments and do not expose host credentials to experimental runs.
+
+A production-ready sandbox should include at least:
+
+- container/VM isolation;
+- explicit filesystem mounts;
+- network deny-by-default;
+- CPU/memory/PID limits;
+- no host SSH/cloud credentials;
+- timeout and hard kill;
+- `no-new-privileges` / capability dropping where applicable.
+
+---
+
+## License
+
+Apache-2.0. See [LICENSE](LICENSE).
