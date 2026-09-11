@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Dict, Literal, Optional
+from typing import Dict, List, Literal, Optional
 
 import yaml
 from pydantic import BaseModel, Field
@@ -28,6 +28,9 @@ class ArcConfig(BaseModel):
 
     project_id: str = "default"
     default_agent: str = "mock"
+    hard_task_usd: float = 5.0
+    hard_project_usd: float = 500.0
+    visible_test_cmd: List[str] = Field(default_factory=list)
     agents: Dict[str, AgentProfile] = Field(default_factory=dict)
 
     @classmethod
