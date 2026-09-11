@@ -37,6 +37,7 @@ class Orchestrator:
     ) -> None:
         self.event_store = event_store
         self.memory_lifecycle = memory_lifecycle
+        self.memory_lifecycle.bind_event_store(event_store)
         self.repo_path = Path(repo_path).resolve()
         self.project_id = project_id
         self.hard_task_usd = hard_task_usd
@@ -50,7 +51,7 @@ class Orchestrator:
         self.worktree_mgr = WorktreeManager(self.repo_path)
 
         self.retriever = MemoryRetriever(self.memory_lifecycle)
-        self.compiler = ContextCompiler(self.event_store)
+        self.compiler = ContextCompiler(self.event_store, repo_path=self.repo_path)
         self.staleness_detector = StalenessDetector(self.event_store, self.memory_lifecycle)
 
     def init_project(self, spec: Dict[str, Any], constraints: Optional[List[str]] = None) -> int:
@@ -179,7 +180,6 @@ class Orchestrator:
                     f"agent {agent_id} did not complete task {task_id}: {agent_result.status}"
                 )
 
-            # The candidate commit, not an arbitrary text field, is the unit of integration.
             candidate_sha = self.worktree_mgr.commit_candidate(
                 task_id,
                 message=f"arc({task_id}): candidate from {agent_id}",
@@ -235,8 +235,6 @@ class Orchestrator:
             )
 
             if gate_result.status == GateStatus.ACCEPTED:
-                # Memory is a derived projection over authoritative events. Process the
-                # committed trajectory only after the candidate entered integration.
                 latest_events = self.event_store.read_after(
                     dispatch_v,
                     project_id=self.project_id,
