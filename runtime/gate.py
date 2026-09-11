@@ -292,6 +292,8 @@ class IntegrationGate:
             merged_commit_sha = self._git(["rev-parse", "HEAD"]).stdout.strip()
             stages_passed.append("G4_integrated")
 
+            # This event is the validation boundary for durable project memory.
+            # Knowledge from rejected candidates is intentionally excluded.
             self.event_store.append(
                 actor="gate",
                 kind="gate.accepted",
@@ -303,6 +305,12 @@ class IntegrationGate:
                     "candidate_commit_sha": submission.candidate_commit_sha,
                     "merged_commit_sha": merged_commit_sha,
                     "agent_id": submission.agent_id,
+                    "summary": submission.summary,
+                    "decisions": submission.decisions,
+                    "assumptions": submission.assumptions,
+                    "procedures": submission.procedures,
+                    "failures": submission.failures,
+                    "memories_used": submission.memories_used,
                     "stages_passed": stages_passed,
                     "staleness_score": staleness_score,
                 },
