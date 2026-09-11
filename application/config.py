@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import subprocess
 from pathlib import Path
 from typing import Dict, List, Literal, Optional
 
@@ -60,7 +61,36 @@ class ConfigStore:
             )
         return config
 
+    def _ensure_runtime_ignored(self) -> None:
+        """Keep `.arc/` local without mutating a user's committed .gitignore.
+
+        ARC's integration gate requires a clean repository. A fresh repository
+        may not already ignore `.arc/`, so initialization records the runtime
+        directory in Git's repository-local `info/exclude` file.
+        """
+        result = subprocess.run(
+            ["git", "rev-parse", "--git-path", "info/exclude"],
+            cwd=str(self.repo),
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        if result.returncode != 0 or not result.stdout.strip():
+            return
+        exclude_path = Path(result.stdout.strip())
+        if not exclude_path.is_absolute():
+            exclude_path = self.repo / exclude_path
+        exclude_path.parent.mkdir(parents=True, exist_ok=True)
+        current = exclude_path.read_text(encoding="utf-8") if exclude_path.exists() else ""
+        existing = {line.strip() for line in current.splitlines()}
+        if ".arc/" in existing:
+            return
+        prefix = "" if not current or current.endswith("\n") else "\n"
+        with exclude_path.open("a", encoding="utf-8") as handle:
+            handle.write(f"{prefix}# ARC local runtime state\n.arc/\n")
+
     def save(self, config: ArcConfig) -> Path:
+        self._ensure_runtime_ignored()
         self.arc_dir.mkdir(parents=True, exist_ok=True)
         payload = config.model_dump(mode="json", exclude_none=True)
         self.path.write_text(
