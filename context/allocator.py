@@ -1,10 +1,10 @@
-"""Context budget allocator across classes C0-C6 with risk-aware adjustments."""
+"""Context budget allocator across classes C0-C6."""
 
 from dataclasses import dataclass
-from typing import Dict, Optional
+from typing import Optional
 
 
-@dataclass
+@dataclass(frozen=True)
 class ClassBudgets:
     c0_authoritative: int
     c1_decisions: int
@@ -15,67 +15,91 @@ class ClassBudgets:
     c6_episodes: int
     total_budget: int
 
+    @property
+    def allocated_total(self) -> int:
+        return (
+            self.c0_authoritative
+            + self.c1_decisions
+            + self.c2_code
+            + self.c3_assumptions
+            + self.c4_failures
+            + self.c5_procedures
+            + self.c6_episodes
+        )
+
 
 class BudgetAllocator:
-    """Allocates finite token budget across context classes based on risk and task requirements."""
+    """Allocate a hard token ceiling across context classes.
+
+    Risk changes the *distribution* of a declared budget; it never silently
+    expands the budget. This is important for iso-token / iso-cost evaluation.
+    """
 
     def __init__(self, base_budget: int = 24000) -> None:
         self.base_budget = base_budget
 
-    def allocate(self, risk: float = 0.5, declared_budget: Optional[int] = None) -> ClassBudgets:
-        """Compute token quotas per class according to Sections 25 & 26."""
-        total = declared_budget or self.base_budget
+    def allocate(
+        self,
+        risk: float = 0.5,
+        declared_budget: Optional[int] = None,
+    ) -> ClassBudgets:
+        total = int(declared_budget or self.base_budget)
+        if total <= 0:
+            raise ValueError("context token budget must be positive")
 
-        # Apply risk-aware multiplier (Section 26)
+        # Baseline proportions. For low risk we reduce historical/assumption
+        # context and bias toward the authoritative core + code. For high risk
+        # we allocate more to code/failure evidence. We then normalize exactly
+        # to one hard budget.
+        weights = {
+            "c0": 0.125,
+            "c1": 0.0833,
+            "c2": 0.5000,
+            "c3": 0.0833,
+            "c4": 0.0833,
+            "c5": 0.0833,
+            "c6": 0.0418,
+        }
         if risk < 0.3:
-            total = int(total * 0.70)
+            weights["c0"] += 0.03
+            weights["c2"] += 0.05
+            weights["c3"] -= 0.02
+            weights["c4"] -= 0.02
+            weights["c6"] -= 0.04
         elif risk > 0.7:
-            total = int(total * 1.25)
+            weights["c2"] += 0.05
+            weights["c4"] += 0.04
+            weights["c6"] -= 0.03
+            weights["c1"] -= 0.02
+            weights["c3"] -= 0.02
+            weights["c5"] -= 0.02
 
-        # Baseline proportions for 24k:
-        # C0: 3000 (12.5%)
-        # C1: 2000 (8.33%)
-        # C2: 12000 (50.0%)
-        # C3: 2000 (8.33%)
-        # C4: 2000 (8.33%)
-        # C5: 2000 (8.33%)
-        # C6: 1000 (4.17%)
-        ratio_c0 = 3000 / 24000
-        ratio_c1 = 2000 / 24000
-        ratio_c2 = 12000 / 24000
-        ratio_c3 = 2000 / 24000
-        ratio_c4 = 2000 / 24000
-        ratio_c5 = 2000 / 24000
-        ratio_c6 = 1000 / 24000
+        weights = {key: max(0.0, value) for key, value in weights.items()}
+        weight_sum = sum(weights.values())
+        normalized = {key: value / weight_sum for key, value in weights.items()}
 
-        # Adjust for high risk: allocate more to code evidence and failure recovery
-        if risk > 0.7:
-            ratio_c2 += 0.05
-            ratio_c4 += 0.03
-            ratio_c6 = max(0.01, ratio_c6 - 0.04)
+        raw = {key: int(total * value) for key, value in normalized.items()}
+        # Integer rounding leaves a few tokens. Give them to code evidence, the
+        # highest-value expandable class.
+        raw["c2"] += total - sum(raw.values())
 
-        c0 = max(1000, int(total * ratio_c0))
-        c1 = max(500, int(total * ratio_c1))
-        c2 = max(2000, int(total * ratio_c2))
-        c3 = max(500, int(total * ratio_c3))
-        c4 = max(500, int(total * ratio_c4))
-        c5 = max(500, int(total * ratio_c5))
-        c6 = max(200, int(total * ratio_c6))
-
-        return ClassBudgets(
-            c0_authoritative=c0,
-            c1_decisions=c1,
-            c2_code=c2,
-            c3_assumptions=c3,
-            c4_failures=c4,
-            c5_procedures=c5,
-            c6_episodes=c6,
+        result = ClassBudgets(
+            c0_authoritative=raw["c0"],
+            c1_decisions=raw["c1"],
+            c2_code=raw["c2"],
+            c3_assumptions=raw["c3"],
+            c4_failures=raw["c4"],
+            c5_procedures=raw["c5"],
+            c6_episodes=raw["c6"],
             total_budget=total,
         )
+        if result.allocated_total != total:
+            raise AssertionError("context class allocation must equal total budget")
+        return result
 
     @staticmethod
     def estimate_tokens(text: str) -> int:
-        """Estimate token count (approximately 4 characters per token)."""
+        """Cheap deterministic estimate (~4 UTF-8 characters/token)."""
         if not text:
             return 0
-        return max(1, len(text) // 4)
+        return max(1, (len(text) + 3) // 4)
