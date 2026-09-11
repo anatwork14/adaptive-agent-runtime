@@ -1,8 +1,9 @@
-"""Pydantic models for Authoritative State Plane."""
+"""Pydantic models for the Authoritative State Plane."""
 
 from datetime import datetime, timezone
 from enum import Enum
 from typing import Any, Dict, List, Optional
+
 from pydantic import BaseModel, Field
 
 
@@ -27,6 +28,7 @@ class GateStatus(str, Enum):
 
 class Event(BaseModel):
     """Authoritative event record in append-only store."""
+
     id: int
     ts: str = Field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
     actor: str
@@ -44,6 +46,7 @@ class Event(BaseModel):
 
 class ProjectState(BaseModel):
     """Materialized projection of a project's authoritative state."""
+
     project_id: str
     version: int = 0
     spec: Dict[str, Any] = Field(default_factory=dict)
@@ -58,6 +61,7 @@ class ProjectState(BaseModel):
 
 class TaskState(BaseModel):
     """Materialized projection of a task in the DAG."""
+
     task_id: str
     project_id: str
     goal: str
@@ -78,6 +82,7 @@ class TaskState(BaseModel):
 
 class Lease(BaseModel):
     """Resource lease with fencing token for concurrency control."""
+
     resource: str
     holder: str
     fencing_token: int
@@ -90,6 +95,7 @@ class Lease(BaseModel):
 
 class BudgetState(BaseModel):
     """Authoritative project and task budget accounting."""
+
     project_id: str
     reserved_usd: float = 0.0
     consumed_usd: float = 0.0
@@ -102,12 +108,22 @@ class BudgetState(BaseModel):
 
 
 class PatchSubmission(BaseModel):
-    """Structured patch submission from an agent."""
+    """Structured patch submission from an agent.
+
+    ``candidate_commit_sha`` is intentionally mandatory for a real submission.
+    The integration gate verifies that exact git object in an isolated gate
+    worktree before cherry-picking it into the integration branch. This avoids
+    the previous failure mode where the gate validated the unchanged main tree
+    while the candidate changes lived only in an agent worktree.
+    """
+
     patch_id: str
     task_id: str
     agent_id: str
     context_id: str
     dispatch_state_version: int
+    candidate_commit_sha: str
+    candidate_branch: Optional[str] = None
     fencing_tokens: List[int] = Field(default_factory=list)
     diff: str = ""
     summary: str = ""
@@ -120,6 +136,7 @@ class PatchSubmission(BaseModel):
 
 class GateResult(BaseModel):
     """Result of serial integration gate evaluation."""
+
     gate_run_id: str
     patch_id: str
     task_id: str
@@ -132,3 +149,4 @@ class GateResult(BaseModel):
     error_detail: Optional[str] = None
     staleness_score: float = 0.0
     verification_level: str = "V0"
+    merged_commit_sha: Optional[str] = None
