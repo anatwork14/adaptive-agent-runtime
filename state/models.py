@@ -110,11 +110,10 @@ class BudgetState(BaseModel):
 class PatchSubmission(BaseModel):
     """Structured patch submission from an agent.
 
-    ``candidate_commit_sha`` is intentionally mandatory for a real submission.
-    The integration gate verifies that exact git object in an isolated gate
-    worktree before cherry-picking it into the integration branch. This avoids
-    the previous failure mode where the gate validated the unchanged main tree
-    while the candidate changes lived only in an agent worktree.
+    ``candidate_commit_sha`` is required by the integration gate for a real
+    merge, but defaults to empty so non-gate utilities (for example staleness
+    unit tests) can still construct a lightweight submission. The gate rejects
+    an empty or invalid SHA before integration.
     """
 
     patch_id: str
@@ -122,7 +121,7 @@ class PatchSubmission(BaseModel):
     agent_id: str
     context_id: str
     dispatch_state_version: int
-    candidate_commit_sha: str
+    candidate_commit_sha: str = ""
     candidate_branch: Optional[str] = None
     fencing_tokens: List[int] = Field(default_factory=list)
     diff: str = ""
