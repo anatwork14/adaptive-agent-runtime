@@ -1,41 +1,24 @@
-"""OpenCode / local open-weight model adapter."""
+"""OpenCode CLI coding-agent adapter."""
 
-from pathlib import Path
-from typing import Callable, Optional
-from adapters.base import AgentBudget, AgentRunResult
-from context.compiler import ContextPacket
+from adapters.cli_process import SubprocessCodingAgent
 
 
-class OpenCodeAgentAdapter:
-    """Agent adapter for open-weights / local models (e.g. Qwen, DeepSeek)."""
+class OpenCodeAgentAdapter(SubprocessCodingAgent):
+    """Run OpenCode as a real workspace-editing CLI agent.
 
-    def __init__(
-        self,
-        model_name: str = "qwen2.5-coder-32b",
-        mock_handler: Optional[Callable[[ContextPacket, Path], AgentRunResult]] = None,
-    ) -> None:
-        self.model_name = model_name
-        self.mock_handler = mock_handler
+    The default command is ``opencode run`` with the ARC prompt on stdin.
+    Override it with ``ARC_OPENCODE_COMMAND`` if your installed version uses a
+    different invocation.
+    """
 
-    async def run(
-        self,
-        *,
-        context: ContextPacket,
-        workspace: Path,
-        budget: AgentBudget,
-    ) -> AgentRunResult:
-        if self.mock_handler:
-            return self.mock_handler(context, workspace)
-
-        return AgentRunResult(
-            status="completed",
-            patch_ref="HEAD",
-            diff=f"# OpenCode patch for {context.task_id}\n",
-            summary=f"OpenCode completed {context.goal}",
-            memory_references=list(context.memory_ids),
-            decisions=[],
-            assumptions=[],
-            tool_trace=[],
-            token_usage={"prompt_tokens": context.context_token_count, "completion_tokens": 300},
-            cost_usd=0.005,
+    def __init__(self, model_name: str | None = None) -> None:
+        command = ["opencode", "run"]
+        if model_name:
+            command.extend(["--model", model_name])
+        super().__init__(
+            name="OpenCode",
+            executable="opencode",
+            command=command,
+            env_command_var="ARC_OPENCODE_COMMAND",
         )
+        self.model_name = model_name
