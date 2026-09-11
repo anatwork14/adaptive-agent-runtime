@@ -8,6 +8,7 @@ import shutil
 from dataclasses import dataclass
 from typing import Optional
 
+from adapters.antigravity import AntigravityAgentAdapter
 from adapters.claude import ClaudeAgentAdapter
 from adapters.codex import CodexAgentAdapter
 from adapters.mock import MockAgentAdapter
@@ -30,6 +31,7 @@ class AgentDoctorResult:
 _PROVIDER_EXECUTABLES = {
     "codex": "codex",
     "claude": "claude",
+    "antigravity": "agy",
     "opencode": "opencode",
 }
 
@@ -56,6 +58,8 @@ def build_agent(profile: AgentProfile):
         return CodexAgentAdapter(model_name=profile.model)
     if profile.provider == "claude":
         return ClaudeAgentAdapter(model_name=profile.model)
+    if profile.provider == "antigravity":
+        return AntigravityAgentAdapter(model_name=profile.model)
     if profile.provider == "opencode":
         return OpenCodeAgentAdapter(model_name=profile.model)
     if profile.provider == "openrouter":
@@ -64,7 +68,12 @@ def build_agent(profile: AgentProfile):
 
 
 def doctor_profile(profile: AgentProfile) -> AgentDoctorResult:
-    """Perform non-invasive provider readiness checks."""
+    """Perform non-invasive provider readiness checks.
+
+    This checks installation only. Authentication is intentionally handled by
+    the separate auth subsystem so status polling does not repeatedly hit
+    vendor login endpoints.
+    """
     if not profile.enabled:
         return AgentDoctorResult(
             profile.name, profile.provider, profile.model, None, False, "DISABLED", "profile disabled"
@@ -86,7 +95,7 @@ def doctor_profile(profile: AgentProfile) -> AgentDoctorResult:
         )
 
     executable = _PROVIDER_EXECUTABLES[profile.provider]
-    override = profile.command_override or os.environ.get(_PROVIDER_COMMAND_ENV[profile.provider], "")
+    override = profile.command_override or os.environ.get(_PROVIDER_COMMAND_ENV.get(profile.provider, ""), "")
     if override:
         try:
             executable = shlex.split(override)[0]
