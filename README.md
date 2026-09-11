@@ -1,6 +1,6 @@
 # ARC — Adaptive Agent Runtime
 
-> **Reliable context control for long-horizon multi-agent coding.**
+> **Reliable context control and Mission Control for long-horizon coding agents.**
 
 [![CI](https://github.com/anatwork14/adaptive-agent-runtime/actions/workflows/ci.yml/badge.svg)](https://github.com/anatwork14/adaptive-agent-runtime/actions/workflows/ci.yml)
 [![Python 3.11+](https://img.shields.io/badge/python-3.11%2B-3776ab.svg)](https://www.python.org/)
@@ -12,18 +12,177 @@
 </p>
 
 <p align="center">
-  👉 <strong><a href="https://anatwork14.github.io/adaptive-agent-runtime/">Explore the Interactive Live Documentation & Architecture Simulator</a></strong>
+  <strong><a href="https://anatwork14.github.io/adaptive-agent-runtime/">Interactive website</a></strong>
+  ·
+  <strong><a href="docs/GETTING_STARTED.md">Getting started</a></strong>
+  ·
+  <strong><a href="docs/OPERATOR_GUIDE.md">Operator guide</a></strong>
 </p>
 
-ARC is a research-oriented runtime for coordinating coding agents without treating chat history, summaries, or vector memory as project truth.
+ARC is a research-oriented runtime **and operator application** for coordinating coding agents without treating chat history, summaries, or vector memory as project truth.
 
 The core rule is:
 
 > **Adaptive memory is never authoritative.**
 
-The authoritative project state is an append-only event stream plus git state. Memory is a rebuildable, versioned projection used to compile the smallest useful context for each task.
+Authoritative project state lives in an append-only event stream plus Git state. Memory is a rebuildable, versioned projection used to compile the smallest useful context for each task.
 
-**Project status:** experimental / pre-alpha. The control-plane architecture is implemented, but provider CLI compatibility, container-level isolation, semantic embeddings, and repository-scale evaluation are still active work. Do not run untrusted agent-generated code on a sensitive host yet.
+ARC now exposes that runtime through a complete Typer CLI, live task monitoring, named agent profiles, and a Textual terminal Mission Control dashboard.
+
+**Status:** experimental / pre-alpha. The control-plane substrate, CLI v2, deterministic mock execution, transactional Git integration, and terminal dashboard are implemented. Real provider wrappers, semantic retrieval, stronger provider sandboxing, and repository-scale research evaluation remain active work.
+
+---
+
+## Start here
+
+Install from source:
+
+```bash
+git clone https://github.com/anatwork14/adaptive-agent-runtime.git
+cd adaptive-agent-runtime
+python -m venv .venv
+source .venv/bin/activate
+pip install -e ".[dev]"
+```
+
+Then, from a clean Git repository that ARC should operate on:
+
+```bash
+arc init . --project-id demo
+arc agent doctor
+
+arc task create "Create a traceable ARC demo artifact" \
+  --file arc_demo.txt \
+  --accept "artifact integrates through the gate" \
+  --risk 0.2
+
+arc run T001 --agent mock
+arc task show T001
+arc events
+```
+
+The built-in `mock` profile is a deterministic zero-credential agent used to validate the **real ARC execution path** without provider costs. It writes a real repository change which must still survive worktree isolation, candidate commit creation, verification, and the integration gate.
+
+Open the terminal application:
+
+```bash
+arc dashboard
+```
+
+Or monitor a single mission:
+
+```bash
+arc watch T001
+```
+
+---
+
+## ARC Mission Control
+
+`arc dashboard` is a Textual TUI built on the same application layer as the CLI.
+
+```text
+┌──────────────────────── ARC Mission Control ─────────────────────┐
+│ TASK DAG                              │ AGENTS / SYSTEM           │
+│ T001  auth middleware   READY         │ ● builder   READY         │
+│ T002  auth tests        CREATED       │ ○ reviewer  READY         │
+├───────────────────────────────────────┼───────────────────────────┤
+│ TASK DETAIL                           │ AUTHORITATIVE EVENTS       │
+│ goal / agent / risk / files / history │ #42 task.created          │
+│                                       │ #43 task.dispatched       │
+│                                       │ #44 context.compiled      │
+└───────────────────────────────────────┴───────────────────────────┘
+
+[g] run   [y] retry   [x] cancel   [r] refresh   [q] quit
+```
+
+The dashboard shows:
+
+- task DAG and execution state;
+- configured agent profiles and doctor status;
+- project version, budget, active memory, and leases;
+- selected-task metadata and recent event trail;
+- live append-only authoritative events;
+- operator actions routed through `ArcApplication`.
+
+There is no separate TUI state database and no duplicated execution logic.
+
+---
+
+## CLI v2
+
+The main operator surface is now:
+
+```text
+arc init
+arc status
+arc events
+arc replay
+arc run TASK
+arc watch TASK
+arc dashboard
+
+arc task create | list | show | run | retry | cancel
+arc agent list | add | remove | doctor
+arc config show | default-agent
+arc context build | inspect
+arc memory list | why | consolidate | rebuild-index
+arc gate inspect
+```
+
+Example named Codex profile:
+
+```bash
+arc agent add builder \
+  --provider codex \
+  --role implementation \
+  --default
+
+arc agent doctor builder
+arc run T001 --agent builder
+```
+
+Provider-named adapters never silently fall back to a mock success:
+
+- `CodexAgentAdapter` invokes a real Codex CLI or fails;
+- `ClaudeAgentAdapter` invokes a real Claude CLI or fails;
+- `OpenCodeAgentAdapter` invokes a real OpenCode CLI or fails;
+- OpenRouter remains gateway-only until ARC has a real filesystem tool loop for it.
+
+Provider command overrides remain available:
+
+```bash
+export ARC_CODEX_COMMAND='codex exec --full-auto -'
+export ARC_CLAUDE_COMMAND='claude -p'
+export ARC_OPENCODE_COMMAND='opencode run'
+```
+
+See [docs/OPERATOR_GUIDE.md](docs/OPERATOR_GUIDE.md) for the full command/config reference.
+
+---
+
+## One application boundary
+
+CLI, TUI, and future APIs share one service layer:
+
+```text
+                     ArcApplication
+                           │
+          ┌────────────────┼────────────────┐
+          │                │                │
+       Typer CLI       Textual TUI      future API
+          │                │                │
+          └────────────────┼────────────────┘
+                           ▼
+                      Orchestrator
+                    single writer
+                           │
+          event state + Git integration
+```
+
+`ArcApplication` centralizes task lifecycle, agent/profile resolution, context inspection, project snapshots, and live event access. The existing `Orchestrator` remains the single authoritative execution writer.
+
+This prevents a future GUI from becoming a second implementation of the runtime.
 
 ---
 
@@ -36,10 +195,10 @@ Adding more coding agents creates new failure modes:
 - Summaries silently lose constraints.
 - Vector retrieval returns facts that were already superseded.
 - Two agents duplicate the same exploration.
-- A patch is "verified" against the wrong repository tree.
+- A patch is verified against the wrong repository tree.
 - Failed attempts disappear, so the next worker repeats them.
 
-ARC treats these as **state, context, and integration problems**, not prompt-engineering problems.
+ARC treats these as **state, context, integration, and recovery problems**, not prompt-engineering problems.
 
 <p align="center">
   <img src="docs/assets/comparison_diagram.jpg" alt="Naive Vector Memory vs ARC Deterministic State Plane" width="100%">
@@ -47,7 +206,7 @@ ARC treats these as **state, context, and integration problems**, not prompt-eng
 
 ---
 
-## Architecture
+## Runtime architecture
 
 <p align="center">
   <img src="docs/assets/architecture_diagram.jpg" alt="ARC Two-Plane Architecture: Authoritative State vs Adaptive Memory" width="100%">
@@ -89,15 +248,13 @@ ARC treats these as **state, context, and integration problems**, not prompt-eng
                                    │
                                    ▼
                     SERIALIZED INTEGRATION GATE
-                      cherry-pick candidate into
-                      temporary verification tree
                                    │
                          ┌─────────┴─────────┐
                          ▼                   ▼
                        reject             accept
                                              │
                                              ▼
-                                  cherry-pick into integration
+                                  integration branch
 ```
 
 ### Correctness boundary
@@ -108,18 +265,12 @@ The event log must be sufficient to reconstruct authoritative project state. Der
 
 ---
 
-## What changed in the hardened runtime
+## Transactional integration
 
-The current branch/runtime addresses several prototype failure modes:
-
-### 1. The integration gate validates the actual patch
-
-Agent changes are first materialized as an immutable candidate commit.
-
-The gate then:
+Agent changes are materialized as an immutable candidate commit. The gate verifies that exact candidate in a fresh worktree before integrating that same commit.
 
 <p align="center">
-  <img src="docs/assets/gate_pipeline.jpg" alt="ARC Serialized Integration Gate Stages: G0 Candidate Commit to G3 Main Branch" width="100%">
+  <img src="docs/assets/gate_pipeline.jpg" alt="ARC Serialized Integration Gate" width="100%">
 </p>
 
 ```text
@@ -129,59 +280,13 @@ fresh gate worktree at current integration HEAD
       ↓
 cherry-pick candidate
       ↓
-static checks / configured visible tests / review
+static checks / configured tests / optional review
       ↓
 PASS → cherry-pick same candidate into integration
 FAIL → discard candidate integration attempt
 ```
 
-The gate no longer validates the unchanged main tree while the agent's work disappears in a temporary worktree.
-
-### 2. Mock agents are explicit
-
-`MockAgentAdapter` is used only for deterministic tests.
-
-Provider-named adapters no longer fabricate successful patches:
-
-- `CodexAgentAdapter` invokes a real Codex CLI or fails.
-- `ClaudeAgentAdapter` invokes a real Claude CLI or fails.
-- `OpenCodeAgentAdapter` invokes a real OpenCode CLI or fails.
-- `OpenRouterAgentAdapter` currently fails explicitly because a model gateway alone is not a filesystem coding-agent runtime.
-
-You can override provider commands with:
-
-```bash
-export ARC_CODEX_COMMAND='codex exec --full-auto -'
-export ARC_CLAUDE_COMMAND='claude -p'
-export ARC_OPENCODE_COMMAND='opencode run'
-```
-
-### 3. Context budgets are hard ceilings
-
-Risk changes how the budget is allocated; it does not silently create more tokens.
-
-Context packets contain:
-
-- task goal and acceptance criteria;
-- project constraints;
-- dependency state;
-- declared file surface;
-- versioned decisions / assumptions / failures / procedures;
-- actual repository code evidence where available;
-- SHA-256 hashes of source files;
-- project state version and immutable context digest.
-
-### 4. Memory replay is explicit
-
-Derived memory writes can be recorded as `memory.materialized` events.
-
-Replay restores the recorded output rather than calling an LLM again and hoping to regenerate the same summary.
-
-### 5. Fallback vector retrieval is deterministic
-
-The built-in fallback uses stable SHA-256 feature hashing. It is a **lexical baseline**, not a semantic embedding model.
-
-Any experiment claiming semantic retrieval should plug in a real pinned embedding provider and record the model/version.
+ARC also keeps `.arc/` out of Git status through the repository-local `.git/info/exclude`, so runtime metadata does not violate the gate's clean-tree invariant and no committed `.gitignore` edit is required.
 
 ---
 
@@ -191,6 +296,11 @@ Any experiment claiming semantic retrieval should plug in a real pinned embeddin
 |---|---|
 | SQLite WAL authoritative event store | ✅ implemented |
 | Deterministic project/task replay | ✅ implemented |
+| Shared `ArcApplication` service layer | ✅ implemented |
+| CLI v2 task lifecycle | ✅ implemented |
+| Named agent profiles + `agent doctor` | ✅ implemented |
+| Live `arc watch` | ✅ implemented |
+| Textual `arc dashboard` Mission Control | ✅ implemented |
 | Versioned memory + provenance | ✅ implemented |
 | Memory materialization replay path | ✅ implemented |
 | Hard-budget context compiler | ✅ implemented |
@@ -199,80 +309,14 @@ Any experiment claiming semantic retrieval should plug in a real pinned embeddin
 | Immutable candidate commit | ✅ implemented |
 | Transactional integration gate | ✅ implemented |
 | Explicit mock test adapter | ✅ implemented |
+| Docker-backed command/test sandbox | ✅ implemented |
 | Codex / Claude / OpenCode CLI wrappers | 🧪 experimental |
-| Container-level sandbox for untrusted agents | 🚧 not complete |
+| Provider CLI credential/container boundary | 🚧 not complete |
 | Real semantic embedding provider | 🚧 not complete |
 | OpenRouter tool-using coding loop | 🚧 not complete |
+| Browser Mission Control GUI | 🗺️ next UI layer |
 | Repository-scale iso-cost benchmark | 🚧 not complete |
 | Learned risk / memory policies | 🚧 research stage |
-
----
-
-## Quickstart
-
-Requirements:
-
-- Python 3.11+
-- Git
-- a clean git repository for agent execution
-
-Install from source:
-
-```bash
-git clone https://github.com/anatwork14/adaptive-agent-runtime.git
-cd adaptive-agent-runtime
-python -m venv .venv
-source .venv/bin/activate
-pip install -e ".[dev]"
-```
-
-Check the CLI:
-
-```bash
-arc --help
-```
-
-Run tests:
-
-```bash
-python -m pytest -q
-```
-
-Build the package:
-
-```bash
-python -m build
-```
-
----
-
-## CLI concepts
-
-The existing CLI exposes project state, event history, context compilation, memory inspection, and replay operations.
-
-Examples:
-
-```bash
-arc init . --project-id my_project
-arc status
-arc events --limit 20
-arc context build task_1 --agent codex
-arc memory why M_DEC_1
-arc replay
-```
-
-The intended debugging experience is provenance-first:
-
-```text
-$ arc memory why M_77
-
-Memory M_77
-Type: decision
-Status: active
-Derived from: event 4812, event 4799
-Valid: event 4812 → current
-Delivered to: T17 / codex_2, T21 / claude_1
-```
 
 ---
 
@@ -280,19 +324,20 @@ Delivered to: T17 / codex_2, T21 / claude_1
 
 ```text
 adaptive-agent-runtime/
-├── adapters/       # real CLI adapters + explicit MockAgentAdapter
-├── cli/            # Typer CLI
-├── configs/        # runtime / evaluation policies
+├── application/    # shared app/service layer + config + agent resolution + events
+├── adapters/       # provider CLI adapters + explicit MockAgentAdapter
+├── cli/            # Typer CLI v2
+├── tui/            # Textual terminal Mission Control
 ├── context/        # retrieval, ranking, allocation, compiler, staleness
-├── eval/           # baselines, faults, grading, statistics
-├── indexes/        # FTS, deterministic vector baseline, symbols, relations
-├── isolation/      # git worktrees and execution boundaries
 ├── memory/         # lifecycle, provenance, supersession, consolidation
 ├── runtime/        # orchestrator, gate, leases, recovery, replay, budgets
 ├── state/          # authoritative event store + deterministic projections
+├── isolation/      # git worktrees and execution boundaries
 ├── verification/   # static checks, reviewer, test runner
+├── indexes/        # FTS, deterministic vector baseline, symbols, relations
+├── eval/           # baselines, faults, grading, statistics
 ├── tests/
-├── docs/           # static GitHub Pages site
+├── docs/           # website + operator documentation
 └── final_adaptive_memory_context_runtime.md
 ```
 
@@ -304,16 +349,7 @@ ARC asks a falsifiable question:
 
 > Can versioned, provenance-aware context control improve long-horizon coding reliability or reduce cost relative to transcript handoff, static structured handoff, and ordinary vector top-k memory **at matched cost**?
 
-Planned primary comparisons include:
-
-- single agent;
-- single-agent pipeline;
-- multi-agent transcript handoff;
-- static structured handoff;
-- rolling summary;
-- vector top-k memory;
-- event-sourced static memory;
-- full ARC context control.
+Planned comparisons include single-agent, static structured handoff, transcript handoff, rolling summary, vector top-k, event-sourced static memory, and the full ARC runtime.
 
 Primary outcome:
 
@@ -321,51 +357,29 @@ Primary outcome:
 resolved rate @ iso-cost
 ```
 
-with hidden tests, regression checks, context-pressure strata, and paired task analysis.
-
-The project is deliberately designed so a negative result can still produce a useful characterization study.
+with hidden tests, regression checks, context-pressure strata, and paired task analysis. A negative result can still identify the crossover point where multi-agent/context machinery stops paying for itself.
 
 ---
 
-## Website / GitHub Pages deployment
+## CI and testing
 
-The landing page lives in:
+The CI matrix runs on Python 3.11 and 3.12 and currently checks:
 
-```text
-docs/index.html
+- install/build of the packaged application;
+- correctness-focused Ruff rules;
+- homepage JavaScript syntax;
+- the full pytest suite;
+- real Git worktree/candidate/gate integration with `MockAgentAdapter`;
+- CLI v2 lifecycle/profile flows;
+- authoritative retry/cancel semantics;
+- headless Textual dashboard startup.
+
+Run locally:
+
+```bash
+python -m pytest -q
+python -m build
 ```
-
-A Pages workflow is included at:
-
-```text
-.github/workflows/pages.yml
-```
-
-After merging the workflow to `main`:
-
-1. Open **Repository Settings → Pages**.
-2. Under **Build and deployment**, choose **GitHub Actions** as the source.
-3. Run the **Deploy Pages** workflow once if it does not start automatically.
-4. The site will be published at:
-
-```text
-https://anatwork14.github.io/adaptive-agent-runtime/
-```
-
-Future pushes to `main` that modify `docs/**` redeploy automatically.
-
----
-
-## CI
-
-`.github/workflows/ci.yml` runs on pull requests and development branches:
-
-- Python 3.11 and 3.12;
-- correctness-focused Ruff checks;
-- pytest;
-- package build.
-
-Style cleanup is intentionally not a blocking gate while the prototype is being structurally hardened.
 
 ---
 
@@ -373,17 +387,21 @@ Style cleanup is intentionally not a blocking gate while the prototype is being 
 
 ARC executes code produced by AI agents. Treat that as untrusted-code execution.
 
-The current provider CLI wrappers are **not yet a complete container security boundary**. Use disposable repositories/environments and do not expose host credentials to experimental runs.
+The command/test execution path can use Docker isolation with network disabled, dropped capabilities, resource limits, and a read-only root filesystem. Provider coding CLIs are still experimental host-mode because safely brokering provider authentication into isolated containers requires additional design.
 
-A production-ready sandbox should include at least:
+Use disposable repositories/environments for experimental provider runs and do not expose valuable host credentials to untrusted generated code.
 
-- container/VM isolation;
-- explicit filesystem mounts;
-- network deny-by-default;
-- CPU/memory/PID limits;
-- no host SSH/cloud credentials;
-- timeout and hard kill;
-- `no-new-privileges` / capability dropping where applicable.
+---
+
+## Website
+
+Interactive homepage:
+
+```text
+https://anatwork14.github.io/adaptive-agent-runtime/
+```
+
+GitHub Pages deploys from `docs/` using `.github/workflows/pages.yml`.
 
 ---
 
