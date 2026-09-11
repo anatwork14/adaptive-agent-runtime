@@ -3,1775 +3,221 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <meta name="description" content="ARC is a reliable context control plane for long-horizon multi-agent coding: event-sourced project state, versioned adaptive memory, risk-aware context compilation, and transactional integration." />
-  <meta name="theme-color" content="#0b0c0b" />
-  <meta property="og:title" content="ARC — Reliable Context Control for Coding Agents" />
-  <meta property="og:description" content="Versioned project state. Adaptive memory. Reliable handoffs. Transactional integration." />
+  <meta name="description" content="ARC is a reliable context control plane for long-horizon multi-agent coding: event-sourced state, versioned adaptive memory, bounded context compilation, and transactional integration." />
+  <meta name="theme-color" content="#0a0b0a" />
+  <meta property="og:title" content="ARC — Adaptive Agent Runtime" />
+  <meta property="og:description" content="Versioned state. Adaptive memory. Reliable handoffs. Transactional integration." />
   <meta property="og:type" content="website" />
   <meta property="og:url" content="https://anatwork14.github.io/adaptive-agent-runtime/" />
-  <title>ARC — Reliable Context Control for Coding Agents</title>
-
+  <title>ARC — Adaptive Agent Runtime</title>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600;700;800&family=IBM+Plex+Mono:wght@400;500;600&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
-
   <style>
     :root {
       color-scheme: dark;
-      --ink: #0a0b0a;
-      --ink-2: #0f1110;
-      --ink-3: #141715;
-      --panel: rgba(18, 21, 19, 0.78);
-      --panel-strong: rgba(14, 16, 15, 0.96);
-      --line: rgba(223, 230, 218, 0.13);
-      --line-strong: rgba(223, 230, 218, 0.25);
-      --paper: #e7eadf;
-      --paper-2: #bcc4b5;
-      --muted: #7f8a7d;
-      --amber: #e8a143;
-      --amber-hot: #ffbb59;
-      --amber-dim: rgba(232, 161, 67, 0.14);
-      --radar: #9bd4ad;
-      --radar-bright: #c7f1d1;
-      --radar-dim: rgba(155, 212, 173, 0.12);
-      --warning: #e96a4d;
-      --sky: #7c9eb0;
-      --mono: "IBM Plex Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
-      --cond: "Barlow Condensed", Impact, sans-serif;
-      --sans: Inter, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-      --mx: 50vw;
-      --my: 35vh;
-      --ease: cubic-bezier(.2,.8,.2,1);
-    }
-
-    * { box-sizing: border-box; }
-    html { scroll-behavior: smooth; background: var(--ink); }
-    body {
-      margin: 0;
-      min-width: 320px;
-      background:
-        radial-gradient(circle at 12% 0%, rgba(232,161,67,.06), transparent 27rem),
-        radial-gradient(circle at 86% 22%, rgba(155,212,173,.05), transparent 32rem),
-        var(--ink);
-      color: var(--paper);
-      font-family: var(--sans);
-      line-height: 1.55;
-      overflow-x: hidden;
-    }
-
-    body::before {
-      content: "";
-      position: fixed;
-      inset: 0;
-      pointer-events: none;
-      z-index: 50;
-      opacity: .19;
-      background:
-        linear-gradient(rgba(255,255,255,.018) 1px, transparent 1px) 0 0 / 100% 4px,
-        radial-gradient(450px circle at var(--mx) var(--my), rgba(232,161,67,.045), transparent 70%);
-      mix-blend-mode: screen;
-    }
-
-    body::after {
-      content: "";
-      position: fixed;
-      inset: 0;
-      pointer-events: none;
-      z-index: 49;
-      opacity: .025;
-      background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 160 160' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='.9'/%3E%3C/svg%3E");
-    }
-
-    a { color: inherit; }
-    button, input { font: inherit; }
-    ::selection { background: rgba(232,161,67,.32); color: white; }
-
-    .skip-link {
-      position: absolute;
-      top: -4rem;
-      left: 1rem;
-      z-index: 999;
-      padding: .75rem 1rem;
-      background: var(--paper);
-      color: var(--ink);
-      border-radius: 4px;
-    }
-    .skip-link:focus { top: 1rem; }
-
-    .shell {
-      width: min(1240px, calc(100% - 40px));
-      margin-inline: auto;
-    }
-
-    .micro {
-      font: 500 .69rem/1.2 var(--mono);
-      letter-spacing: .14em;
-      text-transform: uppercase;
-      color: var(--muted);
-    }
-
-    .hud-line {
-      display: flex;
-      align-items: center;
-      gap: .6rem;
-      color: var(--muted);
-      font: 500 .68rem/1 var(--mono);
-      text-transform: uppercase;
-      letter-spacing: .12em;
-    }
-    .hud-line::before {
-      content: "";
-      width: 28px;
-      height: 1px;
-      background: currentColor;
-      opacity: .7;
-    }
-
-    .nav-wrap {
-      position: sticky;
-      top: 0;
-      z-index: 40;
-      border-bottom: 1px solid rgba(225,230,218,.08);
-      background: linear-gradient(180deg, rgba(10,11,10,.94), rgba(10,11,10,.76));
-      backdrop-filter: blur(18px) saturate(120%);
-      -webkit-backdrop-filter: blur(18px) saturate(120%);
-    }
-    .nav {
-      min-height: 68px;
-      display: grid;
-      grid-template-columns: auto 1fr auto;
-      align-items: center;
-      gap: 2rem;
-    }
-    .brand {
-      display: inline-flex;
-      align-items: center;
-      gap: .8rem;
-      text-decoration: none;
-      min-height: 44px;
-    }
-    .brand-mark {
-      position: relative;
-      width: 38px;
-      height: 38px;
-      display: grid;
-      place-items: center;
-      border: 1px solid rgba(232,161,67,.55);
-      clip-path: polygon(7px 0,100% 0,100% calc(100% - 7px),calc(100% - 7px) 100%,0 100%,0 7px);
-      color: var(--amber-hot);
-      font: 800 1.15rem/1 var(--cond);
-      letter-spacing: -.03em;
-      background: linear-gradient(135deg, rgba(232,161,67,.13), transparent 60%);
-    }
-    .brand-mark::before,
-    .brand-mark::after {
-      content: "";
-      position: absolute;
-      width: 8px;
-      height: 1px;
-      background: var(--amber);
-    }
-    .brand-mark::before { left: -4px; top: 10px; }
-    .brand-mark::after { right: -4px; bottom: 10px; }
-    .brand-copy strong {
-      display: block;
-      font: 800 1.13rem/1 var(--cond);
-      letter-spacing: .08em;
-    }
-    .brand-copy span {
-      display: block;
-      margin-top: 4px;
-      color: var(--muted);
-      font: 500 .58rem/1 var(--mono);
-      letter-spacing: .13em;
-      text-transform: uppercase;
-    }
-
-    .nav-links {
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      gap: 1.8rem;
-    }
-    .nav-links a {
-      position: relative;
-      padding: 12px 0;
-      text-decoration: none;
-      color: #9ba398;
-      font: 500 .7rem/1 var(--mono);
-      letter-spacing: .09em;
-      text-transform: uppercase;
-      transition: color .2s ease;
-    }
-    .nav-links a::after {
-      content: "";
-      position: absolute;
-      left: 0;
-      right: 100%;
-      bottom: 7px;
-      height: 1px;
-      background: var(--amber);
-      transition: right .25s var(--ease);
-    }
-    .nav-links a:hover,
-    .nav-links a:focus-visible { color: var(--paper); }
-    .nav-links a:hover::after,
-    .nav-links a:focus-visible::after { right: 0; }
-
-    .nav-status {
-      display: flex;
-      align-items: center;
-      gap: .65rem;
-      color: var(--radar);
-      font: 500 .65rem/1 var(--mono);
-      text-transform: uppercase;
-      letter-spacing: .09em;
-    }
-    .status-dot {
-      width: 7px;
-      height: 7px;
-      border-radius: 50%;
-      background: var(--radar);
-      box-shadow: 0 0 0 5px rgba(155,212,173,.08), 0 0 14px rgba(155,212,173,.4);
-      animation: pulse 2.1s ease-in-out infinite;
-    }
-
-    .hero {
-      position: relative;
-      min-height: 780px;
-      overflow: clip;
-      border-bottom: 1px solid var(--line);
-    }
-    .hero::before {
-      content: "";
-      position: absolute;
-      inset: 0;
-      pointer-events: none;
-      background:
-        linear-gradient(90deg, transparent 0 49.95%, rgba(255,255,255,.04) 50%, transparent 50.05%),
-        linear-gradient(0deg, transparent 0 49.95%, rgba(255,255,255,.025) 50%, transparent 50.05%);
-      background-size: 160px 160px;
-      mask-image: linear-gradient(to bottom, black, transparent 90%);
-    }
-    .hero-grid {
-      position: relative;
-      z-index: 3;
-      display: grid;
-      grid-template-columns: minmax(0, .95fr) minmax(460px, 1.05fr);
-      min-height: 710px;
-      align-items: center;
-      gap: 2rem;
-      padding: 72px 0 42px;
-    }
-    .hero-copy { position: relative; z-index: 5; padding: 2.2rem 0; }
-
-    .classification {
-      display: inline-flex;
-      align-items: center;
-      gap: .7rem;
-      margin-bottom: 1.7rem;
-      color: var(--amber-hot);
-      font: 600 .68rem/1 var(--mono);
-      letter-spacing: .13em;
-      text-transform: uppercase;
-    }
-    .classification::before {
-      content: "";
-      width: 10px;
-      height: 10px;
-      border: 1px solid currentColor;
-      transform: rotate(45deg);
-      background: rgba(232,161,67,.11);
-    }
-
-    .hero h1 {
-      max-width: 720px;
-      margin: 0;
-      font: 800 clamp(4.5rem, 9vw, 8.2rem)/.74 var(--cond);
-      letter-spacing: -.055em;
-      text-transform: uppercase;
-    }
-    .hero h1 .arc {
-      display: block;
-      color: #f2efe4;
-      text-shadow: 0 14px 55px rgba(0,0,0,.5);
-    }
-    .hero h1 .sub {
-      display: block;
-      margin-top: .25em;
-      color: transparent;
-      -webkit-text-stroke: 1px rgba(231,234,223,.46);
-      font-size: .43em;
-      line-height: .92;
-      letter-spacing: .025em;
-    }
-    .hero-desc {
-      max-width: 620px;
-      margin: 2rem 0 0;
-      color: #aab2a6;
-      font-size: clamp(1rem, 1.6vw, 1.16rem);
-      line-height: 1.75;
-    }
-    .hero-desc strong { color: var(--paper); font-weight: 600; }
-
-    .hero-actions {
-      display: flex;
-      flex-wrap: wrap;
-      align-items: center;
-      gap: .9rem;
-      margin-top: 2rem;
-    }
-    .btn {
-      position: relative;
-      min-height: 46px;
-      display: inline-flex;
-      align-items: center;
-      justify-content: center;
-      gap: .65rem;
-      padding: 0 1.15rem;
-      border: 1px solid var(--line-strong);
-      border-radius: 2px;
-      text-decoration: none;
-      text-transform: uppercase;
-      letter-spacing: .08em;
-      font: 600 .68rem/1 var(--mono);
-      overflow: hidden;
-      transition: transform .2s var(--ease), border-color .2s ease, background .2s ease, color .2s ease;
-    }
-    .btn::before {
-      content: "";
-      position: absolute;
-      inset: 0;
-      transform: translateX(-102%);
-      background: linear-gradient(90deg, transparent, rgba(255,255,255,.12), transparent);
-      transition: transform .45s var(--ease);
-    }
-    .btn:hover::before { transform: translateX(102%); }
-    .btn:hover { transform: translateY(-2px); }
-    .btn-primary {
-      color: #18130b;
-      background: var(--amber);
-      border-color: var(--amber);
-      box-shadow: 0 10px 38px rgba(232,161,67,.13);
-    }
-    .btn-primary:hover { background: var(--amber-hot); border-color: var(--amber-hot); }
-    .btn-ghost { background: rgba(255,255,255,.025); color: var(--paper); }
-    .btn-ghost:hover { border-color: rgba(232,161,67,.5); color: var(--amber-hot); }
-    .btn svg { width: 15px; height: 15px; }
-
-    .hero-meta {
-      display: grid;
-      grid-template-columns: repeat(3, minmax(0,1fr));
-      gap: 1px;
-      max-width: 620px;
-      margin-top: 2.2rem;
-      background: var(--line);
-      border: 1px solid var(--line);
-    }
-    .hero-meta > div {
-      padding: .85rem 1rem;
-      background: rgba(10,11,10,.78);
-      min-width: 0;
-    }
-    .hero-meta b {
-      display: block;
-      color: var(--paper);
-      font: 700 .84rem/1.2 var(--mono);
-      overflow-wrap: anywhere;
-    }
-    .hero-meta span {
-      display: block;
-      margin-top: .35rem;
-      color: var(--muted);
-      font: 500 .59rem/1.2 var(--mono);
-      text-transform: uppercase;
-      letter-spacing: .08em;
-    }
-
-    .scene-wrap {
-      position: relative;
-      align-self: stretch;
-      min-height: 640px;
-      isolation: isolate;
-      perspective: 1200px;
-    }
-    .scene-wrap::before {
-      content: "";
-      position: absolute;
-      inset: 6% 0 0 -6%;
-      z-index: -2;
-      background:
-        radial-gradient(circle at 50% 43%, rgba(232,161,67,.12), transparent 17rem),
-        radial-gradient(circle at 56% 58%, rgba(155,212,173,.07), transparent 23rem);
-      filter: blur(4px);
-    }
-    .scene-frame {
-      position: absolute;
-      inset: 1rem 0 1rem;
-      border: 1px solid rgba(231,234,223,.12);
-      clip-path: polygon(26px 0, 100% 0,100% calc(100% - 26px),calc(100% - 26px) 100%,0 100%,0 26px);
-      background: linear-gradient(145deg, rgba(255,255,255,.025), transparent 45%);
-      overflow: hidden;
-      transform-style: preserve-3d;
-    }
-    .scene-frame::before,
-    .scene-frame::after {
-      content: "";
-      position: absolute;
-      pointer-events: none;
-      z-index: 3;
-    }
-    .scene-frame::before {
-      inset: 0;
-      border: 1px solid transparent;
-      background:
-        linear-gradient(90deg, var(--amber) 0 38px, transparent 38px calc(100% - 38px), var(--amber) calc(100% - 38px)) top left / 100% 1px no-repeat,
-        linear-gradient(0deg, var(--amber) 0 38px, transparent 38px calc(100% - 38px), var(--amber) calc(100% - 38px)) top left / 1px 100% no-repeat;
-      opacity: .65;
-    }
-    .scene-frame::after {
-      left: 0;
-      right: 0;
-      top: -18%;
-      height: 18%;
-      background: linear-gradient(to bottom, transparent, rgba(155,212,173,.05), rgba(155,212,173,.19), rgba(155,212,173,.03), transparent);
-      filter: blur(.2px);
-      animation: scan 7s linear infinite;
-    }
-    #arc-scene {
-      position: absolute;
-      inset: 0;
-      width: 100%;
-      height: 100%;
-      display: block;
-      cursor: crosshair;
-    }
-    .scene-fallback {
-      position: absolute;
-      inset: 0;
-      display: grid;
-      place-items: center;
-      pointer-events: none;
-      opacity: .7;
-    }
-    .fallback-core {
-      width: min(56%, 330px);
-      aspect-ratio: 1;
-      border-radius: 50%;
-      border: 1px solid rgba(232,161,67,.35);
-      box-shadow: inset 0 0 60px rgba(232,161,67,.05), 0 0 70px rgba(232,161,67,.05);
-      position: relative;
-      animation: slowspin 18s linear infinite;
-    }
-    .fallback-core::before,
-    .fallback-core::after {
-      content: "";
-      position: absolute;
-      border-radius: 50%;
-      border: 1px solid rgba(155,212,173,.22);
-    }
-    .fallback-core::before { inset: 14%; transform: rotateX(68deg); }
-    .fallback-core::after { inset: 30%; border-color: rgba(232,161,67,.5); }
-
-    .scene-label {
-      position: absolute;
-      z-index: 7;
-      padding: .6rem .72rem;
-      min-width: 150px;
-      color: var(--paper-2);
-      background: rgba(8,10,9,.72);
-      border: 1px solid rgba(231,234,223,.12);
-      backdrop-filter: blur(10px);
-      font: 500 .62rem/1.35 var(--mono);
-      letter-spacing: .05em;
-      pointer-events: none;
-    }
-    .scene-label b { color: var(--amber-hot); font-weight: 600; }
-    .scene-label span { display: block; margin-top: .25rem; color: var(--muted); font-size: .56rem; }
-    .scene-label.a { top: 9%; left: 5%; }
-    .scene-label.b { right: 5%; bottom: 12%; }
-    .scene-label.c { left: 7%; bottom: 8%; border-color: rgba(155,212,173,.19); }
-
-    .target-reticle {
-      position: absolute;
-      z-index: 6;
-      width: 42px;
-      height: 42px;
-      top: 18%;
-      right: 15%;
-      border: 1px solid rgba(232,161,67,.25);
-      border-radius: 50%;
-      animation: reticle 4s ease-in-out infinite;
-      pointer-events: none;
-    }
-    .target-reticle::before,
-    .target-reticle::after {
-      content: "";
-      position: absolute;
-      background: rgba(232,161,67,.45);
-    }
-    .target-reticle::before { width: 58px; height: 1px; left: -9px; top: 20px; }
-    .target-reticle::after { height: 58px; width: 1px; top: -9px; left: 20px; }
-
-    .mode-strip {
-      position: absolute;
-      z-index: 9;
-      right: 1.1rem;
-      top: 50%;
-      transform: translateY(-50%);
-      display: grid;
-      gap: .45rem;
-    }
-    .mode-btn {
-      width: 40px;
-      height: 40px;
-      display: grid;
-      place-items: center;
-      border: 1px solid rgba(231,234,223,.14);
-      color: var(--muted);
-      background: rgba(11,13,12,.72);
-      cursor: pointer;
-      font: 600 .61rem/1 var(--mono);
-      transition: all .2s ease;
-    }
-    .mode-btn:hover,
-    .mode-btn:focus-visible,
-    .mode-btn[aria-pressed="true"] {
-      color: #151008;
-      background: var(--amber);
-      border-color: var(--amber);
-    }
-
-    .telemetry-band {
-      position: relative;
-      z-index: 6;
-      margin-top: -1px;
-      border-top: 1px solid var(--line);
-      border-bottom: 1px solid var(--line);
-      background: rgba(12,14,13,.78);
-      overflow: hidden;
-    }
-    .telemetry-track {
-      display: flex;
-      width: max-content;
-      min-width: 100%;
-      animation: ticker 28s linear infinite;
-    }
-    .telemetry-set { display: flex; }
-    .telemetry-item {
-      display: flex;
-      align-items: center;
-      gap: .7rem;
-      padding: .75rem 1.2rem;
-      border-right: 1px solid var(--line);
-      white-space: nowrap;
-      color: var(--muted);
-      font: 500 .61rem/1 var(--mono);
-      text-transform: uppercase;
-      letter-spacing: .07em;
-    }
-    .telemetry-item b { color: var(--paper-2); font-weight: 500; }
-    .telemetry-item .ok { color: var(--radar); }
-    .telemetry-item .warn { color: var(--amber); }
-
-    section { position: relative; padding: 110px 0; border-bottom: 1px solid var(--line); }
-    .section-grid {
-      display: grid;
-      grid-template-columns: 290px minmax(0,1fr);
-      gap: 4.5rem;
-      align-items: start;
-    }
-    .section-index { position: sticky; top: 104px; }
-    .section-index .num {
-      color: var(--amber);
-      font: 700 2rem/1 var(--cond);
-      letter-spacing: .08em;
-    }
-    .section-index h2 {
-      margin: .65rem 0 0;
-      font: 700 1.6rem/1 var(--cond);
-      text-transform: uppercase;
-      letter-spacing: .035em;
-    }
-    .section-index p {
-      margin: 1rem 0 0;
-      color: var(--muted);
-      font-size: .9rem;
-      line-height: 1.7;
-    }
-
-    .section-lead {
-      max-width: 840px;
-      margin: 0 0 3.5rem;
-    }
-    .section-lead h3 {
-      margin: 0;
-      font: 700 clamp(2.6rem, 6vw, 5.3rem)/.88 var(--cond);
-      letter-spacing: -.035em;
-      text-transform: uppercase;
-    }
-    .section-lead p {
-      max-width: 690px;
-      margin: 1.35rem 0 0;
-      color: #9ea79c;
-      font-size: 1rem;
-      line-height: 1.75;
-    }
-
-    .problem-grid {
-      display: grid;
-      grid-template-columns: repeat(3,minmax(0,1fr));
-      gap: 1px;
-      background: var(--line);
-      border: 1px solid var(--line);
-    }
-    .problem {
-      min-height: 250px;
-      padding: 1.4rem;
-      background: #0d0f0e;
-      position: relative;
-      overflow: hidden;
-      transition: background .25s ease;
-    }
-    .problem::before {
-      content: attr(data-code);
-      position: absolute;
-      right: 1rem;
-      top: .9rem;
-      color: rgba(231,234,223,.08);
-      font: 800 4.6rem/1 var(--cond);
-    }
-    .problem:hover { background: #111411; }
-    .problem .icon {
-      width: 38px;
-      height: 38px;
-      display: grid;
-      place-items: center;
-      border: 1px solid rgba(232,161,67,.25);
-      color: var(--amber);
-      margin-bottom: 3.4rem;
-      font: 700 .66rem/1 var(--mono);
-    }
-    .problem h4 {
-      margin: 0;
-      font: 700 1.3rem/1 var(--cond);
-      text-transform: uppercase;
-      letter-spacing: .03em;
-    }
-    .problem p { margin: .7rem 0 0; color: var(--muted); font-size: .87rem; }
-
-    .architecture-console {
-      border: 1px solid var(--line-strong);
-      background: #0c0e0d;
-      min-height: 600px;
-      display: grid;
-      grid-template-columns: minmax(0,1.4fr) minmax(280px,.6fr);
-      position: relative;
-      overflow: hidden;
-    }
-    .architecture-console::before {
-      content: "";
-      position: absolute;
-      inset: 0;
-      pointer-events: none;
-      background-image:
-        linear-gradient(rgba(255,255,255,.018) 1px, transparent 1px),
-        linear-gradient(90deg, rgba(255,255,255,.018) 1px, transparent 1px);
-      background-size: 28px 28px;
-      mask-image: linear-gradient(to right, black, transparent 72%);
-    }
-    .map-panel {
-      position: relative;
-      min-height: 600px;
-      overflow: hidden;
-    }
-    .map-panel svg { position: absolute; inset: 0; width: 100%; height: 100%; }
-    .map-panel .connection {
-      fill: none;
-      stroke: rgba(155,212,173,.18);
-      stroke-width: 1.2;
-      stroke-dasharray: 5 8;
-      transition: stroke .2s ease, opacity .2s ease, stroke-width .2s ease;
-    }
-    .map-panel .connection.flow { animation: dash 11s linear infinite; }
-    .map-panel .connection.active {
-      stroke: var(--amber-hot);
-      stroke-width: 2;
-      opacity: .95;
-      filter: drop-shadow(0 0 4px rgba(232,161,67,.25));
-    }
-    .map-node {
-      position: absolute;
-      width: 128px;
-      min-height: 74px;
-      padding: .75rem;
-      border: 1px solid rgba(231,234,223,.16);
-      background: rgba(12,14,13,.92);
-      color: var(--paper-2);
-      text-align: left;
-      cursor: pointer;
-      clip-path: polygon(8px 0,100% 0,100% calc(100% - 8px),calc(100% - 8px) 100%,0 100%,0 8px);
-      transition: transform .22s var(--ease), background .2s ease, border-color .2s ease, color .2s ease;
-    }
-    .map-node:hover,
-    .map-node:focus-visible,
-    .map-node[aria-pressed="true"] {
-      transform: translateY(-3px);
-      border-color: rgba(232,161,67,.65);
-      background: rgba(38,28,17,.9);
-      color: var(--paper);
-    }
-    .map-node .node-kicker {
-      display: block;
-      margin-bottom: .5rem;
-      color: var(--muted);
-      font: 500 .53rem/1 var(--mono);
-      letter-spacing: .08em;
-      text-transform: uppercase;
-    }
-    .map-node strong { font: 700 .98rem/1 var(--cond); text-transform: uppercase; letter-spacing: .04em; }
-    .map-node.state { left: 7%; top: 11%; }
-    .map-node.memory { left: 57%; top: 9%; }
-    .map-node.context { left: 31%; top: 40%; }
-    .map-node.agent { left: 8%; top: 72%; }
-    .map-node.gate { left: 58%; top: 70%; }
-
-    .console-side {
-      position: relative;
-      z-index: 2;
-      border-left: 1px solid var(--line);
-      background: rgba(11,13,12,.82);
-      padding: 1.2rem;
-    }
-    .console-head {
-      display: flex;
-      justify-content: space-between;
-      gap: 1rem;
-      padding-bottom: 1rem;
-      border-bottom: 1px solid var(--line);
-      color: var(--muted);
-      font: 500 .58rem/1 var(--mono);
-      letter-spacing: .08em;
-      text-transform: uppercase;
-    }
-    .console-head span:last-child { color: var(--radar); }
-    #node-detail { padding: 1.7rem 0; }
-    #node-detail h4 {
-      margin: 0;
-      font: 700 2rem/1 var(--cond);
-      text-transform: uppercase;
-    }
-    #node-detail p { margin: 1rem 0 0; color: #9ba499; font-size: .9rem; line-height: 1.7; }
-    .detail-list { display: grid; gap: .65rem; margin-top: 1.4rem; }
-    .detail-list span {
-      display: flex;
-      align-items: center;
-      gap: .7rem;
-      color: var(--paper-2);
-      font: 500 .63rem/1.3 var(--mono);
-    }
-    .detail-list span::before {
-      content: "";
-      width: 5px;
-      height: 5px;
-      background: var(--radar);
-      box-shadow: 0 0 8px rgba(155,212,173,.32);
-    }
-    .signal-meter { margin-top: 1.6rem; }
-    .signal-meter .label { display: flex; justify-content: space-between; color: var(--muted); font: 500 .56rem/1 var(--mono); text-transform: uppercase; letter-spacing: .06em; }
-    .meter {
-      height: 5px;
-      margin-top: .55rem;
-      background: rgba(255,255,255,.06);
-      overflow: hidden;
-    }
-    .meter > span {
-      display: block;
-      height: 100%;
-      width: 76%;
-      background: repeating-linear-gradient(90deg,var(--radar) 0 7px,transparent 7px 9px);
-      transition: width .35s var(--ease), background .35s ease;
-    }
-
-    .feature-deck {
-      display: grid;
-      grid-template-columns: repeat(2,minmax(0,1fr));
-      gap: 1px;
-      background: var(--line);
-      border: 1px solid var(--line);
-    }
-    .feature-card {
-      --tiltX: 0deg;
-      --tiltY: 0deg;
-      position: relative;
-      min-height: 310px;
-      padding: 1.45rem;
-      background: linear-gradient(145deg,#101310,#0c0e0d);
-      transform: perspective(850px) rotateX(var(--tiltX)) rotateY(var(--tiltY));
-      transform-style: preserve-3d;
-      transition: transform .16s ease, background .25s ease;
-      overflow: hidden;
-    }
-    .feature-card::before {
-      content: "";
-      position: absolute;
-      inset: 0;
-      background: radial-gradient(320px circle at var(--cx,50%) var(--cy,50%), rgba(232,161,67,.09), transparent 60%);
-      opacity: 0;
-      transition: opacity .2s ease;
-    }
-    .feature-card:hover::before { opacity: 1; }
-    .feature-card > * { position: relative; z-index: 2; transform: translateZ(14px); }
-    .feature-top { display: flex; justify-content: space-between; align-items: flex-start; gap: 1rem; }
-    .feature-id { color: var(--amber); font: 600 .62rem/1 var(--mono); letter-spacing: .1em; }
-    .feature-state { color: var(--radar); font: 500 .55rem/1 var(--mono); text-transform: uppercase; letter-spacing: .08em; }
-    .feature-card h4 { margin: 4.2rem 0 0; font: 700 2rem/1 var(--cond); text-transform: uppercase; letter-spacing: .025em; }
-    .feature-card p { max-width: 440px; margin: 1rem 0 0; color: var(--muted); font-size: .9rem; line-height: 1.7; }
-    .feature-tags { display: flex; flex-wrap: wrap; gap: .45rem; margin-top: 1.3rem; }
-    .feature-tags span { padding: .35rem .48rem; border: 1px solid rgba(231,234,223,.1); color: #9da69a; font: 500 .55rem/1 var(--mono); text-transform: uppercase; }
-
-    .terminal {
-      border: 1px solid var(--line-strong);
-      background: #090b0a;
-      overflow: hidden;
-    }
-    .terminal-head {
-      min-height: 42px;
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      gap: 1rem;
-      padding: 0 1rem;
-      border-bottom: 1px solid var(--line);
-      color: var(--muted);
-      font: 500 .57rem/1 var(--mono);
-      text-transform: uppercase;
-      letter-spacing: .08em;
-    }
-    .terminal-head .lights { display: flex; gap: .35rem; }
-    .terminal-head .lights i { width: 6px; height: 6px; border-radius: 50%; background: #323831; }
-    .terminal-head .lights i:first-child { background: var(--warning); }
-    .terminal-head .lights i:nth-child(2) { background: var(--amber); }
-    .terminal-head .lights i:nth-child(3) { background: var(--radar); }
-    .terminal-body {
-      position: relative;
-      min-height: 420px;
-      padding: 1.25rem;
-      font: 500 .72rem/1.7 var(--mono);
-      color: #9fa89d;
-      overflow: hidden;
-    }
-    .terminal-body::before {
-      content: "";
-      position: absolute;
-      inset: 0;
-      pointer-events: none;
-      background: linear-gradient(to bottom, transparent, rgba(155,212,173,.02), transparent);
-      background-size: 100% 14px;
-    }
-    .prompt { color: var(--radar-bright); }
-    .cmd { color: var(--paper); }
-    .out { color: #7f8a7d; }
-    .out strong { color: var(--amber-hot); font-weight: 500; }
-    .terminal-tabs {
-      display: flex;
-      flex-wrap: wrap;
-      gap: .5rem;
-      margin-bottom: 1.2rem;
-    }
-    .terminal-tabs button {
-      min-height: 40px;
-      padding: 0 .8rem;
-      border: 1px solid var(--line);
-      background: transparent;
-      color: var(--muted);
-      cursor: pointer;
-      font: 500 .58rem/1 var(--mono);
-      text-transform: uppercase;
-      letter-spacing: .06em;
-    }
-    .terminal-tabs button:hover,
-    .terminal-tabs button:focus-visible,
-    .terminal-tabs button[aria-pressed="true"] {
-      color: #161209;
-      background: var(--amber);
-      border-color: var(--amber);
-    }
-    .terminal-output {
-      padding: 1rem;
-      border-left: 2px solid rgba(155,212,173,.3);
-      background: rgba(155,212,173,.025);
-      white-space: pre-wrap;
-      overflow-wrap: anywhere;
-    }
-
-    .principle {
-      display: grid;
-      grid-template-columns: minmax(0,.72fr) minmax(0,1.28fr);
-      gap: 1px;
-      background: var(--line);
-      border: 1px solid var(--line);
-    }
-    .principle > div { background: #0c0e0d; padding: 2rem; }
-    .principle .quote { display: flex; flex-direction: column; justify-content: space-between; min-height: 400px; }
-    .principle blockquote {
-      margin: 0;
-      font: 700 clamp(2.2rem,4vw,4.1rem)/.93 var(--cond);
-      text-transform: uppercase;
-      letter-spacing: -.02em;
-    }
-    .principle blockquote em { color: var(--amber); font-style: normal; }
-    .principle .flow { display: grid; align-content: center; gap: .85rem; }
-    .flow-row {
-      display: grid;
-      grid-template-columns: 34px 1fr auto;
-      align-items: center;
-      gap: 1rem;
-      padding: 1rem;
-      border: 1px solid rgba(231,234,223,.09);
-      background: rgba(255,255,255,.015);
-    }
-    .flow-row .idx { color: var(--amber); font: 600 .6rem/1 var(--mono); }
-    .flow-row strong { font: 700 1rem/1 var(--cond); text-transform: uppercase; letter-spacing: .04em; }
-    .flow-row span { color: var(--muted); font: 500 .55rem/1 var(--mono); text-transform: uppercase; }
-
-    .cta {
-      padding: 110px 0 80px;
-      overflow: hidden;
-    }
-    .cta-card {
-      position: relative;
-      min-height: 450px;
-      display: grid;
-      grid-template-columns: 1fr auto;
-      align-items: end;
-      gap: 3rem;
-      padding: 3rem;
-      border: 1px solid rgba(232,161,67,.35);
-      background:
-        linear-gradient(135deg, rgba(232,161,67,.09), transparent 38%),
-        linear-gradient(170deg, #121511, #0b0d0c 65%);
-      clip-path: polygon(28px 0,100% 0,100% calc(100% - 28px),calc(100% - 28px) 100%,0 100%,0 28px);
-      overflow: hidden;
-    }
-    .cta-card::before {
-      content: "ARC";
-      position: absolute;
-      right: -2%;
-      top: -8%;
-      color: rgba(232,161,67,.035);
-      font: 800 clamp(13rem,28vw,25rem)/.8 var(--cond);
-      letter-spacing: -.08em;
-      pointer-events: none;
-    }
-    .cta-card h2 {
-      position: relative;
-      margin: 0;
-      max-width: 760px;
-      font: 800 clamp(3.2rem,7vw,7rem)/.82 var(--cond);
-      text-transform: uppercase;
-      letter-spacing: -.04em;
-    }
-    .cta-card h2 span { color: var(--amber-hot); }
-    .cta-card p { position: relative; max-width: 650px; margin: 1.4rem 0 0; color: #9ea79c; }
-    .cta-actions { position: relative; display: flex; flex-direction: column; gap: .8rem; min-width: 190px; }
-
-    footer {
-      padding: 0 0 2.5rem;
-      color: var(--muted);
-    }
-    .footer-inner {
-      display: flex;
-      justify-content: space-between;
-      gap: 2rem;
-      padding-top: 1.5rem;
-      border-top: 1px solid var(--line);
-      font: 500 .59rem/1.5 var(--mono);
-      text-transform: uppercase;
-      letter-spacing: .06em;
-    }
-    .footer-inner a { color: var(--paper-2); text-decoration: none; }
-    .footer-inner a:hover { color: var(--amber-hot); }
-
-    .reveal {
-      opacity: 0;
-      transform: translateY(18px);
-      transition: opacity .7s var(--ease), transform .7s var(--ease);
-    }
-    .reveal.in { opacity: 1; transform: none; }
-
-    @keyframes pulse {
-      0%,100% { opacity: .65; transform: scale(.9); }
-      50% { opacity: 1; transform: scale(1.08); }
-    }
-    @keyframes scan {
-      0% { transform: translateY(0); }
-      100% { transform: translateY(650%); }
-    }
-    @keyframes slowspin { to { transform: rotate(360deg); } }
-    @keyframes reticle {
-      0%,100% { transform: scale(.88) rotate(0); opacity: .4; }
-      50% { transform: scale(1.08) rotate(45deg); opacity: .85; }
-    }
-    @keyframes ticker { to { transform: translateX(-50%); } }
-    @keyframes dash { to { stroke-dashoffset: -120; } }
-
-    @media (max-width: 1040px) {
-      .nav-links { display: none; }
-      .nav { grid-template-columns: 1fr auto; }
-      .hero { min-height: auto; }
-      .hero-grid { grid-template-columns: 1fr; min-height: auto; padding-top: 60px; }
-      .hero-copy { padding-bottom: 0; }
-      .scene-wrap { min-height: 590px; }
-      .section-grid { grid-template-columns: 1fr; gap: 2.5rem; }
-      .section-index { position: static; display: grid; grid-template-columns: auto 1fr; gap: 1rem; align-items: start; }
-      .section-index p { grid-column: 2; margin-top: .35rem; }
-      .problem-grid { grid-template-columns: 1fr; }
-      .architecture-console { grid-template-columns: 1fr; }
-      .console-side { border-left: 0; border-top: 1px solid var(--line); }
-      .map-panel { min-height: 520px; }
-      .principle { grid-template-columns: 1fr; }
-      .cta-card { grid-template-columns: 1fr; align-items: start; }
-      .cta-actions { flex-direction: row; flex-wrap: wrap; }
-    }
-
-    @media (max-width: 720px) {
-      .shell { width: min(100% - 24px, 1240px); }
-      .nav { min-height: 62px; }
-      .brand-copy span, .nav-status span { display: none; }
-      .hero-grid { padding-top: 44px; gap: 1rem; }
-      .hero h1 { font-size: clamp(4.2rem, 25vw, 6.2rem); }
-      .hero-desc { font-size: .96rem; }
-      .hero-meta { grid-template-columns: 1fr; }
-      .scene-wrap { min-height: 500px; }
-      .scene-label { min-width: 128px; font-size: .56rem; }
-      .scene-label.a { top: 7%; left: 4%; }
-      .scene-label.b { right: 3%; bottom: 9%; }
-      .scene-label.c { display: none; }
-      .mode-strip { right: .5rem; }
-      section { padding: 82px 0; }
-      .section-lead { margin-bottom: 2rem; }
-      .section-lead h3 { font-size: clamp(2.8rem,14vw,4.4rem); }
-      .problem { min-height: 210px; }
-      .feature-deck { grid-template-columns: 1fr; }
-      .feature-card { min-height: 280px; }
-      .feature-card h4 { margin-top: 3rem; }
-      .architecture-console, .map-panel { min-height: 590px; }
-      .map-node { width: 112px; min-height: 68px; padding: .6rem; }
-      .map-node.state { left: 4%; top: 8%; }
-      .map-node.memory { left: 54%; top: 8%; }
-      .map-node.context { left: 26%; top: 39%; }
-      .map-node.agent { left: 4%; top: 72%; }
-      .map-node.gate { left: 54%; top: 72%; }
-      .terminal-body { padding: .9rem; font-size: .66rem; }
-      .cta { padding-top: 80px; }
-      .cta-card { min-height: 520px; padding: 2rem 1.4rem; }
-      .cta-card h2 { font-size: clamp(3.2rem,16vw,5.2rem); }
-      .footer-inner { flex-direction: column; }
-    }
-
-    @media (hover: hover) and (pointer: fine) {
-      .magnetic { will-change: transform; }
-    }
-
-    @media (prefers-reduced-motion: reduce) {
-      html { scroll-behavior: auto; }
-      *, *::before, *::after {
-        animation-duration: .001ms !important;
-        animation-iteration-count: 1 !important;
-        scroll-behavior: auto !important;
-        transition-duration: .001ms !important;
-      }
-      .reveal { opacity: 1; transform: none; }
-      .feature-card { transform: none !important; }
-    }
+      --ink:#090a09; --ink2:#0f1110; --ink3:#151815; --panel:rgba(18,21,19,.82);
+      --line:rgba(225,230,218,.13); --line2:rgba(225,230,218,.25);
+      --paper:#e8eadf; --muted:#8b9587; --amber:#e8a143; --amber2:#ffbd62;
+      --radar:#9bd4ad; --radar2:#c9f1d3; --warning:#e96a4d; --sky:#7d9eae;
+      --mono:"IBM Plex Mono",ui-monospace,SFMono-Regular,Menlo,monospace;
+      --cond:"Barlow Condensed",Impact,sans-serif; --sans:Inter,system-ui,-apple-system,sans-serif;
+      --mx:50vw; --my:35vh; --ease:cubic-bezier(.2,.8,.2,1);
+    }
+    *{box-sizing:border-box} html{scroll-behavior:smooth;background:var(--ink)}
+    body{margin:0;min-width:320px;background:radial-gradient(circle at 10% 0%,rgba(232,161,67,.06),transparent 28rem),radial-gradient(circle at 90% 20%,rgba(155,212,173,.05),transparent 34rem),var(--ink);color:var(--paper);font-family:var(--sans);line-height:1.6;overflow-x:hidden}
+    body::before{content:"";position:fixed;inset:0;pointer-events:none;z-index:70;opacity:.2;background:linear-gradient(rgba(255,255,255,.018) 1px,transparent 1px) 0 0/100% 4px,radial-gradient(480px circle at var(--mx) var(--my),rgba(232,161,67,.045),transparent 72%);mix-blend-mode:screen}
+    body::after{content:"";position:fixed;inset:0;pointer-events:none;z-index:69;opacity:.025;background-image:url("data:image/svg+xml,%3Csvg viewBox='0 0 160 160' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E")}
+    a{color:inherit}button{font:inherit}.shell{width:min(1240px,calc(100% - 40px));margin:auto}.micro{font:500 .69rem/1.2 var(--mono);letter-spacing:.14em;text-transform:uppercase;color:var(--muted)}
+    .skip{position:absolute;top:-4rem;left:1rem;z-index:999;background:var(--paper);color:var(--ink);padding:.75rem 1rem}.skip:focus{top:1rem}
+    .nav-wrap{position:sticky;top:0;z-index:60;background:linear-gradient(180deg,rgba(9,10,9,.96),rgba(9,10,9,.78));backdrop-filter:blur(18px);border-bottom:1px solid var(--line)}
+    .nav{min-height:68px;display:grid;grid-template-columns:auto 1fr auto;align-items:center;gap:2rem}.brand{display:flex;align-items:center;gap:.8rem;text-decoration:none}.brand-mark{width:38px;height:38px;display:grid;place-items:center;border:1px solid rgba(232,161,67,.58);clip-path:polygon(7px 0,100% 0,100% calc(100% - 7px),calc(100% - 7px) 100%,0 100%,0 7px);color:var(--amber2);font:800 1.15rem/1 var(--cond);background:linear-gradient(135deg,rgba(232,161,67,.14),transparent 60%)}
+    .brand-copy strong{display:block;font:800 1.12rem/1 var(--cond);letter-spacing:.1em}.brand-copy span{display:block;margin-top:4px;color:var(--muted);font:500 .57rem/1 var(--mono);letter-spacing:.12em;text-transform:uppercase}.nav-links{display:flex;justify-content:center;gap:1.7rem}.nav-links a{text-decoration:none;color:#9ba398;font:500 .68rem/1 var(--mono);letter-spacing:.09em;text-transform:uppercase;padding:12px 0}.nav-links a:hover,.nav-links a:focus-visible{color:var(--amber2)}.nav-status{display:flex;align-items:center;gap:.6rem;color:var(--radar);font:500 .63rem/1 var(--mono);letter-spacing:.08em;text-transform:uppercase}.dot{width:7px;height:7px;border-radius:50%;background:var(--radar);box-shadow:0 0 0 5px rgba(155,212,173,.08),0 0 16px rgba(155,212,173,.4);animation:pulse 2s ease-in-out infinite}
+    .hero{position:relative;overflow:hidden;border-bottom:1px solid var(--line)}.hero::before{content:"";position:absolute;inset:0;background:linear-gradient(90deg,transparent 49.9%,rgba(255,255,255,.03) 50%,transparent 50.1%),linear-gradient(0deg,transparent 49.9%,rgba(255,255,255,.025) 50%,transparent 50.1%);background-size:160px 160px;mask-image:linear-gradient(to bottom,#000,transparent 94%)}
+    .hero-grid{position:relative;z-index:2;display:grid;grid-template-columns:minmax(0,.95fr) minmax(440px,1.05fr);min-height:720px;align-items:center;gap:2rem;padding:76px 0 52px}.classification{display:inline-flex;align-items:center;gap:.7rem;color:var(--amber2);font:600 .68rem/1 var(--mono);letter-spacing:.13em;text-transform:uppercase}.classification::before{content:"";width:10px;height:10px;border:1px solid currentColor;transform:rotate(45deg)}
+    h1{margin:1.7rem 0 0;font:800 clamp(4.7rem,9vw,8.3rem)/.76 var(--cond);letter-spacing:-.055em;text-transform:uppercase}.outline{display:block;margin-top:.18em;color:transparent;-webkit-text-stroke:1px rgba(232,234,223,.46);font-size:.42em;line-height:.95;letter-spacing:.025em}.hero p{max-width:620px;color:#aab2a6;font-size:clamp(1rem,1.6vw,1.16rem);line-height:1.75}.hero p strong{color:var(--paper)}
+    .actions{display:flex;flex-wrap:wrap;gap:.9rem;margin-top:2rem}.btn{position:relative;display:inline-flex;align-items:center;justify-content:center;min-height:46px;padding:0 1.15rem;border:1px solid var(--line2);text-decoration:none;text-transform:uppercase;letter-spacing:.08em;font:600 .68rem/1 var(--mono);background:rgba(255,255,255,.025);overflow:hidden;transition:.2s var(--ease)}.btn:hover{transform:translateY(-2px);border-color:rgba(232,161,67,.58)}.btn.primary{background:var(--amber);border-color:var(--amber);color:#18130b}.btn.primary:hover{background:var(--amber2)}
+    .hero-meta{display:grid;grid-template-columns:repeat(3,1fr);gap:1px;max-width:620px;margin-top:2.2rem;background:var(--line);border:1px solid var(--line)}.hero-meta div{padding:.85rem 1rem;background:rgba(10,11,10,.8)}.hero-meta b{display:block;font:700 .82rem/1.2 var(--mono)}.hero-meta span{display:block;margin-top:.35rem;color:var(--muted);font:500 .58rem/1.2 var(--mono);text-transform:uppercase;letter-spacing:.08em}
+    .visual{position:relative;height:600px;min-width:0}.canvas-wrap{position:absolute;inset:0;border:1px solid rgba(232,161,67,.12);clip-path:polygon(28px 0,100% 0,100% calc(100% - 28px),calc(100% - 28px) 100%,0 100%,0 28px);background:radial-gradient(circle at 50% 48%,rgba(232,161,67,.09),transparent 33%),linear-gradient(rgba(155,212,173,.025) 1px,transparent 1px),linear-gradient(90deg,rgba(155,212,173,.025) 1px,transparent 1px);background-size:auto,38px 38px,38px 38px;overflow:hidden}.canvas-wrap canvas{width:100%;height:100%;display:block}.fallback-core{position:absolute;inset:16%;display:grid;place-items:center;border:1px solid rgba(155,212,173,.28);border-radius:50%;animation:spin 18s linear infinite}.fallback-core::before,.fallback-core::after{content:"";position:absolute;border:1px solid rgba(232,161,67,.32);border-radius:50%}.fallback-core::before{inset:15%;transform:rotateX(68deg)}.fallback-core::after{inset:30%;background:radial-gradient(circle,rgba(155,212,173,.3),transparent 65%)}.telemetry{position:absolute;left:18px;right:18px;bottom:18px;display:grid;grid-template-columns:repeat(3,1fr);gap:1px;background:var(--line);border:1px solid var(--line);z-index:4}.telemetry div{padding:.7rem .75rem;background:rgba(9,10,9,.88)}.telemetry b{display:block;font:600 .7rem/1.1 var(--mono);color:var(--radar2)}.telemetry span{display:block;margin-top:.3rem;color:var(--muted);font:500 .55rem/1.2 var(--mono);letter-spacing:.08em;text-transform:uppercase}
+    section{border-bottom:1px solid var(--line)}.section{padding:92px 0}.eyebrow{color:var(--amber2);font:600 .67rem/1 var(--mono);letter-spacing:.14em;text-transform:uppercase}.section h2{max-width:860px;margin:.8rem 0 0;font:800 clamp(2.8rem,6vw,5.7rem)/.88 var(--cond);letter-spacing:-.035em;text-transform:uppercase}.lead{max-width:760px;margin:1.2rem 0 0;color:#9da79a;font-size:1.05rem}
+    .install-grid{display:grid;grid-template-columns:.78fr 1.22fr;gap:34px;margin-top:46px}.install-side{border:1px solid var(--line);background:linear-gradient(180deg,rgba(232,161,67,.035),rgba(255,255,255,.012));padding:26px;align-self:start}.install-side h3{margin:0;font:700 2rem/1 var(--cond);text-transform:uppercase}.reqs{display:grid;gap:10px;margin-top:22px}.req{display:flex;justify-content:space-between;gap:1rem;padding:12px 0;border-top:1px solid var(--line);font:500 .7rem/1.35 var(--mono);color:var(--muted)}.req b{color:var(--paper);font-weight:600}.notice{margin-top:22px;padding:14px;border-left:2px solid var(--amber);background:rgba(232,161,67,.06);color:#b7b5a8;font-size:.86rem}
+    .terminal{border:1px solid var(--line2);background:#090b0a;box-shadow:0 30px 80px rgba(0,0,0,.28)}.terminal-head{display:flex;align-items:center;justify-content:space-between;gap:1rem;padding:12px 14px;border-bottom:1px solid var(--line);background:#111411}.term-title{font:600 .62rem/1 var(--mono);letter-spacing:.11em;text-transform:uppercase;color:#9da79a}.lights{display:flex;gap:6px}.lights i{display:block;width:7px;height:7px;border-radius:50%;background:#343934}.lights i:first-child{background:var(--warning)}.lights i:nth-child(2){background:var(--amber)}.lights i:nth-child(3){background:var(--radar)}
+    .tabs{display:flex;gap:1px;border-bottom:1px solid var(--line);background:var(--line)}.tab{flex:1;min-height:44px;border:0;background:#0f120f;color:var(--muted);font:600 .62rem/1 var(--mono);letter-spacing:.08em;text-transform:uppercase;cursor:pointer}.tab[aria-selected="true"]{background:rgba(232,161,67,.09);color:var(--amber2);box-shadow:inset 0 -2px 0 var(--amber)}.term-body{position:relative;padding:22px;min-height:300px;overflow:auto}.term-body pre{margin:0;white-space:pre-wrap;color:#d7dfd2;font:500 .78rem/1.8 var(--mono)}.prompt{color:var(--radar)}.comment{color:#667164}.copy{position:absolute;right:14px;top:14px;min-height:34px;padding:0 10px;border:1px solid var(--line);background:#121512;color:var(--muted);font:600 .58rem/1 var(--mono);letter-spacing:.08em;text-transform:uppercase;cursor:pointer}.copy:hover{color:var(--amber2);border-color:rgba(232,161,67,.4)}
+    .mission{margin-top:48px;display:grid;grid-template-columns:330px minmax(0,1fr);gap:28px}.steps{border:1px solid var(--line);background:rgba(255,255,255,.012);padding:10px}.step{width:100%;display:grid;grid-template-columns:38px 1fr;gap:12px;text-align:left;padding:14px;border:0;background:transparent;color:var(--paper);cursor:pointer;border-bottom:1px solid var(--line)}.step:last-child{border-bottom:0}.step-num{width:34px;height:34px;border:1px solid var(--line2);display:grid;place-items:center;color:var(--muted);font:600 .65rem/1 var(--mono)}.step b{display:block;font:700 .85rem/1.2 var(--mono)}.step span{display:block;margin-top:5px;color:var(--muted);font-size:.76rem}.step.active{background:rgba(155,212,173,.055)}.step.active .step-num{border-color:var(--radar);color:var(--radar2);box-shadow:0 0 20px rgba(155,212,173,.08)}
+    .demo-panel{border:1px solid var(--line2);background:linear-gradient(180deg,#0c0f0d,#090b0a);min-width:0}.demo-top{padding:18px 20px;border-bottom:1px solid var(--line);display:flex;align-items:center;justify-content:space-between;gap:1rem}.demo-top b{font:700 .9rem/1.2 var(--mono)}.demo-top span{color:var(--radar);font:500 .6rem/1 var(--mono);text-transform:uppercase;letter-spacing:.1em}.demo-code{padding:22px;overflow:auto;min-height:390px}.demo-code pre{margin:0;white-space:pre-wrap;color:#cbd5c7;font:500 .75rem/1.75 var(--mono)}.demo-actions{display:flex;flex-wrap:wrap;align-items:center;gap:.8rem;padding:0 22px 22px}.small-btn{min-height:38px;padding:0 12px;border:1px solid var(--line2);background:#121512;color:var(--paper);font:600 .6rem/1 var(--mono);letter-spacing:.08em;text-transform:uppercase;cursor:pointer}.small-btn:hover{border-color:rgba(232,161,67,.5);color:var(--amber2)}.demo-output{margin:0 22px 22px;border:1px solid var(--line);background:#080908;padding:14px;min-height:116px;color:#95a594;font:500 .68rem/1.65 var(--mono);white-space:pre-wrap}.sim-label{color:var(--muted);font:500 .58rem/1 var(--mono);text-transform:uppercase;letter-spacing:.1em}
+    .architecture{margin-top:46px;display:grid;grid-template-columns:repeat(5,1fr);gap:12px;align-items:stretch}.node{position:relative;min-height:190px;border:1px solid var(--line);background:rgba(255,255,255,.018);padding:20px;transition:.25s var(--ease);cursor:pointer}.node:hover,.node.active{transform:translateY(-5px);border-color:rgba(155,212,173,.46);background:rgba(155,212,173,.045)}.node .n{color:var(--amber);font:600 .58rem/1 var(--mono);letter-spacing:.12em;text-transform:uppercase}.node h3{margin:.8rem 0 .55rem;font:700 1.6rem/1 var(--cond);text-transform:uppercase}.node p{margin:0;color:var(--muted);font-size:.82rem}.node::after{content:"→";position:absolute;right:-19px;top:46%;color:#596158;font:500 1rem var(--mono)}.node:last-child::after{display:none}
+    .features{display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin-top:46px}.card{position:relative;min-height:250px;border:1px solid var(--line);background:linear-gradient(180deg,rgba(255,255,255,.025),rgba(255,255,255,.01));padding:24px;transform-style:preserve-3d;transition:transform .16s ease,border-color .2s ease}.card:hover{border-color:rgba(232,161,67,.38)}.card small{color:var(--amber);font:600 .59rem/1 var(--mono);letter-spacing:.12em;text-transform:uppercase}.card h3{margin:1.4rem 0 .7rem;font:700 1.75rem/1 var(--cond);text-transform:uppercase}.card p{color:var(--muted);font-size:.84rem}.card .bar{position:absolute;left:24px;right:24px;bottom:23px;height:2px;background:#222722}.card .bar i{display:block;height:100%;background:var(--radar);width:var(--w,70%)}
+    .status-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:14px;margin-top:44px}.status-card{border:1px solid var(--line);padding:20px;background:rgba(255,255,255,.015)}.status-card b{font:700 1rem/1 var(--mono)}.status-card p{margin:.7rem 0 0;color:var(--muted);font-size:.82rem}.ok{color:var(--radar2)}.exp{color:var(--amber2)}.road{color:#9fa7a0}
+    footer{padding:34px 0 46px}.foot{display:flex;justify-content:space-between;align-items:center;gap:2rem;color:var(--muted);font:500 .62rem/1.5 var(--mono);text-transform:uppercase;letter-spacing:.08em}.foot a{text-decoration:none}.foot a:hover{color:var(--amber2)}
+    @keyframes pulse{50%{opacity:.45;transform:scale(.86)}}@keyframes spin{to{transform:rotate(360deg)}}
+    @media(max-width:980px){.nav-links{display:none}.nav{grid-template-columns:1fr auto}.hero-grid{grid-template-columns:1fr;padding-top:52px}.visual{height:520px}.install-grid,.mission{grid-template-columns:1fr}.architecture{grid-template-columns:1fr 1fr}.node::after{display:none}.features{grid-template-columns:1fr 1fr}.status-grid{grid-template-columns:1fr 1fr}}
+    @media(max-width:640px){.shell{width:min(100% - 24px,1240px)}.brand-copy span,.nav-status span{display:none}.hero-grid{padding-top:38px}.hero h1{font-size:clamp(4rem,24vw,6.2rem)}.visual{height:430px}.hero-meta,.telemetry{grid-template-columns:1fr}.telemetry{left:10px;right:10px}.section{padding:72px 0}.section h2{font-size:3.4rem}.architecture,.features,.status-grid{grid-template-columns:1fr}.install-side{padding:20px}.term-body,.demo-code{padding:16px}.mission{gap:16px}.foot{align-items:flex-start;flex-direction:column}}
+    @media(prefers-reduced-motion:reduce){*{scroll-behavior:auto!important;animation:none!important;transition:none!important}.fallback-core{transform:none!important}}
   </style>
 </head>
 <body>
-  <a class="skip-link" href="#main">Skip to content</a>
-
-  <header class="nav-wrap">
-    <div class="shell nav">
-      <a class="brand" href="#top" aria-label="ARC home">
-        <span class="brand-mark">A</span>
-        <span class="brand-copy">
-          <strong>ARC</strong>
-          <span>Adaptive Agent Runtime</span>
-        </span>
-      </a>
-
-      <nav class="nav-links" aria-label="Primary navigation">
-        <a href="#problem">Problem</a>
-        <a href="#architecture">Architecture</a>
-        <a href="#capabilities">Capabilities</a>
-        <a href="#inspect">Inspect</a>
-        <a href="#research">Research</a>
-      </nav>
-
-      <div class="nav-status" title="Experimental research runtime">
-        <i class="status-dot" aria-hidden="true"></i>
-        <span>Experimental / online</span>
+<a class="skip" href="#main">Skip to content</a>
+<header class="nav-wrap">
+  <div class="shell nav">
+    <a class="brand" href="#top" aria-label="ARC home"><span class="brand-mark">A</span><span class="brand-copy"><strong>ARC</strong><span>Adaptive Agent Runtime</span></span></a>
+    <nav class="nav-links" aria-label="Primary navigation"><a href="#system">System</a><a href="#install">Install</a><a href="#demo">Demo</a><a href="#status">Status</a><a href="https://github.com/anatwork14/adaptive-agent-runtime">GitHub</a></nav>
+    <div class="nav-status"><i class="dot"></i><span>Experimental runtime</span></div>
+  </div>
+</header>
+<main id="main">
+  <section class="hero" id="top">
+    <div class="shell hero-grid">
+      <div>
+        <div class="classification">Runtime control plane // long-horizon coding</div>
+        <h1>ARC<span class="outline">Adaptive Agent Runtime</span></h1>
+        <p><strong>Reliable context control for coding-agent teams.</strong> ARC separates authoritative project truth from lossy memory, compiles bounded task context, isolates agent work in Git worktrees, and integrates only verified candidate commits.</p>
+        <div class="actions"><a class="btn primary" href="#install">Install ARC</a><a class="btn" href="#demo">Run the demo</a><a class="btn" href="https://github.com/anatwork14/adaptive-agent-runtime">View source</a></div>
+        <div class="hero-meta"><div><b>STATE</b><span>Append-only events</span></div><div><b>MEMORY</b><span>Versioned projection</span></div><div><b>GATE</b><span>Transactional integration</span></div></div>
+      </div>
+      <div class="visual" aria-label="Interactive ARC runtime core visualization">
+        <div class="canvas-wrap" id="scene"><div class="fallback-core" id="fallback"></div><div class="telemetry"><div><b id="tState">V.128</b><span>State version</span></div><div><b id="tMemory">14 active</b><span>Memory objects</span></div><div><b id="tGate">ready</b><span>Gate status</span></div></div></div>
       </div>
     </div>
-  </header>
+  </section>
 
-  <main id="main">
-    <section class="hero" id="top" aria-labelledby="hero-title">
-      <div class="shell hero-grid">
-        <div class="hero-copy reveal">
-          <div class="classification">System // ARC-01 // Context Control Plane</div>
-          <h1 id="hero-title">
-            <span class="arc">ARC</span>
-            <span class="sub">Reliable context for coding-agent teams.</span>
-          </h1>
-          <p class="hero-desc">
-            Long-horizon coding agents fail when project knowledge drifts. ARC gives them a <strong>versioned project state</strong>, <strong>adaptive memory</strong>, task-specific context, and a transactional integration gate—without treating lossy summaries as ground truth.
-          </p>
-          <div class="hero-actions">
-            <a class="btn btn-primary magnetic" href="https://github.com/anatwork14/adaptive-agent-runtime" target="_blank" rel="noreferrer">
-              Open GitHub
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M7 17 17 7M8 7h9v9"/></svg>
-            </a>
-            <a class="btn btn-ghost magnetic" href="#architecture">Enter system map</a>
-          </div>
-          <div class="hero-meta" aria-label="Project characteristics">
-            <div><b>EVENT-SOURCED</b><span>authoritative state</span></div>
-            <div><b>VERSION-AWARE</b><span>memory validity</span></div>
-            <div><b>FAIL-CLOSED</b><span>git integration</span></div>
-          </div>
-        </div>
-
-        <div class="scene-wrap reveal" id="scene-wrap">
-          <div class="scene-frame" id="scene-frame">
-            <canvas id="arc-scene" aria-hidden="true"></canvas>
-            <div class="scene-fallback" id="scene-fallback" aria-hidden="true"><div class="fallback-core"></div></div>
-            <div class="scene-label a"><b>ARC_CORE</b><span>project state projection</span></div>
-            <div class="scene-label b"><b>GATE / TX-04</b><span>candidate commit verified</span></div>
-            <div class="scene-label c"><b>CTX / 24K</b><span>budget-aware compilation</span></div>
-            <div class="target-reticle" aria-hidden="true"></div>
-            <div class="mode-strip" aria-label="3D scene mode">
-              <button class="mode-btn" type="button" data-scene-mode="state" aria-pressed="true" title="State mode">ST</button>
-              <button class="mode-btn" type="button" data-scene-mode="memory" aria-pressed="false" title="Memory mode">MM</button>
-              <button class="mode-btn" type="button" data-scene-mode="gate" aria-pressed="false" title="Gate mode">GT</button>
-            </div>
-          </div>
-        </div>
-      </div>
-    </section>
-
-    <div class="telemetry-band" aria-hidden="true">
-      <div class="telemetry-track">
-        <div class="telemetry-set">
-          <div class="telemetry-item">STATE_VERSION <b>MONOTONIC</b></div>
-          <div class="telemetry-item">MEMORY_STATUS <b class="ok">PROVENANCE_OK</b></div>
-          <div class="telemetry-item">CONTEXT_BUDGET <b>HARD_CEILING</b></div>
-          <div class="telemetry-item">WORKTREE <b class="ok">ISOLATED</b></div>
-          <div class="telemetry-item">INTEGRATION <b class="warn">SERIALIZED</b></div>
-          <div class="telemetry-item">REPLAY <b class="ok">DETERMINISTIC</b></div>
-        </div>
-        <div class="telemetry-set">
-          <div class="telemetry-item">STATE_VERSION <b>MONOTONIC</b></div>
-          <div class="telemetry-item">MEMORY_STATUS <b class="ok">PROVENANCE_OK</b></div>
-          <div class="telemetry-item">CONTEXT_BUDGET <b>HARD_CEILING</b></div>
-          <div class="telemetry-item">WORKTREE <b class="ok">ISOLATED</b></div>
-          <div class="telemetry-item">INTEGRATION <b class="warn">SERIALIZED</b></div>
-          <div class="telemetry-item">REPLAY <b class="ok">DETERMINISTIC</b></div>
-        </div>
+  <section id="install"><div class="shell section">
+    <div class="eyebrow">01 // deployment procedure</div><h2>Install it. Initialize it. Inspect it.</h2>
+    <p class="lead">ARC is currently installed from source. The CLI manages authoritative state and inspection; the Python API drives task creation and agent execution.</p>
+    <div class="install-grid">
+      <aside class="install-side"><div class="micro">Requirements</div><h3>Operator checklist</h3><div class="reqs"><div class="req"><b>Python</b><span>3.11+</span></div><div class="req"><b>Git</b><span>clean repository</span></div><div class="req"><b>Provider CLI</b><span>optional for smoke test</span></div><div class="req"><b>Docker</b><span>command sandbox image</span></div></div><div class="notice">Start with the deterministic mock adapter to validate the full ARC control flow without API keys. Switch to Codex / Claude / OpenCode only after the smoke test succeeds.</div></aside>
+      <div class="terminal" aria-label="Installation terminal">
+        <div class="terminal-head"><div class="lights"><i></i><i></i><i></i></div><div class="term-title">ARC // installation uplink</div></div>
+        <div class="tabs" role="tablist"><button class="tab" role="tab" aria-selected="true" data-install="source">Install from source</button><button class="tab" role="tab" aria-selected="false" data-install="init">Initialize runtime</button><button class="tab" role="tab" aria-selected="false" data-install="docker">Docker runner</button></div>
+        <div class="term-body"><button class="copy" type="button" data-copy-target="installCode">Copy</button><pre id="installCode"></pre></div>
       </div>
     </div>
+  </div></section>
 
-    <section id="problem">
-      <div class="shell section-grid">
-        <aside class="section-index reveal">
-          <div class="num">01</div>
-          <div>
-            <h2>Failure surface</h2>
-            <p>Why scaling the number of agents does not automatically scale software engineering reliability.</p>
-          </div>
-        </aside>
-
-        <div>
-          <div class="section-lead reveal">
-            <div class="hud-line">Problem model</div>
-            <h3>Agents don't just lose tokens. They lose the project.</h3>
-            <p>Long-running software work mutates underneath every agent. Old summaries become stale, transcripts become expensive, vector recall confuses chronology, and parallel workers can act on different versions of reality.</p>
-          </div>
-
-          <div class="problem-grid reveal">
-            <article class="problem" data-code="01">
-              <div class="icon">CTX</div>
-              <h4>Context drift</h4>
-              <p>A correct decision at event 481 can become dangerous at event 612. Retrieval without temporal validity can quietly resurrect obsolete project facts.</p>
-            </article>
-            <article class="problem" data-code="02">
-              <div class="icon">MEM</div>
-              <h4>Memory echo</h4>
-              <p>A lossy summary gets retrieved, repeated, and reinforced until the team treats an interpretation as authority.</p>
-            </article>
-            <article class="problem" data-code="03">
-              <div class="icon">GIT</div>
-              <h4>Integration race</h4>
-              <p>Multiple successful agent branches can still form one broken repository. Reliability has to be enforced at the merged candidate tree.</p>
-            </article>
-          </div>
-        </div>
+  <section id="demo"><div class="shell section">
+    <div class="eyebrow">02 // first mission</div><h2>See a task cross the entire runtime.</h2>
+    <p class="lead">This walkthrough uses ARC's real public interfaces. The default path uses <code>MockAgentAdapter</code> so anyone can validate worktree isolation, context compilation, candidate commits, gate integration, replay and inspection without provider credentials.</p>
+    <div class="mission">
+      <div class="steps" role="tablist" aria-label="Demo steps">
+        <button class="step active" type="button" data-step="0"><span class="step-num">01</span><span><b>Initialize</b><span>Create authoritative state.</span></span></button>
+        <button class="step" type="button" data-step="1"><span class="step-num">02</span><span><b>Run smoke task</b><span>Execute through worktree + gate.</span></span></button>
+        <button class="step" type="button" data-step="2"><span class="step-num">03</span><span><b>Inspect state</b><span>Read DAG and event history.</span></span></button>
+        <button class="step" type="button" data-step="3"><span class="step-num">04</span><span><b>Compile context</b><span>Inspect bounded task context.</span></span></button>
+        <button class="step" type="button" data-step="4"><span class="step-num">05</span><span><b>Switch to Codex</b><span>Replace the deterministic adapter.</span></span></button>
       </div>
-    </section>
-
-    <section id="architecture">
-      <div class="shell section-grid">
-        <aside class="section-index reveal">
-          <div class="num">02</div>
-          <div>
-            <h2>System map</h2>
-            <p>Click any subsystem. ARC separates authoritative truth from lossy derived memory, then compiles only the context an agent needs.</p>
-          </div>
-        </aside>
-
-        <div>
-          <div class="section-lead reveal">
-            <div class="hud-line">Interactive architecture</div>
-            <h3>A control plane, not a shared chat log.</h3>
-            <p>The central invariant is simple: <strong style="color:var(--paper)">adaptive memory is never authoritative.</strong> Project truth lives in append-only events and git state. Memory can be compressed, superseded, archived, or rebuilt without changing what actually happened.</p>
-          </div>
-
-          <div class="architecture-console reveal" id="architecture-console">
-            <div class="map-panel" id="map-panel">
-              <svg viewBox="0 0 760 600" preserveAspectRatio="none" aria-hidden="true">
-                <path id="conn-state-context" class="connection flow active" d="M160 120 C250 150 270 260 350 300" />
-                <path id="conn-memory-context" class="connection flow active" d="M555 115 C475 165 455 255 400 300" />
-                <path id="conn-context-agent" class="connection flow" d="M350 340 C275 390 230 470 165 505" />
-                <path id="conn-agent-gate" class="connection flow" d="M165 515 C280 565 425 565 555 515" />
-                <path id="conn-gate-state" class="connection flow" d="M590 500 C690 355 620 180 165 120" />
-                <circle cx="375" cy="305" r="95" fill="none" stroke="rgba(232,161,67,.08)" stroke-width="1" />
-                <circle cx="375" cy="305" r="150" fill="none" stroke="rgba(155,212,173,.055)" stroke-width="1" stroke-dasharray="2 8" />
-              </svg>
-
-              <button class="map-node state" type="button" data-node="state" aria-pressed="true">
-                <span class="node-kicker">Plane / authoritative</span>
-                <strong>Project State</strong>
-              </button>
-              <button class="map-node memory" type="button" data-node="memory" aria-pressed="false">
-                <span class="node-kicker">Plane / derived</span>
-                <strong>Memory</strong>
-              </button>
-              <button class="map-node context" type="button" data-node="context" aria-pressed="false">
-                <span class="node-kicker">Compiler / bounded</span>
-                <strong>Context</strong>
-              </button>
-              <button class="map-node agent" type="button" data-node="agent" aria-pressed="false">
-                <span class="node-kicker">Worker / isolated</span>
-                <strong>Agent</strong>
-              </button>
-              <button class="map-node gate" type="button" data-node="gate" aria-pressed="false">
-                <span class="node-kicker">Writer / serialized</span>
-                <strong>Gate</strong>
-              </button>
-            </div>
-
-            <aside class="console-side">
-              <div class="console-head"><span>Subsystem telemetry</span><span>live</span></div>
-              <div id="node-detail" aria-live="polite">
-                <div class="micro" id="detail-code">AUTH / ST-01</div>
-                <h4 id="detail-title">Project State</h4>
-                <p id="detail-copy">Append-only events, task DAG versions, git refs, leases, budgets, and integration outcomes form the reconstructable source of truth.</p>
-                <div class="detail-list" id="detail-list">
-                  <span>single authoritative writer</span>
-                  <span>monotonic state version</span>
-                  <span>deterministic replay</span>
-                </div>
-                <div class="signal-meter">
-                  <div class="label"><span>authority</span><span id="detail-score">100%</span></div>
-                  <div class="meter"><span id="detail-meter" style="width:100%"></span></div>
-                </div>
-              </div>
-            </aside>
-          </div>
-        </div>
+      <div class="demo-panel">
+        <div class="demo-top"><b id="demoTitle">01 // Initialize ARC</b><span id="demoMode">real command</span></div>
+        <div class="demo-code"><pre id="demoCode"></pre></div>
+        <div class="demo-actions"><button class="small-btn" type="button" id="copyDemo">Copy current step</button><button class="small-btn" type="button" id="playDemo">Play walkthrough</button><span class="sim-label">Terminal output below is an illustrative UI walkthrough, not remote execution.</span></div>
+        <div class="demo-output" id="demoOutput" aria-live="polite">$ waiting for operator input...</div>
       </div>
-    </section>
-
-    <section id="capabilities">
-      <div class="shell section-grid">
-        <aside class="section-index reveal">
-          <div class="num">03</div>
-          <div>
-            <h2>Runtime capabilities</h2>
-            <p>Move the pointer across each panel. Depth is decorative; every capability is readable without hover.</p>
-          </div>
-        </aside>
-
-        <div>
-          <div class="section-lead reveal">
-            <div class="hud-line">Operational stack</div>
-            <h3>Reliability engineered into every handoff.</h3>
-            <p>ARC treats context, memory, execution and integration as one control problem. The runtime is intentionally modular so each policy can be benchmarked against static baselines.</p>
-          </div>
-
-          <div class="feature-deck reveal">
-            <article class="feature-card tilt-card">
-              <div class="feature-top"><span class="feature-id">ARC / MEM-02</span><span class="feature-state">active</span></div>
-              <h4>Versioned adaptive memory</h4>
-              <p>Every memory object carries source-event provenance, validity boundaries and supersession state. Derived memory stays useful without becoming ground truth.</p>
-              <div class="feature-tags"><span>provenance</span><span>supersession</span><span>conflict-aware</span></div>
-            </article>
-
-            <article class="feature-card tilt-card">
-              <div class="feature-top"><span class="feature-id">ARC / CTX-03</span><span class="feature-state">bounded</span></div>
-              <h4>Risk-aware context compilation</h4>
-              <p>ARC assembles task core, decisions, code evidence, assumptions, failures and procedures under a hard token ceiling instead of dumping history into the prompt.</p>
-              <div class="feature-tags"><span>hard budget</span><span>code evidence</span><span>task-aware</span></div>
-            </article>
-
-            <article class="feature-card tilt-card">
-              <div class="feature-top"><span class="feature-id">ARC / GIT-04</span><span class="feature-state">serialized</span></div>
-              <h4>Transactional integration gate</h4>
-              <p>Candidate commits are verified in an isolated gate worktree against the merged tree before the single writer is allowed to integrate them.</p>
-              <div class="feature-tags"><span>worktrees</span><span>candidate commit</span><span>fail-closed</span></div>
-            </article>
-
-            <article class="feature-card tilt-card">
-              <div class="feature-top"><span class="feature-id">ARC / ISO-05</span><span class="feature-state">hardened</span></div>
-              <h4>Isolated command execution</h4>
-              <p>Build and test commands can run in a Docker boundary with network disabled, dropped capabilities, resource limits and no silent host fallback.</p>
-              <div class="feature-tags"><span>docker</span><span>network-none</span><span>resource limits</span></div>
-            </article>
-          </div>
-        </div>
-      </div>
-    </section>
-
-    <section id="inspect">
-      <div class="shell section-grid">
-        <aside class="section-index reveal">
-          <div class="num">04</div>
-          <div>
-            <h2>Inspectable memory</h2>
-            <p>A reliable memory system should explain why an item exists, where it came from, when it was valid, and where it was used.</p>
-          </div>
-        </aside>
-
-        <div>
-          <div class="section-lead reveal">
-            <div class="hud-line">Operator console</div>
-            <h3>Ask the runtime why it remembers.</h3>
-            <p>The provenance model is designed to make agent memory debuggable rather than magical. Try the simulated operator views below.</p>
-          </div>
-
-          <div class="terminal reveal">
-            <div class="terminal-head">
-              <span>arc://operator-console</span>
-              <span class="lights" aria-hidden="true"><i></i><i></i><i></i></span>
-            </div>
-            <div class="terminal-body">
-              <div class="terminal-tabs" aria-label="Choose inspection example">
-                <button type="button" data-memory="decision" aria-pressed="true">Decision M_44</button>
-                <button type="button" data-memory="failure" aria-pressed="false">Failure M_18</button>
-                <button type="button" data-memory="superseded" aria-pressed="false">Superseded M_07</button>
-              </div>
-              <div><span class="prompt">operator@arc:~$</span> <span class="cmd" id="memory-command">arc memory why M_44</span></div>
-              <div class="terminal-output" id="memory-output" aria-live="polite">Memory <strong>M_44</strong>
-
-Type:             decision
-Status:           active
-Valid:            event 850 → current
-Derived from:     event 842, event 850
-Delivered to:     T17 / codex_2, T21 / claude_1
-Downstream:       2 accepted patches · 0 rejected patches
-
-Decision: All auth APIs return domain result objects, not tuples.</div>
-            </div>
-          </div>
-        </div>
-      </div>
-    </section>
-
-    <section id="research">
-      <div class="shell section-grid">
-        <aside class="section-index reveal">
-          <div class="num">05</div>
-          <div>
-            <h2>Research thesis</h2>
-            <p>ARC is an experimental research runtime. The research question is not whether agents can remember more, but whether context control improves reliability per unit cost.</p>
-          </div>
-        </aside>
-
-        <div>
-          <div class="section-lead reveal">
-            <div class="hud-line">Core principle</div>
-            <h3>Never hand agents history. Hand them the current project.</h3>
-          </div>
-
-          <div class="principle reveal">
-            <div class="quote">
-              <blockquote>Memory may be <em>lossy</em>. Truth may not.</blockquote>
-              <div class="micro">Design invariant / ARC-INV-01</div>
-            </div>
-            <div class="flow">
-              <div class="flow-row"><span class="idx">01</span><strong>Authoritative events</strong><span>append-only</span></div>
-              <div class="flow-row"><span class="idx">02</span><strong>Versioned memory</strong><span>derived</span></div>
-              <div class="flow-row"><span class="idx">03</span><strong>Context compiler</strong><span>bounded</span></div>
-              <div class="flow-row"><span class="idx">04</span><strong>Isolated agent</strong><span>task-scoped</span></div>
-              <div class="flow-row"><span class="idx">05</span><strong>Integration gate</strong><span>verified</span></div>
-            </div>
-          </div>
-        </div>
-      </div>
-    </section>
-
-    <section class="cta" aria-labelledby="cta-title">
-      <div class="shell">
-        <div class="cta-card reveal">
-          <div>
-            <div class="classification">Open-source research runtime</div>
-            <h2 id="cta-title">Build agent teams that <span>remember correctly.</span></h2>
-            <p>ARC is experimental and evolving. Explore the implementation, inspect the reliability boundaries, and benchmark your own coding-agent workflows against a versioned context control plane.</p>
-          </div>
-          <div class="cta-actions">
-            <a class="btn btn-primary magnetic" href="https://github.com/anatwork14/adaptive-agent-runtime" target="_blank" rel="noreferrer">View repository</a>
-            <a class="btn btn-ghost magnetic" href="https://github.com/anatwork14/adaptive-agent-runtime#quick-start" target="_blank" rel="noreferrer">Quick start</a>
-          </div>
-        </div>
-      </div>
-    </section>
-  </main>
-
-  <footer>
-    <div class="shell footer-inner">
-      <span>ARC // Adaptive Agent Runtime // experimental</span>
-      <span><a href="https://github.com/anatwork14/adaptive-agent-runtime" target="_blank" rel="noreferrer">GitHub</a> · Apache-2.0</span>
     </div>
-  </footer>
+  </div></section>
 
-  <script>
-    (() => {
-      const root = document.documentElement;
-      const reduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  <section id="system"><div class="shell section">
+    <div class="eyebrow">03 // control architecture</div><h2>Memory can help the mission. It cannot rewrite the truth.</h2><p class="lead">ARC keeps correctness-critical facts in an authoritative event stream and Git state. Adaptive memory is a rebuildable, provenance-aware projection used only to compile useful task context.</p>
+    <div class="architecture" id="arch">
+      <article class="node active"><div class="n">A1</div><h3>Authoritative state</h3><p>Events, task DAG, budgets, leases, commit and gate outcomes.</p></article>
+      <article class="node"><div class="n">A2</div><h3>Adaptive memory</h3><p>Decisions, failures, procedures, validity and supersession.</p></article>
+      <article class="node"><div class="n">A3</div><h3>Context compiler</h3><p>Hard token ceiling, code evidence, task/risk-aware packing.</p></article>
+      <article class="node"><div class="n">A4</div><h3>Agent worktree</h3><p>Isolated repository branch; agent produces a candidate commit.</p></article>
+      <article class="node"><div class="n">A5</div><h3>Integration gate</h3><p>Verify the exact candidate tree, then integrate serially.</p></article>
+    </div>
+    <div class="features">
+      <article class="card"><small>memory plane</small><h3>Versioned memory</h3><p>Every retained memory can carry provenance, validity intervals and supersession state.</p><div class="bar"><i style="--w:88%"></i></div></article>
+      <article class="card"><small>context control</small><h3>Bounded packets</h3><p>Risk changes allocation, not the hard token ceiling. Context includes actual code evidence and hashes.</p><div class="bar"><i style="--w:76%"></i></div></article>
+      <article class="card"><small>integration</small><h3>Candidate-first gate</h3><p>The gate validates the immutable candidate commit in a fresh verification worktree.</p><div class="bar"><i style="--w:93%"></i></div></article>
+      <article class="card"><small>recovery</small><h3>Replayable state</h3><p>Recorded memory materializations are replayed as data instead of regenerating summaries.</p><div class="bar"><i style="--w:81%"></i></div></article>
+    </div>
+  </div></section>
 
-      document.addEventListener('pointermove', (event) => {
-        root.style.setProperty('--mx', `${event.clientX}px`);
-        root.style.setProperty('--my', `${event.clientY}px`);
-      }, { passive: true });
+  <section id="status"><div class="shell section">
+    <div class="eyebrow">04 // current status</div><h2>Research-grade prototype. Explicit boundaries.</h2><p class="lead">ARC is pre-alpha. The control-plane substrate is implemented; provider CLI compatibility, semantic retrieval and repository-scale evaluation remain active work.</p>
+    <div class="status-grid"><div class="status-card"><b class="ok">Implemented</b><p>Event sourcing, deterministic replay, versioned memory, bounded context compilation, worktrees, candidate commits, transactional gate, mock adapter.</p></div><div class="status-card"><b class="exp">Experimental</b><p>Codex / Claude / OpenCode CLI wrappers, provider execution paths, Docker-backed command sandbox integration.</p></div><div class="status-card"><b class="road">Research stage</b><p>Semantic embedding provider, learned policies, large repository benchmark, iso-cost multi-agent crossover characterization.</p></div></div>
+  </div></section>
+</main>
+<footer><div class="shell foot"><span>ARC // Adaptive Agent Runtime // Apache-2.0</span><span><a href="https://github.com/anatwork14/adaptive-agent-runtime">GitHub</a> · <a href="https://github.com/anatwork14/adaptive-agent-runtime/blob/main/docs/GETTING_STARTED.md">Getting started</a></span></div></footer>
 
-      const revealNodes = [...document.querySelectorAll('.reveal')];
-      if ('IntersectionObserver' in window && !reduced) {
-        const observer = new IntersectionObserver((entries) => {
-          entries.forEach((entry) => {
-            if (entry.isIntersecting) {
-              entry.target.classList.add('in');
-              observer.unobserve(entry.target);
-            }
-          });
-        }, { threshold: 0.12 });
-        revealNodes.forEach((node) => observer.observe(node));
-      } else {
-        revealNodes.forEach((node) => node.classList.add('in'));
-      }
+<script>
+(() => {
+  const installSnippets = {
+    source: `git clone https://github.com/anatwork14/adaptive-agent-runtime.git\ncd adaptive-agent-runtime\npython -m venv .venv\nsource .venv/bin/activate\npip install -e ".[dev]"\narc --help`,
+    init: `# run inside a clean git repository\narc init . --project-id demo\narc status --project-id demo\narc events --project-id demo`,
+    docker: `# optional: build ARC's command/test sandbox image\ndocker build -f Dockerfile.runner -t arc-runner:latest .\n\n# provider CLI execution remains experimental host-mode\n# until provider auth/credential brokering is containerized.`
+  };
+  const installCode = document.getElementById('installCode');
+  installCode.textContent = installSnippets.source;
+  document.querySelectorAll('[data-install]').forEach(btn => btn.addEventListener('click', () => {
+    document.querySelectorAll('[data-install]').forEach(x => x.setAttribute('aria-selected','false'));
+    btn.setAttribute('aria-selected','true');
+    installCode.textContent = installSnippets[btn.dataset.install];
+  }));
+  document.querySelectorAll('[data-copy-target]').forEach(btn => btn.addEventListener('click', async () => {
+    const node = document.getElementById(btn.dataset.copyTarget); if (!node) return;
+    try { await navigator.clipboard.writeText(node.textContent); btn.textContent='Copied'; setTimeout(()=>btn.textContent='Copy',1200); } catch { btn.textContent='Select + copy'; }
+  }));
 
-      if (!reduced && window.matchMedia('(hover: hover) and (pointer: fine)').matches) {
-        document.querySelectorAll('.tilt-card').forEach((card) => {
-          card.addEventListener('pointermove', (event) => {
-            const rect = card.getBoundingClientRect();
-            const x = (event.clientX - rect.left) / rect.width;
-            const y = (event.clientY - rect.top) / rect.height;
-            const rx = (0.5 - y) * 5;
-            const ry = (x - 0.5) * 6;
-            card.style.setProperty('--tiltX', `${rx}deg`);
-            card.style.setProperty('--tiltY', `${ry}deg`);
-            card.style.setProperty('--cx', `${x * 100}%`);
-            card.style.setProperty('--cy', `${y * 100}%`);
-          });
-          card.addEventListener('pointerleave', () => {
-            card.style.setProperty('--tiltX', '0deg');
-            card.style.setProperty('--tiltY', '0deg');
-          });
-        });
-
-        document.querySelectorAll('.magnetic').forEach((button) => {
-          button.addEventListener('pointermove', (event) => {
-            const rect = button.getBoundingClientRect();
-            const x = event.clientX - rect.left - rect.width / 2;
-            const y = event.clientY - rect.top - rect.height / 2;
-            button.style.transform = `translate(${x * .07}px, ${y * .07}px)`;
-          });
-          button.addEventListener('pointerleave', () => { button.style.transform = ''; });
-        });
-      }
-
-      const details = {
-        state: {
-          code: 'AUTH / ST-01',
-          title: 'Project State',
-          copy: 'Append-only events, task DAG versions, git refs, leases, budgets, and integration outcomes form the reconstructable source of truth.',
-          list: ['single authoritative writer', 'monotonic state version', 'deterministic replay'],
-          score: '100%', width: '100%', links: ['conn-state-context','conn-gate-state']
-        },
-        memory: {
-          code: 'DERIVED / MEM-02',
-          title: 'Adaptive Memory',
-          copy: 'Typed, provenance-aware memory is derived from accepted project events. Items may be superseded or archived without altering project history.',
-          list: ['validity intervals', 'source event provenance', 'supersession semantics'],
-          score: '76%', width: '76%', links: ['conn-memory-context']
-        },
-        context: {
-          code: 'COMPILER / CTX-03',
-          title: 'Context Compiler',
-          copy: 'ARC allocates a finite token budget across task core, decisions, code evidence, assumptions, failures and procedures.',
-          list: ['hard token ceiling', 'risk-aware allocation', 'actual code evidence'],
-          score: '88%', width: '88%', links: ['conn-state-context','conn-memory-context','conn-context-agent']
-        },
-        agent: {
-          code: 'WORKER / AG-04',
-          title: 'Isolated Agent',
-          copy: 'Each worker receives an immutable context packet and works on an isolated git worktree. Provider adapters never silently fall back to fake success.',
-          list: ['immutable dispatch context', 'isolated worktree', 'explicit adapter boundary'],
-          score: '82%', width: '82%', links: ['conn-context-agent','conn-agent-gate']
-        },
-        gate: {
-          code: 'WRITER / GT-05',
-          title: 'Integration Gate',
-          copy: 'The exact candidate commit is applied to a gate worktree, verified, then integrated by the serialized writer only after checks pass.',
-          list: ['candidate commit', 'merged-tree verification', 'fail-closed integration'],
-          score: '94%', width: '94%', links: ['conn-agent-gate','conn-gate-state']
-        }
-      };
-
-      const nodeButtons = [...document.querySelectorAll('.map-node')];
-      const allConnections = [...document.querySelectorAll('.connection')];
-      function selectNode(key) {
-        const detail = details[key] || details.state;
-        nodeButtons.forEach((button) => button.setAttribute('aria-pressed', button.dataset.node === key ? 'true' : 'false'));
-        allConnections.forEach((path) => path.classList.toggle('active', detail.links.includes(path.id)));
-        document.getElementById('detail-code').textContent = detail.code;
-        document.getElementById('detail-title').textContent = detail.title;
-        document.getElementById('detail-copy').textContent = detail.copy;
-        document.getElementById('detail-list').innerHTML = detail.list.map((item) => `<span>${item}</span>`).join('');
-        document.getElementById('detail-score').textContent = detail.score;
-        document.getElementById('detail-meter').style.width = detail.width;
-      }
-      nodeButtons.forEach((button) => button.addEventListener('click', () => selectNode(button.dataset.node)));
-
-      const memoryExamples = {
-        decision: {
-          command: 'arc memory why M_44',
-          output: `Memory M_44\n\nType:             decision\nStatus:           active\nValid:            event 850 → current\nDerived from:     event 842, event 850\nDelivered to:     T17 / codex_2, T21 / claude_1\nDownstream:       2 accepted patches · 0 rejected patches\n\nDecision: All auth APIs return domain result objects, not tuples.`
-        },
-        failure: {
-          command: 'arc memory why M_18',
-          output: `Memory M_18\n\nType:             failure\nStatus:           active\nValid:            event 621 → current\nDerived from:     gate.rejected / event 621\nDelivered to:     T22 / recovery-agent\nDownstream:       procedure candidate created\n\nFailure: Integration tests require the postgres service before pytest.`
-        },
-        superseded: {
-          command: 'arc memory why M_07',
-          output: `Memory M_07\n\nType:             fact\nStatus:           superseded\nValid:            event 212 → event 417\nSuperseded by:    M_31\nDefault retrieval: EXCLUDED\n\nOld fact: AuthClient.login returned Result[Token].\nCurrent fact: See M_31.`
-        }
-      };
-      document.querySelectorAll('[data-memory]').forEach((button) => {
-        button.addEventListener('click', () => {
-          const key = button.dataset.memory;
-          document.querySelectorAll('[data-memory]').forEach((item) => item.setAttribute('aria-pressed', item === button ? 'true' : 'false'));
-          document.getElementById('memory-command').textContent = memoryExamples[key].command;
-          document.getElementById('memory-output').textContent = memoryExamples[key].output;
-        });
-      });
-    })();
-  </script>
-
-  <script type="module">
-    const canvas = document.getElementById('arc-scene');
-    const frame = document.getElementById('scene-frame');
-    const fallback = document.getElementById('scene-fallback');
-    const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-
-    if (canvas && frame && !reducedMotion) {
-      try {
-        const THREE = await import('https://cdn.jsdelivr.net/npm/three@0.180.0/build/three.module.js');
-
-        const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: true, powerPreference: 'high-performance' });
-        renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 1.7));
-        renderer.setClearColor(0x000000, 0);
-
-        const scene = new THREE.Scene();
-        scene.fog = new THREE.FogExp2(0x0b0c0b, 0.038);
-
-        const camera = new THREE.PerspectiveCamera(42, 1, 0.1, 120);
-        camera.position.set(0, 2.5, 14);
-
-        const root = new THREE.Group();
-        scene.add(root);
-
-        const amber = new THREE.Color(0xe8a143);
-        const radar = new THREE.Color(0x9bd4ad);
-        const dim = new THREE.Color(0x556058);
-
-        const coreGeometry = new THREE.IcosahedronGeometry(2.15, 1);
-        const coreMaterial = new THREE.MeshBasicMaterial({ color: amber, wireframe: true, transparent: true, opacity: 0.72 });
-        const core = new THREE.Mesh(coreGeometry, coreMaterial);
-        core.rotation.z = 0.25;
-        root.add(core);
-
-        const innerGeometry = new THREE.OctahedronGeometry(1.02, 0);
-        const innerMaterial = new THREE.MeshBasicMaterial({ color: radar, wireframe: true, transparent: true, opacity: 0.34 });
-        const inner = new THREE.Mesh(innerGeometry, innerMaterial);
-        root.add(inner);
-
-        const shellMaterial = new THREE.MeshBasicMaterial({ color: 0xd7d8cf, wireframe: true, transparent: true, opacity: 0.08 });
-        const shell = new THREE.Mesh(new THREE.IcosahedronGeometry(2.72, 2), shellMaterial);
-        root.add(shell);
-
-        const rings = [];
-        const ringConfigs = [
-          [3.25, 0.0, 0.15, amber, 0.23],
-          [3.95, 1.03, 0.32, radar, 0.18],
-          [4.75, 1.44, -0.54, dim, 0.16]
-        ];
-        ringConfigs.forEach(([radius, rx, ry, color, opacity]) => {
-          const points = [];
-          for (let i = 0; i <= 128; i++) {
-            const a = (i / 128) * Math.PI * 2;
-            points.push(new THREE.Vector3(Math.cos(a) * radius, 0, Math.sin(a) * radius));
-          }
-          const geometry = new THREE.BufferGeometry().setFromPoints(points);
-          const material = new THREE.LineBasicMaterial({ color, transparent: true, opacity });
-          const ring = new THREE.Line(geometry, material);
-          ring.rotation.x = rx;
-          ring.rotation.y = ry;
-          root.add(ring);
-          rings.push(ring);
-        });
-
-        const satellites = new THREE.Group();
-        root.add(satellites);
-        const satGeometry = new THREE.TetrahedronGeometry(0.17, 0);
-        for (let i = 0; i < 9; i++) {
-          const sat = new THREE.Mesh(satGeometry, new THREE.MeshBasicMaterial({ color: i % 3 === 0 ? amber : radar, wireframe: true, transparent: true, opacity: 0.72 }));
-          const angle = (i / 9) * Math.PI * 2;
-          const radius = 3.3 + (i % 3) * .48;
-          sat.position.set(Math.cos(angle) * radius, Math.sin(angle * 1.7) * 1.15, Math.sin(angle) * radius);
-          sat.userData = { angle, radius, speed: 0.18 + (i % 4) * .035, lift: .65 + (i % 3) * .3 };
-          satellites.add(sat);
-        }
-
-        const particleCount = 440;
-        const positions = new Float32Array(particleCount * 3);
-        for (let i = 0; i < particleCount; i++) {
-          const radius = 4 + Math.random() * 18;
-          const theta = Math.random() * Math.PI * 2;
-          const phi = Math.acos(2 * Math.random() - 1);
-          positions[i * 3] = radius * Math.sin(phi) * Math.cos(theta);
-          positions[i * 3 + 1] = (Math.random() - .5) * 12;
-          positions[i * 3 + 2] = radius * Math.sin(phi) * Math.sin(theta);
-        }
-        const particlesGeometry = new THREE.BufferGeometry();
-        particlesGeometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
-        const particlesMaterial = new THREE.PointsMaterial({ color: 0xb9c5ba, size: 0.025, transparent: true, opacity: 0.38, sizeAttenuation: true });
-        const particles = new THREE.Points(particlesGeometry, particlesMaterial);
-        scene.add(particles);
-
-        const grid = new THREE.GridHelper(34, 34, 0x594b37, 0x242a25);
-        grid.position.y = -4.25;
-        grid.material.transparent = true;
-        grid.material.opacity = 0.24;
-        scene.add(grid);
-
-        const horizon = new THREE.Group();
-        const beamMaterial = new THREE.LineBasicMaterial({ color: radar, transparent: true, opacity: 0.1 });
-        for (let i = 0; i < 18; i++) {
-          const geometry = new THREE.BufferGeometry().setFromPoints([
-            new THREE.Vector3(0, -4.2, 0),
-            new THREE.Vector3((Math.random() - .5) * 30, -1 + Math.random() * 8, -8 - Math.random() * 16)
-          ]);
-          horizon.add(new THREE.Line(geometry, beamMaterial));
-        }
-        scene.add(horizon);
-
-        const pointer = { x: 0, y: 0, tx: 0, ty: 0 };
-        frame.addEventListener('pointermove', (event) => {
-          const rect = frame.getBoundingClientRect();
-          pointer.tx = ((event.clientX - rect.left) / rect.width - .5) * 2;
-          pointer.ty = ((event.clientY - rect.top) / rect.height - .5) * 2;
-        });
-        frame.addEventListener('pointerleave', () => { pointer.tx = 0; pointer.ty = 0; });
-
-        let mode = 'state';
-        const modes = {
-          state: { amber: 0xe8a143, radar: 0x9bd4ad, scale: 1.0, fog: 0.038 },
-          memory: { amber: 0x9bd4ad, radar: 0x7c9eb0, scale: .92, fog: 0.032 },
-          gate: { amber: 0xe96a4d, radar: 0xe8a143, scale: 1.08, fog: 0.046 }
-        };
-        document.querySelectorAll('[data-scene-mode]').forEach((button) => {
-          button.addEventListener('click', () => {
-            mode = button.dataset.sceneMode;
-            document.querySelectorAll('[data-scene-mode]').forEach((item) => item.setAttribute('aria-pressed', item === button ? 'true' : 'false'));
-            const cfg = modes[mode];
-            core.material.color.setHex(cfg.amber);
-            inner.material.color.setHex(cfg.radar);
-            scene.fog.density = cfg.fog;
-          });
-        });
-
-        function resize() {
-          const rect = frame.getBoundingClientRect();
-          const width = Math.max(1, Math.floor(rect.width));
-          const height = Math.max(1, Math.floor(rect.height));
-          renderer.setSize(width, height, false);
-          camera.aspect = width / height;
-          camera.updateProjectionMatrix();
-        }
-        resize();
-        const ro = new ResizeObserver(resize);
-        ro.observe(frame);
-
-        fallback.style.opacity = '0';
-
-        const clock = new THREE.Clock();
-        let frameId = 0;
-        function animate() {
-          const t = clock.getElapsedTime();
-          pointer.x += (pointer.tx - pointer.x) * .045;
-          pointer.y += (pointer.ty - pointer.y) * .045;
-
-          const cfg = modes[mode];
-          root.scale.lerp(new THREE.Vector3(cfg.scale, cfg.scale, cfg.scale), .035);
-          root.rotation.y = t * .085 + pointer.x * .28;
-          root.rotation.x = .08 + pointer.y * .12;
-          core.rotation.x += .0018;
-          core.rotation.y += .0022;
-          inner.rotation.x -= .004;
-          inner.rotation.z += .0035;
-          shell.rotation.y -= .0009;
-          rings[0].rotation.z = t * .035;
-          rings[1].rotation.z = -t * .026;
-          rings[2].rotation.z = t * .018;
-          particles.rotation.y = -t * .008;
-          grid.position.z = (t * .16) % 1;
-
-          satellites.children.forEach((sat, index) => {
-            const data = sat.userData;
-            const angle = data.angle + t * data.speed;
-            sat.position.x = Math.cos(angle) * data.radius;
-            sat.position.z = Math.sin(angle) * data.radius;
-            sat.position.y = Math.sin(angle * 1.6 + index) * data.lift;
-            sat.rotation.x += .008;
-            sat.rotation.y += .012;
-          });
-
-          camera.position.x = pointer.x * .7;
-          camera.position.y = 2.5 - pointer.y * .42;
-          camera.lookAt(0, 0, 0);
-          renderer.render(scene, camera);
-          frameId = requestAnimationFrame(animate);
-        }
-        animate();
-
-        document.addEventListener('visibilitychange', () => {
-          if (document.hidden) cancelAnimationFrame(frameId);
-          else animate();
-        });
-      } catch (error) {
-        console.warn('ARC 3D scene unavailable; using CSS fallback.', error);
-        fallback.style.opacity = '.8';
-      }
+  const demo = [
+    {
+      title:'01 // Initialize ARC', mode:'real command',
+      code:`arc init . --project-id demo\narc status --project-id demo`,
+      output:`$ arc init . --project-id demo\nInitialized ARC runtime in .arc (Project: demo)\n\n$ arc status --project-id demo\nProject: demo (State Version: 1)\nStatus: active\nTask DAG: empty`
+    },
+    {
+      title:'02 // Run a zero-credential smoke task', mode:'real Python API',
+      code:`python - <<'PY'\nimport asyncio, sqlite3\nfrom pathlib import Path\nfrom adapters.mock import MockAgentAdapter\nfrom memory.lifecycle import MemoryLifecycle\nfrom runtime.orchestrator import Orchestrator\nfrom state.events import EventStore\n\nasync def main():\n    repo = Path('.').resolve()\n    db = repo / '.arc' / 'state.db'\n    store = EventStore(db)\n    conn = sqlite3.connect(db)\n    conn.row_factory = sqlite3.Row\n    memory = MemoryLifecycle(conn)\n    arc = Orchestrator(store, memory, repo, 'demo')\n    arc.create_task(\n        task_id='hello-arc',\n        goal='Create a traceable ARC demo artifact',\n        files_declared=['arc_demo.txt'],\n        acceptance_criteria=['artifact integrates through the gate'],\n        risk=0.2,\n    )\n    result = await arc.execute_task(\n        'hello-arc', MockAgentAdapter('demo-agent'), 'demo-agent'\n    )\n    print(result.status, result.merged_commit_sha)\n    conn.close(); store.close()\n\nasyncio.run(main())\nPY`,
+      output:`[context] compiled immutable ContextPacket\n[worktree] created isolated task branch\n[agent] wrote arc_demo.txt\n[candidate] committed immutable candidate SHA\n[gate] candidate applied to fresh verification tree\n[gate] static verification passed\n[integration] candidate cherry-picked into integration branch\nACCEPTED <merged-commit-sha>`
+    },
+    {
+      title:'03 // Inspect authoritative state', mode:'real commands',
+      code:`arc status --project-id demo\narc events --project-id demo\narc replay --project-id demo`,
+      output:`Task DAG\nhello-arc    completed\n\nAuthoritative events\nproject.created\ntask.created\ntask.dispatched\ncontext.compiled\nlease.granted\ntask.submitted\ngate.started\ngate.accepted\n...\n\nReplay successful — project projection reconstructed from event history.`
+    },
+    {
+      title:'04 // Compile and inspect task context', mode:'real command',
+      code:`arc context build hello-arc --agent demo --project-id demo`,
+      output:`Compiled Context Packet: CTX_...\nDigest: sha256:...\nTokens: <used> / 24000\nDecisions Included: ...\nProcedures Included: ...\nFailures Included: ...\nMemory IDs: [...]`
+    },
+    {
+      title:'05 // Switch from mock to Codex', mode:'real adapter API',
+      code:`# install + authenticate the Codex CLI first\n# ARC default adapter invocation: codex exec --full-auto -\n\nfrom adapters.codex import CodexAgentAdapter\n\nresult = await arc.execute_task(\n    'your-task-id',\n    CodexAgentAdapter(),\n    agent_id='codex',\n)\n\n# optional command override\n# export ARC_CODEX_COMMAND='codex exec --full-auto -'`,
+      output:`ARC does not fabricate provider success.\nIf the Codex executable is missing or exits unsuccessfully, the adapter fails explicitly.\nWhen it succeeds, ARC still requires a real repository change, candidate commit and integration-gate acceptance.`
     }
-  </script>
+  ];
+  const steps=[...document.querySelectorAll('[data-step]')], title=document.getElementById('demoTitle'), mode=document.getElementById('demoMode'), code=document.getElementById('demoCode'), output=document.getElementById('demoOutput');
+  let current=0, timer=null;
+  function render(i){ current=i; steps.forEach((s,n)=>s.classList.toggle('active',n===i)); title.textContent=demo[i].title; mode.textContent=demo[i].mode; code.textContent=demo[i].code; output.textContent=demo[i].output; }
+  steps.forEach(s=>s.addEventListener('click',()=>{ if(timer){clearInterval(timer);timer=null;} render(Number(s.dataset.step)); })); render(0);
+  document.getElementById('copyDemo').addEventListener('click', async e => { try { await navigator.clipboard.writeText(demo[current].code); e.currentTarget.textContent='Copied'; setTimeout(()=>e.currentTarget.textContent='Copy current step',1200); } catch { e.currentTarget.textContent='Select + copy'; } });
+  document.getElementById('playDemo').addEventListener('click', e => { if(timer){clearInterval(timer);timer=null;e.currentTarget.textContent='Play walkthrough';return;} e.currentTarget.textContent='Pause walkthrough'; timer=setInterval(()=>render((current+1)%demo.length),2600); });
+
+  document.addEventListener('pointermove', e => { document.documentElement.style.setProperty('--mx',e.clientX+'px'); document.documentElement.style.setProperty('--my',e.clientY+'px'); });
+  if (matchMedia('(hover:hover) and (pointer:fine)').matches && !matchMedia('(prefers-reduced-motion:reduce)').matches) {
+    document.querySelectorAll('.card').forEach(card => {
+      card.addEventListener('pointermove', e => { const r=card.getBoundingClientRect(), x=(e.clientX-r.left)/r.width-.5, y=(e.clientY-r.top)/r.height-.5; card.style.transform=`perspective(700px) rotateX(${(-y*6).toFixed(2)}deg) rotateY(${(x*7).toFixed(2)}deg) translateY(-3px)`; });
+      card.addEventListener('pointerleave',()=>card.style.transform='');
+    });
+  }
+})();
+</script>
+<script type="module">
+const wrap=document.getElementById('scene'), fallback=document.getElementById('fallback');
+if(!matchMedia('(prefers-reduced-motion:reduce)').matches){
+  try{
+    const THREE=await import('https://cdn.jsdelivr.net/npm/three@0.180.0/+esm');
+    const renderer=new THREE.WebGLRenderer({antialias:true,alpha:true}); renderer.setPixelRatio(Math.min(devicePixelRatio,1.7)); wrap.prepend(renderer.domElement); fallback.style.display='none';
+    const scene=new THREE.Scene(), camera=new THREE.PerspectiveCamera(42,1,.1,100); camera.position.set(0,1.1,7.4);
+    scene.add(new THREE.AmbientLight(0xb9c7bc,1.25)); const amber=new THREE.PointLight(0xe8a143,18,18); amber.position.set(3,2,4); scene.add(amber); const green=new THREE.PointLight(0x9bd4ad,11,15); green.position.set(-4,-2,3); scene.add(green);
+    const group=new THREE.Group(); scene.add(group);
+    const core=new THREE.Mesh(new THREE.IcosahedronGeometry(1.24,2),new THREE.MeshStandardMaterial({color:0x313933,metalness:.78,roughness:.3,wireframe:true,emissive:0x18231c,emissiveIntensity:.5})); group.add(core);
+    const inner=new THREE.Mesh(new THREE.IcosahedronGeometry(.56,1),new THREE.MeshStandardMaterial({color:0xa9d8b6,emissive:0x74b286,emissiveIntensity:1.1,metalness:.2,roughness:.24})); group.add(inner);
+    [1.9,2.35,2.8].forEach((r,i)=>{const ring=new THREE.Mesh(new THREE.TorusGeometry(r,.014,8,180),new THREE.MeshBasicMaterial({color:i===1?0xe8a143:0x789b83,transparent:true,opacity:.52})); ring.rotation.x=Math.PI*(.18+i*.17); ring.rotation.y=i*.55; group.add(ring);});
+    for(let i=0;i<9;i++){const a=i/9*Math.PI*2, node=new THREE.Mesh(new THREE.OctahedronGeometry(.1,0),new THREE.MeshBasicMaterial({color:i%3===0?0xe8a143:0x9bd4ad})); node.position.set(Math.cos(a)*2.35,Math.sin(a*.7)*.85,Math.sin(a)*2.35); group.add(node);}
+    const pts=[]; for(let i=0;i<420;i++) pts.push((Math.random()-.5)*13,(Math.random()-.5)*8,(Math.random()-.5)*10); const geo=new THREE.BufferGeometry(); geo.setAttribute('position',new THREE.Float32BufferAttribute(pts,3)); scene.add(new THREE.Points(geo,new THREE.PointsMaterial({color:0x8da496,size:.018,transparent:true,opacity:.52})));
+    let px=0,py=0; wrap.addEventListener('pointermove',e=>{const r=wrap.getBoundingClientRect();px=(e.clientX-r.left)/r.width-.5;py=(e.clientY-r.top)/r.height-.5;}); wrap.addEventListener('pointerleave',()=>{px=py=0});
+    function size(){const r=wrap.getBoundingClientRect();renderer.setSize(r.width,r.height,false);camera.aspect=r.width/r.height;camera.updateProjectionMatrix()} addEventListener('resize',size); size();
+    const clock=new THREE.Clock(); function loop(){const t=clock.getElapsedTime(); group.rotation.y=t*.12+px*.35;group.rotation.x=Math.sin(t*.45)*.07-py*.18;inner.scale.setScalar(1+Math.sin(t*2.2)*.05);camera.position.x+=(px*.55-camera.position.x)*.035;camera.position.y+=(1.1-py*.35-camera.position.y)*.035;camera.lookAt(0,0,0);renderer.render(scene,camera);requestAnimationFrame(loop)} loop();
+  }catch(err){ console.warn('ARC 3D fallback active',err); }
+}
+</script>
 </body>
 </html>
