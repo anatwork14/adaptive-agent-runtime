@@ -13,7 +13,7 @@ def test_cli_init_status_and_events(tmp_path):
     # 1. arc init
     res_init = runner.invoke(app, ["init", str(repo_path), "--project-id", "cli_test"])
     assert res_init.exit_code == 0
-    assert "Initialized ARC runtime" in res_init.stdout
+    assert "ARC initialized" in res_init.stdout
 
     # 2. arc status
     res_status = runner.invoke(app, ["status", "--repo", str(repo_path), "--project-id", "cli_test"])

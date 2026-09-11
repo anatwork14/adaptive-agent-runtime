@@ -1,8 +1,8 @@
 # ARC Getting Started
 
-The homepage contains the canonical installation and interactive demo flow. This file exists as a lightweight fallback for readers browsing the repository.
+ARC now exposes the normal operator flow directly through the CLI. You do not need to write Python just to create and run a task.
 
-## Install
+## 1. Install
 
 ```bash
 git clone https://github.com/anatwork14/adaptive-agent-runtime.git
@@ -13,72 +13,139 @@ pip install -e ".[dev]"
 arc --help
 ```
 
-## Initialize
+Requirements: Python 3.11+, Git, and a clean Git repository for the project ARC will operate on.
+
+## 2. Initialize a project
+
+From the target repository:
 
 ```bash
 arc init . --project-id demo
-arc status --project-id demo
+arc status
 ```
 
-## Smoke-test a real ARC task without provider credentials
+ARC writes local runtime state under `.arc/` and automatically adds `.arc/` to the repository-local Git exclude file (`.git/info/exclude`). It does not force a committed `.gitignore` change.
 
-Create `demo_arc.py`:
+## 3. Check available agents
 
-```python
-import asyncio
-import sqlite3
-from pathlib import Path
-
-from adapters.mock import MockAgentAdapter
-from memory.lifecycle import MemoryLifecycle
-from runtime.orchestrator import Orchestrator
-from state.events import EventStore
-
-
-async def main() -> None:
-    repo = Path(".").resolve()
-    db = repo / ".arc" / "state.db"
-    store = EventStore(db)
-    conn = sqlite3.connect(db)
-    conn.row_factory = sqlite3.Row
-    memory = MemoryLifecycle(conn)
-
-    runtime = Orchestrator(
-        event_store=store,
-        memory_lifecycle=memory,
-        repo_path=repo,
-        project_id="demo",
-    )
-    runtime.create_task(
-        task_id="hello-arc",
-        goal="Create a traceable ARC demo artifact",
-        files_declared=["arc_demo.txt"],
-        acceptance_criteria=["arc_demo.txt is integrated through the gate"],
-        risk=0.2,
-    )
-
-    result = await runtime.execute_task(
-        "hello-arc",
-        MockAgentAdapter("demo-agent"),
-        agent_id="demo-agent",
-    )
-    print(result.status, result.merged_commit_sha)
-
-    conn.close()
-    store.close()
-
-
-asyncio.run(main())
-```
-
-Run it from a clean git repository:
+Every initialized project starts with a deterministic `mock` profile for zero-credential smoke tests.
 
 ```bash
-python demo_arc.py
-arc status --project-id demo
-arc events --project-id demo
-arc replay --project-id demo
-arc context build hello-arc --agent demo --project-id demo
+arc agent list
+arc agent doctor
 ```
 
-To use Codex instead of the deterministic mock adapter, install and authenticate the Codex CLI, then replace `MockAgentAdapter("demo-agent")` with `CodexAgentAdapter()` from `adapters.codex`.
+Add a real provider profile after installing and authenticating its CLI:
+
+```bash
+arc agent add builder \
+  --provider codex \
+  --role implementation \
+  --default
+
+arc agent doctor builder
+```
+
+Other supported profile providers are `claude` and `opencode`. `openrouter` remains gateway-only until ARC has a filesystem tool loop for it.
+
+## 4. Create a task
+
+```bash
+arc task create "Create a traceable ARC demo artifact" \
+  --file arc_demo.txt \
+  --accept "artifact integrates through the gate" \
+  --risk 0.2
+```
+
+ARC auto-generates task IDs (`T001`, `T002`, ...). Inspect the DAG with:
+
+```bash
+arc task list
+arc task show T001
+```
+
+## 5. Run a zero-credential smoke task
+
+```bash
+arc run T001 --agent mock
+```
+
+This is not a fake gate result. `MockAgentAdapter` makes a deterministic repository edit, then ARC uses the normal execution path:
+
+```text
+ContextPacket
+    ↓
+Git worktree
+    ↓
+candidate commit
+    ↓
+fresh verification worktree
+    ↓
+static checks / configured tests
+    ↓
+transactional integration gate
+    ↓
+integration branch
+```
+
+The mock profile exists to validate ARC itself without spending provider tokens.
+
+## 6. Watch a mission live
+
+In another terminal:
+
+```bash
+arc watch T001
+```
+
+`arc watch` reads the same append-only authoritative event stream used by replay and the dashboard.
+
+## 7. Open Mission Control
+
+```bash
+arc dashboard
+```
+
+Keyboard controls:
+
+```text
+r  refresh
+ g  run selected READY task
+ y  retry selected failed/blocked task
+ x  cancel selected task
+ q  quit
+```
+
+The Textual TUI shows the task DAG, configured agents and readiness, project/budget state, active memory, task detail, and a live authoritative event log.
+
+## 8. Inspect what ARC used
+
+```bash
+arc events
+arc replay
+arc context inspect T001 --agent mock
+arc gate inspect T001
+arc memory list
+```
+
+For a specific memory:
+
+```bash
+arc memory why M_44
+```
+
+## 9. Run with Codex
+
+After `arc agent doctor builder` reports `READY`:
+
+```bash
+arc task create "Implement the requested repository change" \
+  --file src/example.py \
+  --accept "tests pass"
+
+arc run T002 --agent builder
+```
+
+ARC does not fabricate provider success. If the Codex executable is missing or the provider process fails, the task execution fails explicitly.
+
+For the full operator command reference and configuration format, see [`OPERATOR_GUIDE.md`](OPERATOR_GUIDE.md).
