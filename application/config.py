@@ -9,7 +9,7 @@ from typing import Dict, List, Literal, Optional
 import yaml
 from pydantic import BaseModel, Field
 
-ProviderName = Literal["mock", "codex", "claude", "opencode", "openrouter"]
+ProviderName = Literal["mock", "codex", "claude", "antigravity", "opencode", "openrouter"]
 
 
 class AgentProfile(BaseModel):
@@ -62,12 +62,7 @@ class ConfigStore:
         return config
 
     def _ensure_runtime_ignored(self) -> None:
-        """Keep `.arc/` local without mutating a user's committed .gitignore.
-
-        ARC's integration gate requires a clean repository. A fresh repository
-        may not already ignore `.arc/`, so initialization records the runtime
-        directory in Git's repository-local `info/exclude` file.
-        """
+        """Keep `.arc/` local without mutating a user's committed .gitignore."""
         result = subprocess.run(
             ["git", "rev-parse", "--git-path", "info/exclude"],
             cwd=str(self.repo),
