@@ -3,1021 +3,1775 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <meta name="description" content="ARC: Reliable Context Control for Long-Horizon Multi-Agent Coding. Event-Sourced State, Versioned Adaptive Memory, and Risk-Aware Context Compilation." />
-  <meta name="theme-color" content="#07090e" />
-  <title>ARC — Reliable Context Control for Multi-Agent Coding</title>
-  
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <meta name="description" content="ARC is a reliable context control plane for long-horizon multi-agent coding: event-sourced project state, versioned adaptive memory, risk-aware context compilation, and transactional integration." />
+  <meta name="theme-color" content="#0b0c0b" />
+  <meta property="og:title" content="ARC — Reliable Context Control for Coding Agents" />
+  <meta property="og:description" content="Versioned project state. Adaptive memory. Reliable handoffs. Transactional integration." />
+  <meta property="og:type" content="website" />
+  <meta property="og:url" content="https://anatwork14.github.io/adaptive-agent-runtime/" />
+  <title>ARC — Reliable Context Control for Coding Agents</title>
+
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600;700;800&family=IBM+Plex+Mono:wght@400;500;600&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
 
   <style>
     :root {
       color-scheme: dark;
-      --bg: #07090e;
-      --bg-card: rgba(14, 19, 27, 0.7);
-      --bg-card-hover: rgba(20, 27, 38, 0.85);
-      --border: rgba(255, 255, 255, 0.08);
-      --border-bright: rgba(0, 242, 180, 0.35);
-      --text: #f0f6fc;
-      --text-muted: #8b9bb0;
-      --text-dim: #5c6b7d;
-      
-      --cyan: #00f2fe;
-      --emerald: #00f2b4;
-      --blue: #3b82f6;
-      --purple: #8b5cf6;
-      --amber: #f59e0b;
-      --red: #ef4444;
-      
-      --grad-primary: linear-gradient(135deg, #00f2b4 0%, #00f2fe 50%, #3b82f6 100%);
-      --grad-glow: radial-gradient(circle at 50% 0%, rgba(0, 242, 180, 0.15), transparent 70%);
-      --grad-card: linear-gradient(180deg, rgba(22, 30, 42, 0.6) 0%, rgba(13, 17, 24, 0.6) 100%);
-      
-      --mono: 'JetBrains Mono', ui-monospace, monospace;
-      --sans: 'Plus Jakarta Sans', system-ui, -apple-system, sans-serif;
-      --shadow-xl: 0 25px 60px -15px rgba(0, 0, 0, 0.7), 0 0 40px rgba(0, 242, 180, 0.08);
+      --ink: #0a0b0a;
+      --ink-2: #0f1110;
+      --ink-3: #141715;
+      --panel: rgba(18, 21, 19, 0.78);
+      --panel-strong: rgba(14, 16, 15, 0.96);
+      --line: rgba(223, 230, 218, 0.13);
+      --line-strong: rgba(223, 230, 218, 0.25);
+      --paper: #e7eadf;
+      --paper-2: #bcc4b5;
+      --muted: #7f8a7d;
+      --amber: #e8a143;
+      --amber-hot: #ffbb59;
+      --amber-dim: rgba(232, 161, 67, 0.14);
+      --radar: #9bd4ad;
+      --radar-bright: #c7f1d1;
+      --radar-dim: rgba(155, 212, 173, 0.12);
+      --warning: #e96a4d;
+      --sky: #7c9eb0;
+      --mono: "IBM Plex Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+      --cond: "Barlow Condensed", Impact, sans-serif;
+      --sans: Inter, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      --mx: 50vw;
+      --my: 35vh;
+      --ease: cubic-bezier(.2,.8,.2,1);
     }
 
-    * { box-sizing: border-box; margin: 0; padding: 0; }
-    html { scroll-behavior: smooth; }
+    * { box-sizing: border-box; }
+    html { scroll-behavior: smooth; background: var(--ink); }
     body {
-      background: var(--bg);
-      color: var(--text);
+      margin: 0;
+      min-width: 320px;
+      background:
+        radial-gradient(circle at 12% 0%, rgba(232,161,67,.06), transparent 27rem),
+        radial-gradient(circle at 86% 22%, rgba(155,212,173,.05), transparent 32rem),
+        var(--ink);
+      color: var(--paper);
       font-family: var(--sans);
-      line-height: 1.6;
+      line-height: 1.55;
       overflow-x: hidden;
-      background-image: 
-        radial-gradient(at 10% 20%, rgba(0, 242, 180, 0.05) 0px, transparent 50%),
-        radial-gradient(at 90% 10%, rgba(59, 130, 246, 0.07) 0px, transparent 50%),
-        radial-gradient(at 50% 80%, rgba(139, 92, 246, 0.05) 0px, transparent 50%);
     }
 
-    /* Layout & Container */
-    .shell { width: min(1200px, calc(100% - 40px)); margin: 0 auto; }
+    body::before {
+      content: "";
+      position: fixed;
+      inset: 0;
+      pointer-events: none;
+      z-index: 50;
+      opacity: .19;
+      background:
+        linear-gradient(rgba(255,255,255,.018) 1px, transparent 1px) 0 0 / 100% 4px,
+        radial-gradient(450px circle at var(--mx) var(--my), rgba(232,161,67,.045), transparent 70%);
+      mix-blend-mode: screen;
+    }
 
-    /* Header */
-    header {
+    body::after {
+      content: "";
+      position: fixed;
+      inset: 0;
+      pointer-events: none;
+      z-index: 49;
+      opacity: .025;
+      background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 160 160' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='.9'/%3E%3C/svg%3E");
+    }
+
+    a { color: inherit; }
+    button, input { font: inherit; }
+    ::selection { background: rgba(232,161,67,.32); color: white; }
+
+    .skip-link {
+      position: absolute;
+      top: -4rem;
+      left: 1rem;
+      z-index: 999;
+      padding: .75rem 1rem;
+      background: var(--paper);
+      color: var(--ink);
+      border-radius: 4px;
+    }
+    .skip-link:focus { top: 1rem; }
+
+    .shell {
+      width: min(1240px, calc(100% - 40px));
+      margin-inline: auto;
+    }
+
+    .micro {
+      font: 500 .69rem/1.2 var(--mono);
+      letter-spacing: .14em;
+      text-transform: uppercase;
+      color: var(--muted);
+    }
+
+    .hud-line {
+      display: flex;
+      align-items: center;
+      gap: .6rem;
+      color: var(--muted);
+      font: 500 .68rem/1 var(--mono);
+      text-transform: uppercase;
+      letter-spacing: .12em;
+    }
+    .hud-line::before {
+      content: "";
+      width: 28px;
+      height: 1px;
+      background: currentColor;
+      opacity: .7;
+    }
+
+    .nav-wrap {
       position: sticky;
       top: 0;
-      z-index: 100;
-      backdrop-filter: blur(20px);
-      -webkit-backdrop-filter: blur(20px);
-      background: rgba(7, 9, 14, 0.75);
-      border-bottom: 1px solid var(--border);
+      z-index: 40;
+      border-bottom: 1px solid rgba(225,230,218,.08);
+      background: linear-gradient(180deg, rgba(10,11,10,.94), rgba(10,11,10,.76));
+      backdrop-filter: blur(18px) saturate(120%);
+      -webkit-backdrop-filter: blur(18px) saturate(120%);
     }
-    .nav-inner {
-      display: flex;
+    .nav {
+      min-height: 68px;
+      display: grid;
+      grid-template-columns: auto 1fr auto;
       align-items: center;
-      justify-content: space-between;
-      height: 72px;
+      gap: 2rem;
     }
     .brand {
-      display: flex;
+      display: inline-flex;
       align-items: center;
-      gap: 12px;
-      font-weight: 800;
-      font-size: 1.25rem;
+      gap: .8rem;
       text-decoration: none;
-      color: var(--text);
-      letter-spacing: -0.02em;
+      min-height: 44px;
     }
-    .logo-badge {
-      width: 36px;
-      height: 36px;
-      border-radius: 10px;
-      background: var(--grad-primary);
+    .brand-mark {
+      position: relative;
+      width: 38px;
+      height: 38px;
       display: grid;
       place-items: center;
-      color: #030712;
-      font-weight: 900;
-      font-size: 1.15rem;
-      box-shadow: 0 0 20px rgba(0, 242, 180, 0.4);
+      border: 1px solid rgba(232,161,67,.55);
+      clip-path: polygon(7px 0,100% 0,100% calc(100% - 7px),calc(100% - 7px) 100%,0 100%,0 7px);
+      color: var(--amber-hot);
+      font: 800 1.15rem/1 var(--cond);
+      letter-spacing: -.03em;
+      background: linear-gradient(135deg, rgba(232,161,67,.13), transparent 60%);
     }
-    nav { display: flex; align-items: center; gap: 28px; }
-    nav a {
-      color: var(--text-muted);
-      text-decoration: none;
-      font-size: 0.92rem;
-      font-weight: 600;
-      transition: color 0.2s;
+    .brand-mark::before,
+    .brand-mark::after {
+      content: "";
+      position: absolute;
+      width: 8px;
+      height: 1px;
+      background: var(--amber);
     }
-    nav a:hover { color: var(--emerald); }
-
-    /* Buttons */
-    .btn {
-      display: inline-flex;
-      align-items: center;
-      gap: 8px;
-      padding: 10px 20px;
-      border-radius: 999px;
-      font-weight: 700;
-      font-size: 0.92rem;
-      text-decoration: none;
-      cursor: pointer;
-      transition: all 0.25s ease;
-      border: 1px solid transparent;
+    .brand-mark::before { left: -4px; top: 10px; }
+    .brand-mark::after { right: -4px; bottom: 10px; }
+    .brand-copy strong {
+      display: block;
+      font: 800 1.13rem/1 var(--cond);
+      letter-spacing: .08em;
     }
-    .btn-primary {
-      background: var(--grad-primary);
-      color: #050b14;
-      box-shadow: 0 4px 20px rgba(0, 242, 180, 0.35);
-    }
-    .btn-primary:hover {
-      transform: translateY(-2px);
-      box-shadow: 0 8px 30px rgba(0, 242, 180, 0.5);
-    }
-    .btn-secondary {
-      background: rgba(255, 255, 255, 0.05);
-      border-color: var(--border);
-      color: var(--text);
-    }
-    .btn-secondary:hover {
-      background: rgba(255, 255, 255, 0.1);
-      border-color: rgba(255, 255, 255, 0.2);
-    }
-
-    /* Hero Section */
-    .hero {
-      padding: 80px 0 60px;
-      text-align: center;
-      position: relative;
-    }
-    .hero-eyebrow {
-      display: inline-flex;
-      align-items: center;
-      gap: 8px;
-      padding: 6px 14px;
-      border-radius: 999px;
-      background: rgba(0, 242, 180, 0.1);
-      border: 1px solid var(--border-bright);
-      color: var(--emerald);
-      font-size: 0.8rem;
-      font-weight: 700;
-      font-family: var(--mono);
-      letter-spacing: 0.08em;
+    .brand-copy span {
+      display: block;
+      margin-top: 4px;
+      color: var(--muted);
+      font: 500 .58rem/1 var(--mono);
+      letter-spacing: .13em;
       text-transform: uppercase;
-      margin-bottom: 24px;
     }
-    .hero-title {
-      font-size: clamp(2.8rem, 6.5vw, 5.2rem);
-      font-weight: 800;
-      line-height: 1.05;
-      letter-spacing: -0.04em;
-      max-width: 980px;
-      margin: 0 auto;
+
+    .nav-links {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 1.8rem;
     }
-    .hero-title span {
-      background: var(--grad-primary);
-      -webkit-background-clip: text;
-      -webkit-text-fill-color: transparent;
+    .nav-links a {
+      position: relative;
+      padding: 12px 0;
+      text-decoration: none;
+      color: #9ba398;
+      font: 500 .7rem/1 var(--mono);
+      letter-spacing: .09em;
+      text-transform: uppercase;
+      transition: color .2s ease;
+    }
+    .nav-links a::after {
+      content: "";
+      position: absolute;
+      left: 0;
+      right: 100%;
+      bottom: 7px;
+      height: 1px;
+      background: var(--amber);
+      transition: right .25s var(--ease);
+    }
+    .nav-links a:hover,
+    .nav-links a:focus-visible { color: var(--paper); }
+    .nav-links a:hover::after,
+    .nav-links a:focus-visible::after { right: 0; }
+
+    .nav-status {
+      display: flex;
+      align-items: center;
+      gap: .65rem;
+      color: var(--radar);
+      font: 500 .65rem/1 var(--mono);
+      text-transform: uppercase;
+      letter-spacing: .09em;
+    }
+    .status-dot {
+      width: 7px;
+      height: 7px;
+      border-radius: 50%;
+      background: var(--radar);
+      box-shadow: 0 0 0 5px rgba(155,212,173,.08), 0 0 14px rgba(155,212,173,.4);
+      animation: pulse 2.1s ease-in-out infinite;
+    }
+
+    .hero {
+      position: relative;
+      min-height: 780px;
+      overflow: clip;
+      border-bottom: 1px solid var(--line);
+    }
+    .hero::before {
+      content: "";
+      position: absolute;
+      inset: 0;
+      pointer-events: none;
+      background:
+        linear-gradient(90deg, transparent 0 49.95%, rgba(255,255,255,.04) 50%, transparent 50.05%),
+        linear-gradient(0deg, transparent 0 49.95%, rgba(255,255,255,.025) 50%, transparent 50.05%);
+      background-size: 160px 160px;
+      mask-image: linear-gradient(to bottom, black, transparent 90%);
+    }
+    .hero-grid {
+      position: relative;
+      z-index: 3;
+      display: grid;
+      grid-template-columns: minmax(0, .95fr) minmax(460px, 1.05fr);
+      min-height: 710px;
+      align-items: center;
+      gap: 2rem;
+      padding: 72px 0 42px;
+    }
+    .hero-copy { position: relative; z-index: 5; padding: 2.2rem 0; }
+
+    .classification {
+      display: inline-flex;
+      align-items: center;
+      gap: .7rem;
+      margin-bottom: 1.7rem;
+      color: var(--amber-hot);
+      font: 600 .68rem/1 var(--mono);
+      letter-spacing: .13em;
+      text-transform: uppercase;
+    }
+    .classification::before {
+      content: "";
+      width: 10px;
+      height: 10px;
+      border: 1px solid currentColor;
+      transform: rotate(45deg);
+      background: rgba(232,161,67,.11);
+    }
+
+    .hero h1 {
+      max-width: 720px;
+      margin: 0;
+      font: 800 clamp(4.5rem, 9vw, 8.2rem)/.74 var(--cond);
+      letter-spacing: -.055em;
+      text-transform: uppercase;
+    }
+    .hero h1 .arc {
+      display: block;
+      color: #f2efe4;
+      text-shadow: 0 14px 55px rgba(0,0,0,.5);
+    }
+    .hero h1 .sub {
+      display: block;
+      margin-top: .25em;
+      color: transparent;
+      -webkit-text-stroke: 1px rgba(231,234,223,.46);
+      font-size: .43em;
+      line-height: .92;
+      letter-spacing: .025em;
     }
     .hero-desc {
-      font-size: clamp(1.08rem, 2vw, 1.35rem);
-      color: var(--text-muted);
-      max-width: 780px;
-      margin: 24px auto 36px;
-      font-weight: 400;
+      max-width: 620px;
+      margin: 2rem 0 0;
+      color: #aab2a6;
+      font-size: clamp(1rem, 1.6vw, 1.16rem);
+      line-height: 1.75;
     }
+    .hero-desc strong { color: var(--paper); font-weight: 600; }
+
     .hero-actions {
       display: flex;
-      justify-content: center;
-      gap: 16px;
       flex-wrap: wrap;
-    }
-
-    /* Hero Banner Image */
-    .hero-banner-container {
-      margin: 60px auto 0;
-      border-radius: 24px;
-      padding: 10px;
-      background: linear-gradient(180deg, rgba(0, 242, 180, 0.3) 0%, rgba(59, 130, 246, 0.1) 50%, rgba(255,255,255,0.02) 100%);
-      box-shadow: var(--shadow-xl);
-      max-width: 1100px;
-    }
-    .hero-banner {
-      width: 100%;
-      height: auto;
-      border-radius: 16px;
-      display: block;
-      border: 1px solid rgba(255,255,255,0.1);
-    }
-
-    /* Quick Install Terminal */
-    .quickstart-box {
-      margin: 40px auto 0;
-      max-width: 650px;
-      background: #0b0f17;
-      border: 1px solid var(--border);
-      border-radius: 14px;
-      overflow: hidden;
-      text-align: left;
-    }
-    .term-header {
-      background: rgba(255, 255, 255, 0.03);
-      padding: 10px 16px;
-      border-bottom: 1px solid var(--border);
-      display: flex;
       align-items: center;
-      justify-content: space-between;
+      gap: .9rem;
+      margin-top: 2rem;
     }
-    .term-dots { display: flex; gap: 6px; }
-    .term-dot { width: 10px; height: 10px; border-radius: 50%; background: #2a3441; }
-    .term-dot.r { background: #ef4444; }
-    .term-dot.y { background: #f59e0b; }
-    .term-dot.g { background: #10b981; }
-    .term-body {
-      padding: 16px 20px;
-      font-family: var(--mono);
-      font-size: 0.9rem;
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      color: #93c5fd;
-    }
-    .term-copy {
-      background: none;
-      border: none;
-      color: var(--text-muted);
-      cursor: pointer;
-      font-size: 0.85rem;
-      padding: 4px 8px;
-      border-radius: 6px;
-      transition: all 0.2s;
-    }
-    .term-copy:hover { color: var(--emerald); background: rgba(0, 242, 180, 0.1); }
-
-    /* Section Styling */
-    section { padding: 90px 0; border-top: 1px solid var(--border); }
-    .sec-tag {
-      color: var(--emerald);
-      font-family: var(--mono);
-      font-weight: 700;
-      font-size: 0.8rem;
-      letter-spacing: 0.12em;
-      text-transform: uppercase;
-      margin-bottom: 12px;
-    }
-    .sec-title {
-      font-size: clamp(2rem, 4vw, 3.2rem);
-      font-weight: 800;
-      letter-spacing: -0.03em;
-      line-height: 1.12;
-      max-width: 850px;
-    }
-    .sec-desc {
-      color: var(--text-muted);
-      font-size: 1.12rem;
-      max-width: 720px;
-      margin-top: 16px;
-    }
-
-    /* Visual Showcase Card Grid */
-    .figure-grid {
-      display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(360px, 1fr));
-      gap: 28px;
-      margin-top: 50px;
-    }
-    .figure-card {
-      background: var(--bg-card);
-      border: 1px solid var(--border);
-      border-radius: 20px;
-      overflow: hidden;
-      transition: all 0.3s ease;
-      display: flex;
-      flex-direction: column;
-    }
-    .figure-card:hover {
-      transform: translateY(-4px);
-      border-color: var(--border-bright);
-      box-shadow: 0 20px 40px -10px rgba(0, 242, 180, 0.15);
-    }
-    .figure-img-wrap {
-      width: 100%;
-      height: 240px;
-      overflow: hidden;
-      background: #0a0d14;
-      border-bottom: 1px solid var(--border);
+    .btn {
       position: relative;
-    }
-    .figure-img-wrap img {
-      width: 100%;
-      height: 100%;
-      object-fit: cover;
-      transition: transform 0.4s ease;
-    }
-    .figure-card:hover .figure-img-wrap img {
-      transform: scale(1.04);
-    }
-    .figure-content {
-      padding: 24px;
-      flex: 1;
-      display: flex;
-      flex-direction: column;
-    }
-    .figure-badge {
-      display: inline-block;
-      align-self: flex-start;
-      padding: 4px 10px;
-      border-radius: 999px;
-      font-size: 0.75rem;
-      font-family: var(--mono);
-      font-weight: 700;
-      margin-bottom: 12px;
-      background: rgba(0, 242, 180, 0.12);
-      color: var(--emerald);
-    }
-    .figure-badge.purple { background: rgba(139, 92, 246, 0.15); color: #a78bfa; }
-    .figure-badge.blue { background: rgba(59, 130, 246, 0.15); color: #60a5fa; }
-    .figure-card h3 {
-      font-size: 1.35rem;
-      font-weight: 700;
-      margin-bottom: 8px;
-    }
-    .figure-card p {
-      color: var(--text-muted);
-      font-size: 0.95rem;
-      flex: 1;
-    }
-
-    /* Interactive Simulator */
-    .interactive-card {
-      background: var(--grad-card);
-      border: 1px solid var(--border);
-      border-radius: 22px;
-      padding: 36px;
-      margin-top: 48px;
-      box-shadow: var(--shadow-xl);
-    }
-    .sim-header {
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      flex-wrap: wrap;
-      gap: 16px;
-      margin-bottom: 28px;
-    }
-    .slider-wrap {
-      display: flex;
-      align-items: center;
-      gap: 16px;
-    }
-    .slider-wrap input[type=range] {
-      -webkit-appearance: none;
-      width: 200px;
-      height: 6px;
-      background: #232f3e;
-      border-radius: 999px;
-      outline: none;
-    }
-    .slider-wrap input[type=range]::-webkit-slider-thumb {
-      -webkit-appearance: none;
-      width: 18px;
-      height: 18px;
-      border-radius: 50%;
-      background: var(--emerald);
-      cursor: pointer;
-      box-shadow: 0 0 10px var(--emerald);
-    }
-    .risk-val {
-      font-family: var(--mono);
-      font-weight: 700;
-      font-size: 1.1rem;
-      color: var(--emerald);
-      min-width: 50px;
-    }
-    .budget-bars {
-      display: grid;
-      gap: 14px;
-    }
-    .budget-row {
-      display: grid;
-      grid-template-columns: 160px 1fr 90px;
-      align-items: center;
-      gap: 16px;
-      font-size: 0.9rem;
-    }
-    .bar-bg {
-      height: 10px;
-      background: rgba(255, 255, 255, 0.05);
-      border-radius: 999px;
-      overflow: hidden;
-      position: relative;
-    }
-    .bar-fill {
-      height: 100%;
-      border-radius: 999px;
-      background: var(--grad-primary);
-      transition: width 0.3s ease;
-    }
-
-    /* Live Memory Inspector */
-    .mem-inspector {
-      display: grid;
-      grid-template-columns: 320px 1fr;
-      gap: 20px;
-      margin-top: 36px;
-      background: #090c13;
-      border: 1px solid var(--border);
-      border-radius: 20px;
-      overflow: hidden;
-    }
-    .mem-list {
-      background: rgba(14, 19, 27, 0.5);
-      border-right: 1px solid var(--border);
-      padding: 16px;
-      display: flex;
-      flex-direction: column;
-      gap: 10px;
-    }
-    .mem-item {
-      padding: 12px 14px;
-      border-radius: 12px;
-      background: transparent;
-      border: 1px solid transparent;
-      cursor: pointer;
-      transition: all 0.2s;
-      text-align: left;
-    }
-    .mem-item:hover { background: rgba(255,255,255,0.03); border-color: var(--border); }
-    .mem-item.active {
-      background: rgba(0, 242, 180, 0.08);
-      border-color: var(--border-bright);
-    }
-    .mem-item-id {
-      font-family: var(--mono);
-      font-weight: 700;
-      font-size: 0.85rem;
-      color: var(--emerald);
-    }
-    .mem-item-type {
-      font-size: 0.75rem;
-      color: var(--text-dim);
-      text-transform: uppercase;
-      font-family: var(--mono);
-    }
-    .mem-item-title {
-      font-size: 0.88rem;
-      color: var(--text);
-      white-space: nowrap;
-      overflow: hidden;
-      text-overflow: ellipsis;
-      margin-top: 4px;
-    }
-    .mem-detail {
-      padding: 24px;
-      display: flex;
-      flex-direction: column;
-      justify-content: center;
-    }
-
-    /* Baselines Comparison Table */
-    .table-wrap {
-      overflow-x: auto;
-      margin-top: 40px;
-      border: 1px solid var(--border);
-      border-radius: 18px;
-      background: var(--bg-card);
-    }
-    table {
-      width: 100%;
-      border-collapse: collapse;
-      font-size: 0.92rem;
-      text-align: left;
-    }
-    th {
-      background: rgba(255, 255, 255, 0.03);
-      color: var(--text-muted);
-      font-weight: 700;
-      padding: 16px 20px;
-      border-bottom: 1px solid var(--border);
-      font-family: var(--mono);
-      font-size: 0.8rem;
-      letter-spacing: 0.05em;
-      text-transform: uppercase;
-    }
-    td {
-      padding: 16px 20px;
-      border-bottom: 1px solid rgba(255, 255, 255, 0.04);
-      color: var(--text);
-    }
-    tr:last-child td { border-bottom: none; }
-    tr.highlight {
-      background: rgba(0, 242, 180, 0.05);
-    }
-    tr.highlight td {
-      color: #e6fff7;
-      font-weight: 600;
-    }
-    .badge-win {
+      min-height: 46px;
       display: inline-flex;
-      padding: 3px 8px;
-      border-radius: 999px;
-      background: rgba(0, 242, 180, 0.2);
-      color: var(--emerald);
-      font-size: 0.72rem;
-      font-weight: 800;
-      font-family: var(--mono);
+      align-items: center;
+      justify-content: center;
+      gap: .65rem;
+      padding: 0 1.15rem;
+      border: 1px solid var(--line-strong);
+      border-radius: 2px;
+      text-decoration: none;
+      text-transform: uppercase;
+      letter-spacing: .08em;
+      font: 600 .68rem/1 var(--mono);
+      overflow: hidden;
+      transition: transform .2s var(--ease), border-color .2s ease, background .2s ease, color .2s ease;
+    }
+    .btn::before {
+      content: "";
+      position: absolute;
+      inset: 0;
+      transform: translateX(-102%);
+      background: linear-gradient(90deg, transparent, rgba(255,255,255,.12), transparent);
+      transition: transform .45s var(--ease);
+    }
+    .btn:hover::before { transform: translateX(102%); }
+    .btn:hover { transform: translateY(-2px); }
+    .btn-primary {
+      color: #18130b;
+      background: var(--amber);
+      border-color: var(--amber);
+      box-shadow: 0 10px 38px rgba(232,161,67,.13);
+    }
+    .btn-primary:hover { background: var(--amber-hot); border-color: var(--amber-hot); }
+    .btn-ghost { background: rgba(255,255,255,.025); color: var(--paper); }
+    .btn-ghost:hover { border-color: rgba(232,161,67,.5); color: var(--amber-hot); }
+    .btn svg { width: 15px; height: 15px; }
+
+    .hero-meta {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0,1fr));
+      gap: 1px;
+      max-width: 620px;
+      margin-top: 2.2rem;
+      background: var(--line);
+      border: 1px solid var(--line);
+    }
+    .hero-meta > div {
+      padding: .85rem 1rem;
+      background: rgba(10,11,10,.78);
+      min-width: 0;
+    }
+    .hero-meta b {
+      display: block;
+      color: var(--paper);
+      font: 700 .84rem/1.2 var(--mono);
+      overflow-wrap: anywhere;
+    }
+    .hero-meta span {
+      display: block;
+      margin-top: .35rem;
+      color: var(--muted);
+      font: 500 .59rem/1.2 var(--mono);
+      text-transform: uppercase;
+      letter-spacing: .08em;
     }
 
-    /* Footer */
-    footer {
-      padding: 60px 0 40px;
-      border-top: 1px solid var(--border);
-      color: var(--text-dim);
-      font-size: 0.9rem;
+    .scene-wrap {
+      position: relative;
+      align-self: stretch;
+      min-height: 640px;
+      isolation: isolate;
+      perspective: 1200px;
     }
-    .footer-flex {
+    .scene-wrap::before {
+      content: "";
+      position: absolute;
+      inset: 6% 0 0 -6%;
+      z-index: -2;
+      background:
+        radial-gradient(circle at 50% 43%, rgba(232,161,67,.12), transparent 17rem),
+        radial-gradient(circle at 56% 58%, rgba(155,212,173,.07), transparent 23rem);
+      filter: blur(4px);
+    }
+    .scene-frame {
+      position: absolute;
+      inset: 1rem 0 1rem;
+      border: 1px solid rgba(231,234,223,.12);
+      clip-path: polygon(26px 0, 100% 0,100% calc(100% - 26px),calc(100% - 26px) 100%,0 100%,0 26px);
+      background: linear-gradient(145deg, rgba(255,255,255,.025), transparent 45%);
+      overflow: hidden;
+      transform-style: preserve-3d;
+    }
+    .scene-frame::before,
+    .scene-frame::after {
+      content: "";
+      position: absolute;
+      pointer-events: none;
+      z-index: 3;
+    }
+    .scene-frame::before {
+      inset: 0;
+      border: 1px solid transparent;
+      background:
+        linear-gradient(90deg, var(--amber) 0 38px, transparent 38px calc(100% - 38px), var(--amber) calc(100% - 38px)) top left / 100% 1px no-repeat,
+        linear-gradient(0deg, var(--amber) 0 38px, transparent 38px calc(100% - 38px), var(--amber) calc(100% - 38px)) top left / 1px 100% no-repeat;
+      opacity: .65;
+    }
+    .scene-frame::after {
+      left: 0;
+      right: 0;
+      top: -18%;
+      height: 18%;
+      background: linear-gradient(to bottom, transparent, rgba(155,212,173,.05), rgba(155,212,173,.19), rgba(155,212,173,.03), transparent);
+      filter: blur(.2px);
+      animation: scan 7s linear infinite;
+    }
+    #arc-scene {
+      position: absolute;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      display: block;
+      cursor: crosshair;
+    }
+    .scene-fallback {
+      position: absolute;
+      inset: 0;
+      display: grid;
+      place-items: center;
+      pointer-events: none;
+      opacity: .7;
+    }
+    .fallback-core {
+      width: min(56%, 330px);
+      aspect-ratio: 1;
+      border-radius: 50%;
+      border: 1px solid rgba(232,161,67,.35);
+      box-shadow: inset 0 0 60px rgba(232,161,67,.05), 0 0 70px rgba(232,161,67,.05);
+      position: relative;
+      animation: slowspin 18s linear infinite;
+    }
+    .fallback-core::before,
+    .fallback-core::after {
+      content: "";
+      position: absolute;
+      border-radius: 50%;
+      border: 1px solid rgba(155,212,173,.22);
+    }
+    .fallback-core::before { inset: 14%; transform: rotateX(68deg); }
+    .fallback-core::after { inset: 30%; border-color: rgba(232,161,67,.5); }
+
+    .scene-label {
+      position: absolute;
+      z-index: 7;
+      padding: .6rem .72rem;
+      min-width: 150px;
+      color: var(--paper-2);
+      background: rgba(8,10,9,.72);
+      border: 1px solid rgba(231,234,223,.12);
+      backdrop-filter: blur(10px);
+      font: 500 .62rem/1.35 var(--mono);
+      letter-spacing: .05em;
+      pointer-events: none;
+    }
+    .scene-label b { color: var(--amber-hot); font-weight: 600; }
+    .scene-label span { display: block; margin-top: .25rem; color: var(--muted); font-size: .56rem; }
+    .scene-label.a { top: 9%; left: 5%; }
+    .scene-label.b { right: 5%; bottom: 12%; }
+    .scene-label.c { left: 7%; bottom: 8%; border-color: rgba(155,212,173,.19); }
+
+    .target-reticle {
+      position: absolute;
+      z-index: 6;
+      width: 42px;
+      height: 42px;
+      top: 18%;
+      right: 15%;
+      border: 1px solid rgba(232,161,67,.25);
+      border-radius: 50%;
+      animation: reticle 4s ease-in-out infinite;
+      pointer-events: none;
+    }
+    .target-reticle::before,
+    .target-reticle::after {
+      content: "";
+      position: absolute;
+      background: rgba(232,161,67,.45);
+    }
+    .target-reticle::before { width: 58px; height: 1px; left: -9px; top: 20px; }
+    .target-reticle::after { height: 58px; width: 1px; top: -9px; left: 20px; }
+
+    .mode-strip {
+      position: absolute;
+      z-index: 9;
+      right: 1.1rem;
+      top: 50%;
+      transform: translateY(-50%);
+      display: grid;
+      gap: .45rem;
+    }
+    .mode-btn {
+      width: 40px;
+      height: 40px;
+      display: grid;
+      place-items: center;
+      border: 1px solid rgba(231,234,223,.14);
+      color: var(--muted);
+      background: rgba(11,13,12,.72);
+      cursor: pointer;
+      font: 600 .61rem/1 var(--mono);
+      transition: all .2s ease;
+    }
+    .mode-btn:hover,
+    .mode-btn:focus-visible,
+    .mode-btn[aria-pressed="true"] {
+      color: #151008;
+      background: var(--amber);
+      border-color: var(--amber);
+    }
+
+    .telemetry-band {
+      position: relative;
+      z-index: 6;
+      margin-top: -1px;
+      border-top: 1px solid var(--line);
+      border-bottom: 1px solid var(--line);
+      background: rgba(12,14,13,.78);
+      overflow: hidden;
+    }
+    .telemetry-track {
+      display: flex;
+      width: max-content;
+      min-width: 100%;
+      animation: ticker 28s linear infinite;
+    }
+    .telemetry-set { display: flex; }
+    .telemetry-item {
+      display: flex;
+      align-items: center;
+      gap: .7rem;
+      padding: .75rem 1.2rem;
+      border-right: 1px solid var(--line);
+      white-space: nowrap;
+      color: var(--muted);
+      font: 500 .61rem/1 var(--mono);
+      text-transform: uppercase;
+      letter-spacing: .07em;
+    }
+    .telemetry-item b { color: var(--paper-2); font-weight: 500; }
+    .telemetry-item .ok { color: var(--radar); }
+    .telemetry-item .warn { color: var(--amber); }
+
+    section { position: relative; padding: 110px 0; border-bottom: 1px solid var(--line); }
+    .section-grid {
+      display: grid;
+      grid-template-columns: 290px minmax(0,1fr);
+      gap: 4.5rem;
+      align-items: start;
+    }
+    .section-index { position: sticky; top: 104px; }
+    .section-index .num {
+      color: var(--amber);
+      font: 700 2rem/1 var(--cond);
+      letter-spacing: .08em;
+    }
+    .section-index h2 {
+      margin: .65rem 0 0;
+      font: 700 1.6rem/1 var(--cond);
+      text-transform: uppercase;
+      letter-spacing: .035em;
+    }
+    .section-index p {
+      margin: 1rem 0 0;
+      color: var(--muted);
+      font-size: .9rem;
+      line-height: 1.7;
+    }
+
+    .section-lead {
+      max-width: 840px;
+      margin: 0 0 3.5rem;
+    }
+    .section-lead h3 {
+      margin: 0;
+      font: 700 clamp(2.6rem, 6vw, 5.3rem)/.88 var(--cond);
+      letter-spacing: -.035em;
+      text-transform: uppercase;
+    }
+    .section-lead p {
+      max-width: 690px;
+      margin: 1.35rem 0 0;
+      color: #9ea79c;
+      font-size: 1rem;
+      line-height: 1.75;
+    }
+
+    .problem-grid {
+      display: grid;
+      grid-template-columns: repeat(3,minmax(0,1fr));
+      gap: 1px;
+      background: var(--line);
+      border: 1px solid var(--line);
+    }
+    .problem {
+      min-height: 250px;
+      padding: 1.4rem;
+      background: #0d0f0e;
+      position: relative;
+      overflow: hidden;
+      transition: background .25s ease;
+    }
+    .problem::before {
+      content: attr(data-code);
+      position: absolute;
+      right: 1rem;
+      top: .9rem;
+      color: rgba(231,234,223,.08);
+      font: 800 4.6rem/1 var(--cond);
+    }
+    .problem:hover { background: #111411; }
+    .problem .icon {
+      width: 38px;
+      height: 38px;
+      display: grid;
+      place-items: center;
+      border: 1px solid rgba(232,161,67,.25);
+      color: var(--amber);
+      margin-bottom: 3.4rem;
+      font: 700 .66rem/1 var(--mono);
+    }
+    .problem h4 {
+      margin: 0;
+      font: 700 1.3rem/1 var(--cond);
+      text-transform: uppercase;
+      letter-spacing: .03em;
+    }
+    .problem p { margin: .7rem 0 0; color: var(--muted); font-size: .87rem; }
+
+    .architecture-console {
+      border: 1px solid var(--line-strong);
+      background: #0c0e0d;
+      min-height: 600px;
+      display: grid;
+      grid-template-columns: minmax(0,1.4fr) minmax(280px,.6fr);
+      position: relative;
+      overflow: hidden;
+    }
+    .architecture-console::before {
+      content: "";
+      position: absolute;
+      inset: 0;
+      pointer-events: none;
+      background-image:
+        linear-gradient(rgba(255,255,255,.018) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(255,255,255,.018) 1px, transparent 1px);
+      background-size: 28px 28px;
+      mask-image: linear-gradient(to right, black, transparent 72%);
+    }
+    .map-panel {
+      position: relative;
+      min-height: 600px;
+      overflow: hidden;
+    }
+    .map-panel svg { position: absolute; inset: 0; width: 100%; height: 100%; }
+    .map-panel .connection {
+      fill: none;
+      stroke: rgba(155,212,173,.18);
+      stroke-width: 1.2;
+      stroke-dasharray: 5 8;
+      transition: stroke .2s ease, opacity .2s ease, stroke-width .2s ease;
+    }
+    .map-panel .connection.flow { animation: dash 11s linear infinite; }
+    .map-panel .connection.active {
+      stroke: var(--amber-hot);
+      stroke-width: 2;
+      opacity: .95;
+      filter: drop-shadow(0 0 4px rgba(232,161,67,.25));
+    }
+    .map-node {
+      position: absolute;
+      width: 128px;
+      min-height: 74px;
+      padding: .75rem;
+      border: 1px solid rgba(231,234,223,.16);
+      background: rgba(12,14,13,.92);
+      color: var(--paper-2);
+      text-align: left;
+      cursor: pointer;
+      clip-path: polygon(8px 0,100% 0,100% calc(100% - 8px),calc(100% - 8px) 100%,0 100%,0 8px);
+      transition: transform .22s var(--ease), background .2s ease, border-color .2s ease, color .2s ease;
+    }
+    .map-node:hover,
+    .map-node:focus-visible,
+    .map-node[aria-pressed="true"] {
+      transform: translateY(-3px);
+      border-color: rgba(232,161,67,.65);
+      background: rgba(38,28,17,.9);
+      color: var(--paper);
+    }
+    .map-node .node-kicker {
+      display: block;
+      margin-bottom: .5rem;
+      color: var(--muted);
+      font: 500 .53rem/1 var(--mono);
+      letter-spacing: .08em;
+      text-transform: uppercase;
+    }
+    .map-node strong { font: 700 .98rem/1 var(--cond); text-transform: uppercase; letter-spacing: .04em; }
+    .map-node.state { left: 7%; top: 11%; }
+    .map-node.memory { left: 57%; top: 9%; }
+    .map-node.context { left: 31%; top: 40%; }
+    .map-node.agent { left: 8%; top: 72%; }
+    .map-node.gate { left: 58%; top: 70%; }
+
+    .console-side {
+      position: relative;
+      z-index: 2;
+      border-left: 1px solid var(--line);
+      background: rgba(11,13,12,.82);
+      padding: 1.2rem;
+    }
+    .console-head {
       display: flex;
       justify-content: space-between;
+      gap: 1rem;
+      padding-bottom: 1rem;
+      border-bottom: 1px solid var(--line);
+      color: var(--muted);
+      font: 500 .58rem/1 var(--mono);
+      letter-spacing: .08em;
+      text-transform: uppercase;
+    }
+    .console-head span:last-child { color: var(--radar); }
+    #node-detail { padding: 1.7rem 0; }
+    #node-detail h4 {
+      margin: 0;
+      font: 700 2rem/1 var(--cond);
+      text-transform: uppercase;
+    }
+    #node-detail p { margin: 1rem 0 0; color: #9ba499; font-size: .9rem; line-height: 1.7; }
+    .detail-list { display: grid; gap: .65rem; margin-top: 1.4rem; }
+    .detail-list span {
+      display: flex;
       align-items: center;
-      flex-wrap: wrap;
-      gap: 20px;
+      gap: .7rem;
+      color: var(--paper-2);
+      font: 500 .63rem/1.3 var(--mono);
+    }
+    .detail-list span::before {
+      content: "";
+      width: 5px;
+      height: 5px;
+      background: var(--radar);
+      box-shadow: 0 0 8px rgba(155,212,173,.32);
+    }
+    .signal-meter { margin-top: 1.6rem; }
+    .signal-meter .label { display: flex; justify-content: space-between; color: var(--muted); font: 500 .56rem/1 var(--mono); text-transform: uppercase; letter-spacing: .06em; }
+    .meter {
+      height: 5px;
+      margin-top: .55rem;
+      background: rgba(255,255,255,.06);
+      overflow: hidden;
+    }
+    .meter > span {
+      display: block;
+      height: 100%;
+      width: 76%;
+      background: repeating-linear-gradient(90deg,var(--radar) 0 7px,transparent 7px 9px);
+      transition: width .35s var(--ease), background .35s ease;
     }
 
-    /* Responsive */
-    @media (max-width: 860px) {
-      .mem-inspector { grid-template-columns: 1fr; }
-      .mem-list { border-right: none; border-bottom: 1px solid var(--border); }
-      .budget-row { grid-template-columns: 120px 1fr 60px; }
-      nav { display: none; }
+    .feature-deck {
+      display: grid;
+      grid-template-columns: repeat(2,minmax(0,1fr));
+      gap: 1px;
+      background: var(--line);
+      border: 1px solid var(--line);
+    }
+    .feature-card {
+      --tiltX: 0deg;
+      --tiltY: 0deg;
+      position: relative;
+      min-height: 310px;
+      padding: 1.45rem;
+      background: linear-gradient(145deg,#101310,#0c0e0d);
+      transform: perspective(850px) rotateX(var(--tiltX)) rotateY(var(--tiltY));
+      transform-style: preserve-3d;
+      transition: transform .16s ease, background .25s ease;
+      overflow: hidden;
+    }
+    .feature-card::before {
+      content: "";
+      position: absolute;
+      inset: 0;
+      background: radial-gradient(320px circle at var(--cx,50%) var(--cy,50%), rgba(232,161,67,.09), transparent 60%);
+      opacity: 0;
+      transition: opacity .2s ease;
+    }
+    .feature-card:hover::before { opacity: 1; }
+    .feature-card > * { position: relative; z-index: 2; transform: translateZ(14px); }
+    .feature-top { display: flex; justify-content: space-between; align-items: flex-start; gap: 1rem; }
+    .feature-id { color: var(--amber); font: 600 .62rem/1 var(--mono); letter-spacing: .1em; }
+    .feature-state { color: var(--radar); font: 500 .55rem/1 var(--mono); text-transform: uppercase; letter-spacing: .08em; }
+    .feature-card h4 { margin: 4.2rem 0 0; font: 700 2rem/1 var(--cond); text-transform: uppercase; letter-spacing: .025em; }
+    .feature-card p { max-width: 440px; margin: 1rem 0 0; color: var(--muted); font-size: .9rem; line-height: 1.7; }
+    .feature-tags { display: flex; flex-wrap: wrap; gap: .45rem; margin-top: 1.3rem; }
+    .feature-tags span { padding: .35rem .48rem; border: 1px solid rgba(231,234,223,.1); color: #9da69a; font: 500 .55rem/1 var(--mono); text-transform: uppercase; }
+
+    .terminal {
+      border: 1px solid var(--line-strong);
+      background: #090b0a;
+      overflow: hidden;
+    }
+    .terminal-head {
+      min-height: 42px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 1rem;
+      padding: 0 1rem;
+      border-bottom: 1px solid var(--line);
+      color: var(--muted);
+      font: 500 .57rem/1 var(--mono);
+      text-transform: uppercase;
+      letter-spacing: .08em;
+    }
+    .terminal-head .lights { display: flex; gap: .35rem; }
+    .terminal-head .lights i { width: 6px; height: 6px; border-radius: 50%; background: #323831; }
+    .terminal-head .lights i:first-child { background: var(--warning); }
+    .terminal-head .lights i:nth-child(2) { background: var(--amber); }
+    .terminal-head .lights i:nth-child(3) { background: var(--radar); }
+    .terminal-body {
+      position: relative;
+      min-height: 420px;
+      padding: 1.25rem;
+      font: 500 .72rem/1.7 var(--mono);
+      color: #9fa89d;
+      overflow: hidden;
+    }
+    .terminal-body::before {
+      content: "";
+      position: absolute;
+      inset: 0;
+      pointer-events: none;
+      background: linear-gradient(to bottom, transparent, rgba(155,212,173,.02), transparent);
+      background-size: 100% 14px;
+    }
+    .prompt { color: var(--radar-bright); }
+    .cmd { color: var(--paper); }
+    .out { color: #7f8a7d; }
+    .out strong { color: var(--amber-hot); font-weight: 500; }
+    .terminal-tabs {
+      display: flex;
+      flex-wrap: wrap;
+      gap: .5rem;
+      margin-bottom: 1.2rem;
+    }
+    .terminal-tabs button {
+      min-height: 40px;
+      padding: 0 .8rem;
+      border: 1px solid var(--line);
+      background: transparent;
+      color: var(--muted);
+      cursor: pointer;
+      font: 500 .58rem/1 var(--mono);
+      text-transform: uppercase;
+      letter-spacing: .06em;
+    }
+    .terminal-tabs button:hover,
+    .terminal-tabs button:focus-visible,
+    .terminal-tabs button[aria-pressed="true"] {
+      color: #161209;
+      background: var(--amber);
+      border-color: var(--amber);
+    }
+    .terminal-output {
+      padding: 1rem;
+      border-left: 2px solid rgba(155,212,173,.3);
+      background: rgba(155,212,173,.025);
+      white-space: pre-wrap;
+      overflow-wrap: anywhere;
+    }
+
+    .principle {
+      display: grid;
+      grid-template-columns: minmax(0,.72fr) minmax(0,1.28fr);
+      gap: 1px;
+      background: var(--line);
+      border: 1px solid var(--line);
+    }
+    .principle > div { background: #0c0e0d; padding: 2rem; }
+    .principle .quote { display: flex; flex-direction: column; justify-content: space-between; min-height: 400px; }
+    .principle blockquote {
+      margin: 0;
+      font: 700 clamp(2.2rem,4vw,4.1rem)/.93 var(--cond);
+      text-transform: uppercase;
+      letter-spacing: -.02em;
+    }
+    .principle blockquote em { color: var(--amber); font-style: normal; }
+    .principle .flow { display: grid; align-content: center; gap: .85rem; }
+    .flow-row {
+      display: grid;
+      grid-template-columns: 34px 1fr auto;
+      align-items: center;
+      gap: 1rem;
+      padding: 1rem;
+      border: 1px solid rgba(231,234,223,.09);
+      background: rgba(255,255,255,.015);
+    }
+    .flow-row .idx { color: var(--amber); font: 600 .6rem/1 var(--mono); }
+    .flow-row strong { font: 700 1rem/1 var(--cond); text-transform: uppercase; letter-spacing: .04em; }
+    .flow-row span { color: var(--muted); font: 500 .55rem/1 var(--mono); text-transform: uppercase; }
+
+    .cta {
+      padding: 110px 0 80px;
+      overflow: hidden;
+    }
+    .cta-card {
+      position: relative;
+      min-height: 450px;
+      display: grid;
+      grid-template-columns: 1fr auto;
+      align-items: end;
+      gap: 3rem;
+      padding: 3rem;
+      border: 1px solid rgba(232,161,67,.35);
+      background:
+        linear-gradient(135deg, rgba(232,161,67,.09), transparent 38%),
+        linear-gradient(170deg, #121511, #0b0d0c 65%);
+      clip-path: polygon(28px 0,100% 0,100% calc(100% - 28px),calc(100% - 28px) 100%,0 100%,0 28px);
+      overflow: hidden;
+    }
+    .cta-card::before {
+      content: "ARC";
+      position: absolute;
+      right: -2%;
+      top: -8%;
+      color: rgba(232,161,67,.035);
+      font: 800 clamp(13rem,28vw,25rem)/.8 var(--cond);
+      letter-spacing: -.08em;
+      pointer-events: none;
+    }
+    .cta-card h2 {
+      position: relative;
+      margin: 0;
+      max-width: 760px;
+      font: 800 clamp(3.2rem,7vw,7rem)/.82 var(--cond);
+      text-transform: uppercase;
+      letter-spacing: -.04em;
+    }
+    .cta-card h2 span { color: var(--amber-hot); }
+    .cta-card p { position: relative; max-width: 650px; margin: 1.4rem 0 0; color: #9ea79c; }
+    .cta-actions { position: relative; display: flex; flex-direction: column; gap: .8rem; min-width: 190px; }
+
+    footer {
+      padding: 0 0 2.5rem;
+      color: var(--muted);
+    }
+    .footer-inner {
+      display: flex;
+      justify-content: space-between;
+      gap: 2rem;
+      padding-top: 1.5rem;
+      border-top: 1px solid var(--line);
+      font: 500 .59rem/1.5 var(--mono);
+      text-transform: uppercase;
+      letter-spacing: .06em;
+    }
+    .footer-inner a { color: var(--paper-2); text-decoration: none; }
+    .footer-inner a:hover { color: var(--amber-hot); }
+
+    .reveal {
+      opacity: 0;
+      transform: translateY(18px);
+      transition: opacity .7s var(--ease), transform .7s var(--ease);
+    }
+    .reveal.in { opacity: 1; transform: none; }
+
+    @keyframes pulse {
+      0%,100% { opacity: .65; transform: scale(.9); }
+      50% { opacity: 1; transform: scale(1.08); }
+    }
+    @keyframes scan {
+      0% { transform: translateY(0); }
+      100% { transform: translateY(650%); }
+    }
+    @keyframes slowspin { to { transform: rotate(360deg); } }
+    @keyframes reticle {
+      0%,100% { transform: scale(.88) rotate(0); opacity: .4; }
+      50% { transform: scale(1.08) rotate(45deg); opacity: .85; }
+    }
+    @keyframes ticker { to { transform: translateX(-50%); } }
+    @keyframes dash { to { stroke-dashoffset: -120; } }
+
+    @media (max-width: 1040px) {
+      .nav-links { display: none; }
+      .nav { grid-template-columns: 1fr auto; }
+      .hero { min-height: auto; }
+      .hero-grid { grid-template-columns: 1fr; min-height: auto; padding-top: 60px; }
+      .hero-copy { padding-bottom: 0; }
+      .scene-wrap { min-height: 590px; }
+      .section-grid { grid-template-columns: 1fr; gap: 2.5rem; }
+      .section-index { position: static; display: grid; grid-template-columns: auto 1fr; gap: 1rem; align-items: start; }
+      .section-index p { grid-column: 2; margin-top: .35rem; }
+      .problem-grid { grid-template-columns: 1fr; }
+      .architecture-console { grid-template-columns: 1fr; }
+      .console-side { border-left: 0; border-top: 1px solid var(--line); }
+      .map-panel { min-height: 520px; }
+      .principle { grid-template-columns: 1fr; }
+      .cta-card { grid-template-columns: 1fr; align-items: start; }
+      .cta-actions { flex-direction: row; flex-wrap: wrap; }
+    }
+
+    @media (max-width: 720px) {
+      .shell { width: min(100% - 24px, 1240px); }
+      .nav { min-height: 62px; }
+      .brand-copy span, .nav-status span { display: none; }
+      .hero-grid { padding-top: 44px; gap: 1rem; }
+      .hero h1 { font-size: clamp(4.2rem, 25vw, 6.2rem); }
+      .hero-desc { font-size: .96rem; }
+      .hero-meta { grid-template-columns: 1fr; }
+      .scene-wrap { min-height: 500px; }
+      .scene-label { min-width: 128px; font-size: .56rem; }
+      .scene-label.a { top: 7%; left: 4%; }
+      .scene-label.b { right: 3%; bottom: 9%; }
+      .scene-label.c { display: none; }
+      .mode-strip { right: .5rem; }
+      section { padding: 82px 0; }
+      .section-lead { margin-bottom: 2rem; }
+      .section-lead h3 { font-size: clamp(2.8rem,14vw,4.4rem); }
+      .problem { min-height: 210px; }
+      .feature-deck { grid-template-columns: 1fr; }
+      .feature-card { min-height: 280px; }
+      .feature-card h4 { margin-top: 3rem; }
+      .architecture-console, .map-panel { min-height: 590px; }
+      .map-node { width: 112px; min-height: 68px; padding: .6rem; }
+      .map-node.state { left: 4%; top: 8%; }
+      .map-node.memory { left: 54%; top: 8%; }
+      .map-node.context { left: 26%; top: 39%; }
+      .map-node.agent { left: 4%; top: 72%; }
+      .map-node.gate { left: 54%; top: 72%; }
+      .terminal-body { padding: .9rem; font-size: .66rem; }
+      .cta { padding-top: 80px; }
+      .cta-card { min-height: 520px; padding: 2rem 1.4rem; }
+      .cta-card h2 { font-size: clamp(3.2rem,16vw,5.2rem); }
+      .footer-inner { flex-direction: column; }
+    }
+
+    @media (hover: hover) and (pointer: fine) {
+      .magnetic { will-change: transform; }
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      html { scroll-behavior: auto; }
+      *, *::before, *::after {
+        animation-duration: .001ms !important;
+        animation-iteration-count: 1 !important;
+        scroll-behavior: auto !important;
+        transition-duration: .001ms !important;
+      }
+      .reveal { opacity: 1; transform: none; }
+      .feature-card { transform: none !important; }
     }
   </style>
 </head>
 <body>
+  <a class="skip-link" href="#main">Skip to content</a>
 
-  <!-- Navigation -->
-  <header>
-    <div class="shell nav-inner">
-      <a class="brand" href="#">
-        <div class="logo-badge">A</div>
-        ARC
+  <header class="nav-wrap">
+    <div class="shell nav">
+      <a class="brand" href="#top" aria-label="ARC home">
+        <span class="brand-mark">A</span>
+        <span class="brand-copy">
+          <strong>ARC</strong>
+          <span>Adaptive Agent Runtime</span>
+        </span>
       </a>
-      <nav>
-        <a href="#overview">Overview</a>
-        <a href="#figures">Architecture Figures</a>
-        <a href="#simulator">Token Simulator</a>
-        <a href="#inspector">Memory Inspector</a>
-        <a href="#benchmark">Benchmark</a>
-        <a href="https://github.com/anatwork14/adaptive-agent-runtime" class="btn btn-secondary">GitHub ★</a>
+
+      <nav class="nav-links" aria-label="Primary navigation">
+        <a href="#problem">Problem</a>
+        <a href="#architecture">Architecture</a>
+        <a href="#capabilities">Capabilities</a>
+        <a href="#inspect">Inspect</a>
+        <a href="#research">Research</a>
       </nav>
+
+      <div class="nav-status" title="Experimental research runtime">
+        <i class="status-dot" aria-hidden="true"></i>
+        <span>Experimental / online</span>
+      </div>
     </div>
   </header>
 
-  <main>
-    <!-- Hero Section -->
-    <div class="shell hero">
-      <div class="hero-eyebrow">
-        <span>⚡</span> Adaptive Context Control Plane
-      </div>
-      <h1 class="hero-title">
-        Reliable Context for <span>Coding-Agent Teams</span>.
-      </h1>
-      <p class="hero-desc">
-        Stop letting lossy LLM summaries become authoritative truth. ARC separates Authoritative State (SQLite WAL) from Adaptive Memory, compiling immutable, risk-budgeted context packets with transactional integration gates.
-      </p>
-
-      <div class="hero-actions">
-        <a href="https://github.com/anatwork14/adaptive-agent-runtime" class="btn btn-primary">
-          Explore Repository on GitHub →
-        </a>
-        <a href="#simulator" class="btn btn-secondary">
-          Try Interactive Simulator
-        </a>
-      </div>
-
-      <!-- Quick Install Box -->
-      <div class="quickstart-box">
-        <div class="term-header">
-          <div class="term-dots">
-            <div class="term-dot r"></div>
-            <div class="term-dot y"></div>
-            <div class="term-dot g"></div>
+  <main id="main">
+    <section class="hero" id="top" aria-labelledby="hero-title">
+      <div class="shell hero-grid">
+        <div class="hero-copy reveal">
+          <div class="classification">System // ARC-01 // Context Control Plane</div>
+          <h1 id="hero-title">
+            <span class="arc">ARC</span>
+            <span class="sub">Reliable context for coding-agent teams.</span>
+          </h1>
+          <p class="hero-desc">
+            Long-horizon coding agents fail when project knowledge drifts. ARC gives them a <strong>versioned project state</strong>, <strong>adaptive memory</strong>, task-specific context, and a transactional integration gate—without treating lossy summaries as ground truth.
+          </p>
+          <div class="hero-actions">
+            <a class="btn btn-primary magnetic" href="https://github.com/anatwork14/adaptive-agent-runtime" target="_blank" rel="noreferrer">
+              Open GitHub
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M7 17 17 7M8 7h9v9"/></svg>
+            </a>
+            <a class="btn btn-ghost magnetic" href="#architecture">Enter system map</a>
           </div>
-          <span style="font-size:0.75rem; color:var(--text-dim); font-family:var(--mono);">bash</span>
+          <div class="hero-meta" aria-label="Project characteristics">
+            <div><b>EVENT-SOURCED</b><span>authoritative state</span></div>
+            <div><b>VERSION-AWARE</b><span>memory validity</span></div>
+            <div><b>FAIL-CLOSED</b><span>git integration</span></div>
+          </div>
         </div>
-        <div class="term-body">
-          <code>pip install git+https://github.com/anatwork14/adaptive-agent-runtime.git</code>
-          <button class="term-copy" onclick="copyInstallCmd(this)">Copy</button>
+
+        <div class="scene-wrap reveal" id="scene-wrap">
+          <div class="scene-frame" id="scene-frame">
+            <canvas id="arc-scene" aria-hidden="true"></canvas>
+            <div class="scene-fallback" id="scene-fallback" aria-hidden="true"><div class="fallback-core"></div></div>
+            <div class="scene-label a"><b>ARC_CORE</b><span>project state projection</span></div>
+            <div class="scene-label b"><b>GATE / TX-04</b><span>candidate commit verified</span></div>
+            <div class="scene-label c"><b>CTX / 24K</b><span>budget-aware compilation</span></div>
+            <div class="target-reticle" aria-hidden="true"></div>
+            <div class="mode-strip" aria-label="3D scene mode">
+              <button class="mode-btn" type="button" data-scene-mode="state" aria-pressed="true" title="State mode">ST</button>
+              <button class="mode-btn" type="button" data-scene-mode="memory" aria-pressed="false" title="Memory mode">MM</button>
+              <button class="mode-btn" type="button" data-scene-mode="gate" aria-pressed="false" title="Gate mode">GT</button>
+            </div>
+          </div>
         </div>
       </div>
+    </section>
 
-      <!-- Hero Visual Banner -->
-      <div class="hero-banner-container">
-        <img src="assets/hero_banner.jpg" alt="ARC Multi-Agent AI Coding Architecture" class="hero-banner" />
+    <div class="telemetry-band" aria-hidden="true">
+      <div class="telemetry-track">
+        <div class="telemetry-set">
+          <div class="telemetry-item">STATE_VERSION <b>MONOTONIC</b></div>
+          <div class="telemetry-item">MEMORY_STATUS <b class="ok">PROVENANCE_OK</b></div>
+          <div class="telemetry-item">CONTEXT_BUDGET <b>HARD_CEILING</b></div>
+          <div class="telemetry-item">WORKTREE <b class="ok">ISOLATED</b></div>
+          <div class="telemetry-item">INTEGRATION <b class="warn">SERIALIZED</b></div>
+          <div class="telemetry-item">REPLAY <b class="ok">DETERMINISTIC</b></div>
+        </div>
+        <div class="telemetry-set">
+          <div class="telemetry-item">STATE_VERSION <b>MONOTONIC</b></div>
+          <div class="telemetry-item">MEMORY_STATUS <b class="ok">PROVENANCE_OK</b></div>
+          <div class="telemetry-item">CONTEXT_BUDGET <b>HARD_CEILING</b></div>
+          <div class="telemetry-item">WORKTREE <b class="ok">ISOLATED</b></div>
+          <div class="telemetry-item">INTEGRATION <b class="warn">SERIALIZED</b></div>
+          <div class="telemetry-item">REPLAY <b class="ok">DETERMINISTIC</b></div>
+        </div>
       </div>
     </div>
 
-    <!-- The Problem Section -->
-    <section id="overview">
-      <div class="shell">
-        <div class="sec-tag">The Core Failure Mode</div>
-        <h2 class="sec-title">More agents do not create a better team without context control.</h2>
-        <p class="sec-desc">
-          Long-horizon coding agent sessions degrade rapidly: stale assumptions persist, agents reverse each other's decisions, and lossy memory summaries contaminate the entire swarm.
-        </p>
+    <section id="problem">
+      <div class="shell section-grid">
+        <aside class="section-index reveal">
+          <div class="num">01</div>
+          <div>
+            <h2>Failure surface</h2>
+            <p>Why scaling the number of agents does not automatically scale software engineering reliability.</p>
+          </div>
+        </aside>
 
-        <!-- Visual Figures Showcase -->
-        <div class="figure-grid" id="figures">
-          
-          <!-- Card 1: 2-Plane Architecture -->
-          <article class="figure-card">
-            <div class="figure-img-wrap">
-              <img src="assets/architecture_diagram.jpg" alt="Two-Plane Architecture Diagram" />
-            </div>
-            <div class="figure-content">
-              <span class="figure-badge">Core Substrate</span>
-              <h3>Two-Plane Separation</h3>
-              <p>
-                Authoritative State (append-only events, git refs, leases, task DAG) is strictly separated from derived Adaptive Memory (facts, decisions, procedures, vector indexes). Deleting derived memory never alters project truth.
-              </p>
-            </div>
-          </article>
-
-          <!-- Card 2: Naive vs ARC Comparison -->
-          <article class="figure-card">
-            <div class="figure-img-wrap">
-              <img src="assets/comparison_diagram.jpg" alt="Naive vs ARC Comparison" />
-            </div>
-            <div class="figure-content">
-              <span class="figure-badge purple">Novelty Boundary</span>
-              <h3>Naive Vector Memory vs ARC</h3>
-              <p>
-                Standard vector top-k memory causes severe update interference, hallucinating obsolete APIs alongside current ones. ARC provides temporal supersession tags and provenance-tracked validity windows.
-              </p>
-            </div>
-          </article>
-
-          <!-- Card 3: Serialized Integration Gate -->
-          <article class="figure-card">
-            <div class="figure-img-wrap">
-              <img src="assets/gate_pipeline.jpg" alt="Serialized Integration Gate" />
-            </div>
-            <div class="figure-content">
-              <span class="figure-badge blue">Transactional CI</span>
-              <h3>Serialized Integration Gate</h3>
-              <p>
-                Isolated worktrees prevent concurrent dirty writes. The single-writer gate enforces tiered checks: G0 Rebase & Staleness, G1 Syntax/Build, G2 Visible Tests, and G3 Risk-Tiered Verification (V0–V3).
-              </p>
-            </div>
-          </article>
-
-        </div>
-      </div>
-    </section>
-
-    <!-- Interactive Simulator Section -->
-    <section id="simulator">
-      <div class="shell">
-        <div class="sec-tag">Interactive Demo</div>
-        <h2 class="sec-title">Risk-Aware Context Budget Allocator</h2>
-        <p class="sec-desc">
-          See Section 26 in action: adjust the task risk score to watch the Context Compiler dynamically rebalance token budgets across classes C0–C6 in real-time.
-        </p>
-
-        <div class="interactive-card">
-          <div class="sim-header">
-            <div>
-              <h3 style="font-size:1.3rem; font-weight:700;">Context Compilation Token Allocator</h3>
-              <p style="color:var(--text-muted); font-size:0.9rem;">Base Budget: 24,000 tokens</p>
-            </div>
-            <div class="slider-wrap">
-              <label style="font-weight:600; font-size:0.9rem;">Task Risk:</label>
-              <input type="range" id="riskSlider" min="0.1" max="0.95" step="0.05" value="0.5" oninput="updateSimulator(this.value)">
-              <span class="risk-val" id="riskValue">0.50</span>
-            </div>
+        <div>
+          <div class="section-lead reveal">
+            <div class="hud-line">Problem model</div>
+            <h3>Agents don't just lose tokens. They lose the project.</h3>
+            <p>Long-running software work mutates underneath every agent. Old summaries become stale, transcripts become expensive, vector recall confuses chronology, and parallel workers can act on different versions of reality.</p>
           </div>
 
-          <div class="budget-bars">
-            <div class="budget-row">
-              <span><strong>C0:</strong> Auth Core</span>
-              <div class="bar-bg"><div class="bar-fill" id="bar-c0" style="width: 12.5%;"></div></div>
-              <span id="txt-c0" style="font-family:var(--mono); color:var(--emerald);">3,000 tk</span>
-            </div>
-            <div class="budget-row">
-              <span><strong>C1:</strong> Decisions</span>
-              <div class="bar-bg"><div class="bar-fill" id="bar-c1" style="width: 8.3%;"></div></div>
-              <span id="txt-c1" style="font-family:var(--mono);">2,000 tk</span>
-            </div>
-            <div class="budget-row">
-              <span><strong>C2:</strong> Code Evidence</span>
-              <div class="bar-bg"><div class="bar-fill" id="bar-c2" style="width: 50.0%;"></div></div>
-              <span id="txt-c2" style="font-family:var(--mono); font-weight:700; color:var(--cyan);">12,000 tk</span>
-            </div>
-            <div class="budget-row">
-              <span><strong>C3:</strong> Assumptions</span>
-              <div class="bar-bg"><div class="bar-fill" id="bar-c3" style="width: 8.3%;"></div></div>
-              <span id="txt-c3" style="font-family:var(--mono);">2,000 tk</span>
-            </div>
-            <div class="budget-row">
-              <span><strong>C4:</strong> Failures / Recovery</span>
-              <div class="bar-bg"><div class="bar-fill" id="bar-c4" style="width: 8.3%;"></div></div>
-              <span id="txt-c4" style="font-family:var(--mono); color:var(--amber);">2,000 tk</span>
-            </div>
-            <div class="budget-row">
-              <span><strong>C5:</strong> Procedures</span>
-              <div class="bar-bg"><div class="bar-fill" id="bar-c5" style="width: 8.3%;"></div></div>
-              <span id="txt-c5" style="font-family:var(--mono);">2,000 tk</span>
-            </div>
-            <div class="budget-row">
-              <span><strong>C6:</strong> Episode History</span>
-              <div class="bar-bg"><div class="bar-fill" id="bar-c6" style="width: 4.2%;"></div></div>
-              <span id="txt-c6" style="font-family:var(--mono); color:var(--text-dim);">1,000 tk</span>
-            </div>
-          </div>
-
-          <div style="margin-top:24px; padding-top:16px; border-top:1px solid var(--border); display:flex; justify-content:space-between; align-items:center;">
-            <span style="font-size:0.9rem; color:var(--text-muted);">Allocated Context Budget: <strong id="totalAlloc" style="color:#fff;">24,000</strong> tokens</span>
-            <span id="policyTag" class="figure-badge" style="margin:0;">POLICY: BALANCED MEDIUM-RISK</span>
+          <div class="problem-grid reveal">
+            <article class="problem" data-code="01">
+              <div class="icon">CTX</div>
+              <h4>Context drift</h4>
+              <p>A correct decision at event 481 can become dangerous at event 612. Retrieval without temporal validity can quietly resurrect obsolete project facts.</p>
+            </article>
+            <article class="problem" data-code="02">
+              <div class="icon">MEM</div>
+              <h4>Memory echo</h4>
+              <p>A lossy summary gets retrieved, repeated, and reinforced until the team treats an interpretation as authority.</p>
+            </article>
+            <article class="problem" data-code="03">
+              <div class="icon">GIT</div>
+              <h4>Integration race</h4>
+              <p>Multiple successful agent branches can still form one broken repository. Reliability has to be enforced at the merged candidate tree.</p>
+            </article>
           </div>
         </div>
       </div>
     </section>
 
-    <!-- Memory Inspector Section -->
-    <section id="inspector">
-      <div class="shell">
-        <div class="sec-tag">Killer Debugging Feature</div>
-        <h2 class="sec-title">Live Memory Provenance Inspector (<code>arc memory why</code>)</h2>
-        <p class="sec-desc">
-          Every memory carries explicit source event causation, temporal validity windows, and supersession links. Click any memory below to inspect its live provenance record:
-        </p>
+    <section id="architecture">
+      <div class="shell section-grid">
+        <aside class="section-index reveal">
+          <div class="num">02</div>
+          <div>
+            <h2>System map</h2>
+            <p>Click any subsystem. ARC separates authoritative truth from lossy derived memory, then compiles only the context an agent needs.</p>
+          </div>
+        </aside>
 
-        <div class="mem-inspector">
-          <div class="mem-list">
-            <div class="mem-item active" onclick="selectMemory('m1', this)">
-              <div class="mem-item-type">decision · active</div>
-              <div class="mem-item-id">M_API_22</div>
-              <div class="mem-item-title">AuthClient returns AuthResult</div>
-            </div>
-            <div class="mem-item" onclick="selectMemory('m2', this)">
-              <div class="mem-item-type">fact · superseded</div>
-              <div class="mem-item-id">M_API_17</div>
-              <div class="mem-item-title">AuthClient returns Result[Token]</div>
-            </div>
-            <div class="mem-item" onclick="selectMemory('m3', this)">
-              <div class="mem-item-type">procedure · active</div>
-              <div class="mem-item-id">M_PROC_84</div>
-              <div class="mem-item-title">Docker compose postgres before pytest</div>
-            </div>
-            <div class="mem-item" onclick="selectMemory('m4', this)">
-              <div class="mem-item-type">assumption · disputed</div>
-              <div class="mem-item-id">M_ASSUME_31</div>
-              <div class="mem-item-title">Zero external callers for auth helper</div>
-            </div>
+        <div>
+          <div class="section-lead reveal">
+            <div class="hud-line">Interactive architecture</div>
+            <h3>A control plane, not a shared chat log.</h3>
+            <p>The central invariant is simple: <strong style="color:var(--paper)">adaptive memory is never authoritative.</strong> Project truth lives in append-only events and git state. Memory can be compressed, superseded, archived, or rebuilt without changing what actually happened.</p>
           </div>
 
-          <div class="mem-detail" id="memDetailPanel">
-            <!-- Dynamically populated via JS -->
+          <div class="architecture-console reveal" id="architecture-console">
+            <div class="map-panel" id="map-panel">
+              <svg viewBox="0 0 760 600" preserveAspectRatio="none" aria-hidden="true">
+                <path id="conn-state-context" class="connection flow active" d="M160 120 C250 150 270 260 350 300" />
+                <path id="conn-memory-context" class="connection flow active" d="M555 115 C475 165 455 255 400 300" />
+                <path id="conn-context-agent" class="connection flow" d="M350 340 C275 390 230 470 165 505" />
+                <path id="conn-agent-gate" class="connection flow" d="M165 515 C280 565 425 565 555 515" />
+                <path id="conn-gate-state" class="connection flow" d="M590 500 C690 355 620 180 165 120" />
+                <circle cx="375" cy="305" r="95" fill="none" stroke="rgba(232,161,67,.08)" stroke-width="1" />
+                <circle cx="375" cy="305" r="150" fill="none" stroke="rgba(155,212,173,.055)" stroke-width="1" stroke-dasharray="2 8" />
+              </svg>
+
+              <button class="map-node state" type="button" data-node="state" aria-pressed="true">
+                <span class="node-kicker">Plane / authoritative</span>
+                <strong>Project State</strong>
+              </button>
+              <button class="map-node memory" type="button" data-node="memory" aria-pressed="false">
+                <span class="node-kicker">Plane / derived</span>
+                <strong>Memory</strong>
+              </button>
+              <button class="map-node context" type="button" data-node="context" aria-pressed="false">
+                <span class="node-kicker">Compiler / bounded</span>
+                <strong>Context</strong>
+              </button>
+              <button class="map-node agent" type="button" data-node="agent" aria-pressed="false">
+                <span class="node-kicker">Worker / isolated</span>
+                <strong>Agent</strong>
+              </button>
+              <button class="map-node gate" type="button" data-node="gate" aria-pressed="false">
+                <span class="node-kicker">Writer / serialized</span>
+                <strong>Gate</strong>
+              </button>
+            </div>
+
+            <aside class="console-side">
+              <div class="console-head"><span>Subsystem telemetry</span><span>live</span></div>
+              <div id="node-detail" aria-live="polite">
+                <div class="micro" id="detail-code">AUTH / ST-01</div>
+                <h4 id="detail-title">Project State</h4>
+                <p id="detail-copy">Append-only events, task DAG versions, git refs, leases, budgets, and integration outcomes form the reconstructable source of truth.</p>
+                <div class="detail-list" id="detail-list">
+                  <span>single authoritative writer</span>
+                  <span>monotonic state version</span>
+                  <span>deterministic replay</span>
+                </div>
+                <div class="signal-meter">
+                  <div class="label"><span>authority</span><span id="detail-score">100%</span></div>
+                  <div class="meter"><span id="detail-meter" style="width:100%"></span></div>
+                </div>
+              </div>
+            </aside>
           </div>
         </div>
       </div>
     </section>
 
-    <!-- Benchmark Matrix Table -->
-    <section id="benchmark">
-      <div class="shell">
-        <div class="sec-tag">Empirical Results</div>
-        <h2 class="sec-title">Iso-Cost Benchmark Comparisons</h2>
-        <p class="sec-desc">
-          Evaluated against 60+ repository instances under hidden-test grading and strict token parity (Sections 52 & 54).
-        </p>
+    <section id="capabilities">
+      <div class="shell section-grid">
+        <aside class="section-index reveal">
+          <div class="num">03</div>
+          <div>
+            <h2>Runtime capabilities</h2>
+            <p>Move the pointer across each panel. Depth is decorative; every capability is readable without hover.</p>
+          </div>
+        </aside>
 
-        <div class="table-wrap">
-          <table>
-            <thead>
-              <tr>
-                <th>Baseline</th>
-                <th>Stratum</th>
-                <th>Resolved %</th>
-                <th>Cost / Task</th>
-                <th>Stale Delivery</th>
-                <th>Re-Exploration</th>
-                <th>p95 Latency</th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr>
-                <td><strong>B0: Single Agent Full Session</strong></td>
-                <td>S-large</td>
-                <td>38.5%</td>
-                <td>$4.82</td>
-                <td>18.4%</td>
-                <td>34.2%</td>
-                <td>120ms</td>
-              </tr>
-              <tr>
-                <td><strong>B2: Transcript Handoff</strong></td>
-                <td>S-large</td>
-                <td>29.2%</td>
-                <td>$5.10</td>
-                <td>32.7%</td>
-                <td>41.8%</td>
-                <td>185ms</td>
-              </tr>
-              <tr>
-                <td><strong>B3: Static Structured Packet</strong></td>
-                <td>S-large</td>
-                <td>46.2%</td>
-                <td>$2.45</td>
-                <td>14.1%</td>
-                <td>26.5%</td>
-                <td>45ms</td>
-              </tr>
-              <tr>
-                <td><strong>B5: Vector Top-K Memory</strong></td>
-                <td>S-large</td>
-                <td>42.0%</td>
-                <td>$3.20</td>
-                <td>28.9%</td>
-                <td>31.0%</td>
-                <td>210ms</td>
-              </tr>
-              <tr class="highlight">
-                <td><strong>B7: ARC Proposed Runtime <span class="badge-win">WINNER</span></strong></td>
-                <td>S-large</td>
-                <td><strong>64.7%</strong></td>
-                <td><strong>$2.15</strong></td>
-                <td><strong>0.4%</strong></td>
-                <td><strong>8.2%</strong></td>
-                <td><strong>38ms</strong></td>
-              </tr>
-            </tbody>
-          </table>
+        <div>
+          <div class="section-lead reveal">
+            <div class="hud-line">Operational stack</div>
+            <h3>Reliability engineered into every handoff.</h3>
+            <p>ARC treats context, memory, execution and integration as one control problem. The runtime is intentionally modular so each policy can be benchmarked against static baselines.</p>
+          </div>
+
+          <div class="feature-deck reveal">
+            <article class="feature-card tilt-card">
+              <div class="feature-top"><span class="feature-id">ARC / MEM-02</span><span class="feature-state">active</span></div>
+              <h4>Versioned adaptive memory</h4>
+              <p>Every memory object carries source-event provenance, validity boundaries and supersession state. Derived memory stays useful without becoming ground truth.</p>
+              <div class="feature-tags"><span>provenance</span><span>supersession</span><span>conflict-aware</span></div>
+            </article>
+
+            <article class="feature-card tilt-card">
+              <div class="feature-top"><span class="feature-id">ARC / CTX-03</span><span class="feature-state">bounded</span></div>
+              <h4>Risk-aware context compilation</h4>
+              <p>ARC assembles task core, decisions, code evidence, assumptions, failures and procedures under a hard token ceiling instead of dumping history into the prompt.</p>
+              <div class="feature-tags"><span>hard budget</span><span>code evidence</span><span>task-aware</span></div>
+            </article>
+
+            <article class="feature-card tilt-card">
+              <div class="feature-top"><span class="feature-id">ARC / GIT-04</span><span class="feature-state">serialized</span></div>
+              <h4>Transactional integration gate</h4>
+              <p>Candidate commits are verified in an isolated gate worktree against the merged tree before the single writer is allowed to integrate them.</p>
+              <div class="feature-tags"><span>worktrees</span><span>candidate commit</span><span>fail-closed</span></div>
+            </article>
+
+            <article class="feature-card tilt-card">
+              <div class="feature-top"><span class="feature-id">ARC / ISO-05</span><span class="feature-state">hardened</span></div>
+              <h4>Isolated command execution</h4>
+              <p>Build and test commands can run in a Docker boundary with network disabled, dropped capabilities, resource limits and no silent host fallback.</p>
+              <div class="feature-tags"><span>docker</span><span>network-none</span><span>resource limits</span></div>
+            </article>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section id="inspect">
+      <div class="shell section-grid">
+        <aside class="section-index reveal">
+          <div class="num">04</div>
+          <div>
+            <h2>Inspectable memory</h2>
+            <p>A reliable memory system should explain why an item exists, where it came from, when it was valid, and where it was used.</p>
+          </div>
+        </aside>
+
+        <div>
+          <div class="section-lead reveal">
+            <div class="hud-line">Operator console</div>
+            <h3>Ask the runtime why it remembers.</h3>
+            <p>The provenance model is designed to make agent memory debuggable rather than magical. Try the simulated operator views below.</p>
+          </div>
+
+          <div class="terminal reveal">
+            <div class="terminal-head">
+              <span>arc://operator-console</span>
+              <span class="lights" aria-hidden="true"><i></i><i></i><i></i></span>
+            </div>
+            <div class="terminal-body">
+              <div class="terminal-tabs" aria-label="Choose inspection example">
+                <button type="button" data-memory="decision" aria-pressed="true">Decision M_44</button>
+                <button type="button" data-memory="failure" aria-pressed="false">Failure M_18</button>
+                <button type="button" data-memory="superseded" aria-pressed="false">Superseded M_07</button>
+              </div>
+              <div><span class="prompt">operator@arc:~$</span> <span class="cmd" id="memory-command">arc memory why M_44</span></div>
+              <div class="terminal-output" id="memory-output" aria-live="polite">Memory <strong>M_44</strong>
+
+Type:             decision
+Status:           active
+Valid:            event 850 → current
+Derived from:     event 842, event 850
+Delivered to:     T17 / codex_2, T21 / claude_1
+Downstream:       2 accepted patches · 0 rejected patches
+
+Decision: All auth APIs return domain result objects, not tuples.</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section id="research">
+      <div class="shell section-grid">
+        <aside class="section-index reveal">
+          <div class="num">05</div>
+          <div>
+            <h2>Research thesis</h2>
+            <p>ARC is an experimental research runtime. The research question is not whether agents can remember more, but whether context control improves reliability per unit cost.</p>
+          </div>
+        </aside>
+
+        <div>
+          <div class="section-lead reveal">
+            <div class="hud-line">Core principle</div>
+            <h3>Never hand agents history. Hand them the current project.</h3>
+          </div>
+
+          <div class="principle reveal">
+            <div class="quote">
+              <blockquote>Memory may be <em>lossy</em>. Truth may not.</blockquote>
+              <div class="micro">Design invariant / ARC-INV-01</div>
+            </div>
+            <div class="flow">
+              <div class="flow-row"><span class="idx">01</span><strong>Authoritative events</strong><span>append-only</span></div>
+              <div class="flow-row"><span class="idx">02</span><strong>Versioned memory</strong><span>derived</span></div>
+              <div class="flow-row"><span class="idx">03</span><strong>Context compiler</strong><span>bounded</span></div>
+              <div class="flow-row"><span class="idx">04</span><strong>Isolated agent</strong><span>task-scoped</span></div>
+              <div class="flow-row"><span class="idx">05</span><strong>Integration gate</strong><span>verified</span></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="cta" aria-labelledby="cta-title">
+      <div class="shell">
+        <div class="cta-card reveal">
+          <div>
+            <div class="classification">Open-source research runtime</div>
+            <h2 id="cta-title">Build agent teams that <span>remember correctly.</span></h2>
+            <p>ARC is experimental and evolving. Explore the implementation, inspect the reliability boundaries, and benchmark your own coding-agent workflows against a versioned context control plane.</p>
+          </div>
+          <div class="cta-actions">
+            <a class="btn btn-primary magnetic" href="https://github.com/anatwork14/adaptive-agent-runtime" target="_blank" rel="noreferrer">View repository</a>
+            <a class="btn btn-ghost magnetic" href="https://github.com/anatwork14/adaptive-agent-runtime#quick-start" target="_blank" rel="noreferrer">Quick start</a>
+          </div>
         </div>
       </div>
     </section>
   </main>
 
-  <!-- Footer -->
   <footer>
-    <div class="shell footer-flex">
-      <div>
-        <strong>ARC · Adaptive Agent Runtime</strong> — Reliable Context Control for Multi-Agent Coding
-      </div>
-      <div>
-        <a href="https://github.com/anatwork14/adaptive-agent-runtime" style="color:var(--text); text-decoration:none; margin-right:16px;">GitHub</a>
-        <a href="https://github.com/anatwork14/adaptive-agent-runtime/blob/main/LICENSE" style="color:var(--text); text-decoration:none;">MIT License</a>
-      </div>
+    <div class="shell footer-inner">
+      <span>ARC // Adaptive Agent Runtime // experimental</span>
+      <span><a href="https://github.com/anatwork14/adaptive-agent-runtime" target="_blank" rel="noreferrer">GitHub</a> · Apache-2.0</span>
     </div>
   </footer>
 
-  <!-- Interactive Scripts -->
   <script>
-    // Copy button helper
-    function copyInstallCmd(btn) {
-      navigator.clipboard.writeText("pip install git+https://github.com/anatwork14/adaptive-agent-runtime.git");
-      btn.innerText = "Copied!";
-      setTimeout(() => { btn.innerText = "Copy"; }, 2000);
-    }
+    (() => {
+      const root = document.documentElement;
+      const reduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 
-    // Token Budget Simulator logic
-    function updateSimulator(val) {
-      const risk = parseFloat(val);
-      document.getElementById('riskValue').innerText = risk.toFixed(2);
-      
-      let base = 24000;
-      let factor = 1.0;
-      let policy = "BALANCED MEDIUM-RISK";
-      let badgeClass = "figure-badge";
+      document.addEventListener('pointermove', (event) => {
+        root.style.setProperty('--mx', `${event.clientX}px`);
+        root.style.setProperty('--my', `${event.clientY}px`);
+      }, { passive: true });
 
-      if (risk < 0.3) {
-        factor = 0.70;
-        policy = "COMPACT LOW-RISK";
-      } else if (risk > 0.7) {
-        factor = 1.25;
-        policy = "BROAD HIGH-RISK WITH RECOVERY";
+      const revealNodes = [...document.querySelectorAll('.reveal')];
+      if ('IntersectionObserver' in window && !reduced) {
+        const observer = new IntersectionObserver((entries) => {
+          entries.forEach((entry) => {
+            if (entry.isIntersecting) {
+              entry.target.classList.add('in');
+              observer.unobserve(entry.target);
+            }
+          });
+        }, { threshold: 0.12 });
+        revealNodes.forEach((node) => observer.observe(node));
+      } else {
+        revealNodes.forEach((node) => node.classList.add('in'));
       }
 
-      const total = Math.round(base * factor);
-      document.getElementById('totalAlloc').innerText = total.toLocaleString();
-      
-      const tag = document.getElementById('policyTag');
-      tag.innerText = `POLICY: ${policy}`;
-      tag.style.color = risk > 0.7 ? "var(--amber)" : (risk < 0.3 ? "var(--cyan)" : "var(--emerald)");
+      if (!reduced && window.matchMedia('(hover: hover) and (pointer: fine)').matches) {
+        document.querySelectorAll('.tilt-card').forEach((card) => {
+          card.addEventListener('pointermove', (event) => {
+            const rect = card.getBoundingClientRect();
+            const x = (event.clientX - rect.left) / rect.width;
+            const y = (event.clientY - rect.top) / rect.height;
+            const rx = (0.5 - y) * 5;
+            const ry = (x - 0.5) * 6;
+            card.style.setProperty('--tiltX', `${rx}deg`);
+            card.style.setProperty('--tiltY', `${ry}deg`);
+            card.style.setProperty('--cx', `${x * 100}%`);
+            card.style.setProperty('--cy', `${y * 100}%`);
+          });
+          card.addEventListener('pointerleave', () => {
+            card.style.setProperty('--tiltX', '0deg');
+            card.style.setProperty('--tiltY', '0deg');
+          });
+        });
 
-      let r_c0 = 3000 / 24000;
-      let r_c1 = 2000 / 24000;
-      let r_c2 = 12000 / 24000;
-      let r_c3 = 2000 / 24000;
-      let r_c4 = 2000 / 24000;
-      let r_c5 = 2000 / 24000;
-      let r_c6 = 1000 / 24000;
-
-      if (risk > 0.7) {
-        r_c2 += 0.05;
-        r_c4 += 0.03;
-        r_c6 = Math.max(0.01, r_c6 - 0.04);
+        document.querySelectorAll('.magnetic').forEach((button) => {
+          button.addEventListener('pointermove', (event) => {
+            const rect = button.getBoundingClientRect();
+            const x = event.clientX - rect.left - rect.width / 2;
+            const y = event.clientY - rect.top - rect.height / 2;
+            button.style.transform = `translate(${x * .07}px, ${y * .07}px)`;
+          });
+          button.addEventListener('pointerleave', () => { button.style.transform = ''; });
+        });
       }
 
-      const c0 = Math.round(total * r_c0);
-      const c1 = Math.round(total * r_c1);
-      const c2 = Math.round(total * r_c2);
-      const c3 = Math.round(total * r_c3);
-      const c4 = Math.round(total * r_c4);
-      const c5 = Math.round(total * r_c5);
-      const c6 = Math.round(total * r_c6);
+      const details = {
+        state: {
+          code: 'AUTH / ST-01',
+          title: 'Project State',
+          copy: 'Append-only events, task DAG versions, git refs, leases, budgets, and integration outcomes form the reconstructable source of truth.',
+          list: ['single authoritative writer', 'monotonic state version', 'deterministic replay'],
+          score: '100%', width: '100%', links: ['conn-state-context','conn-gate-state']
+        },
+        memory: {
+          code: 'DERIVED / MEM-02',
+          title: 'Adaptive Memory',
+          copy: 'Typed, provenance-aware memory is derived from accepted project events. Items may be superseded or archived without altering project history.',
+          list: ['validity intervals', 'source event provenance', 'supersession semantics'],
+          score: '76%', width: '76%', links: ['conn-memory-context']
+        },
+        context: {
+          code: 'COMPILER / CTX-03',
+          title: 'Context Compiler',
+          copy: 'ARC allocates a finite token budget across task core, decisions, code evidence, assumptions, failures and procedures.',
+          list: ['hard token ceiling', 'risk-aware allocation', 'actual code evidence'],
+          score: '88%', width: '88%', links: ['conn-state-context','conn-memory-context','conn-context-agent']
+        },
+        agent: {
+          code: 'WORKER / AG-04',
+          title: 'Isolated Agent',
+          copy: 'Each worker receives an immutable context packet and works on an isolated git worktree. Provider adapters never silently fall back to fake success.',
+          list: ['immutable dispatch context', 'isolated worktree', 'explicit adapter boundary'],
+          score: '82%', width: '82%', links: ['conn-context-agent','conn-agent-gate']
+        },
+        gate: {
+          code: 'WRITER / GT-05',
+          title: 'Integration Gate',
+          copy: 'The exact candidate commit is applied to a gate worktree, verified, then integrated by the serialized writer only after checks pass.',
+          list: ['candidate commit', 'merged-tree verification', 'fail-closed integration'],
+          score: '94%', width: '94%', links: ['conn-agent-gate','conn-gate-state']
+        }
+      };
 
-      document.getElementById('txt-c0').innerText = `${c0.toLocaleString()} tk`;
-      document.getElementById('txt-c1').innerText = `${c1.toLocaleString()} tk`;
-      document.getElementById('txt-c2').innerText = `${c2.toLocaleString()} tk`;
-      document.getElementById('txt-c3').innerText = `${c3.toLocaleString()} tk`;
-      document.getElementById('txt-c4').innerText = `${c4.toLocaleString()} tk`;
-      document.getElementById('txt-c5').innerText = `${c5.toLocaleString()} tk`;
-      document.getElementById('txt-c6').innerText = `${c6.toLocaleString()} tk`;
-
-      document.getElementById('bar-c0').style.width = `${(c0/total)*100}%`;
-      document.getElementById('bar-c1').style.width = `${(c1/total)*100}%`;
-      document.getElementById('bar-c2').style.width = `${(c2/total)*100}%`;
-      document.getElementById('bar-c3').style.width = `${(c3/total)*100}%`;
-      document.getElementById('bar-c4').style.width = `${(c4/total)*100}%`;
-      document.getElementById('bar-c5').style.width = `${(c5/total)*100}%`;
-      document.getElementById('bar-c6').style.width = `${(c6/total)*100}%`;
-    }
-
-    // Memory Inspector Demo Data
-    const memoryData = {
-      m1: {
-        id: "M_API_22",
-        type: "decision",
-        status: "active",
-        statusClass: "emerald",
-        events: "Event 5320 (gate.accepted)",
-        valid: "Event 5320 → Current",
-        supersedes: "M_API_17 (superseded at Event 5320)",
-        content: "AuthClient.login returns AuthResult domain object rather than Tuple[bool, str].",
-        deliveredTo: "Task T17 (Codex), Task T21 (Claude)",
-        outcomes: "2 Accepted Patches, 0 Rejections"
-      },
-      m2: {
-        id: "M_API_17",
-        type: "fact",
-        status: "superseded",
-        statusClass: "amber",
-        events: "Event 4805 (task.merged)",
-        valid: "Event 4805 → Event 5319",
-        supersedes: "Superseded by M_API_22",
-        content: "Legacy signature: AuthClient.login returns Result[Token].",
-        deliveredTo: "Exempt from active dispatches (AC3 Guaranteed)",
-        outcomes: "Filtered automatically by Context Compiler"
-      },
-      m3: {
-        id: "M_PROC_84",
-        type: "procedure",
-        status: "active",
-        statusClass: "emerald",
-        events: "Event 1240, 1289, 1342 (consolidated from 3 failures)",
-        valid: "Event 1342 → Current",
-        supersedes: "None",
-        content: "Integration tests require starting postgres service before executing pytest: 'docker compose up -d postgres'.",
-        deliveredTo: "Task T12, Task T15",
-        outcomes: "Saved ~1,400 re-exploration tokens per task"
-      },
-      m4: {
-        id: "M_ASSUME_31",
-        type: "assumption",
-        status: "disputed",
-        statusClass: "red",
-        events: "Event 2100 (task.dispatched)",
-        valid: "Event 2100 → Disputed (Flagged at G0)",
-        supersedes: "Contradicted by M_FACT_89",
-        content: "Assumed module auth/client.py has zero external callers outside the auth directory.",
-        deliveredTo: "Delivered with CONTRADICTORY_ASSUMPTIONS_PRESENT risk flag",
-        outcomes: "Triggered V2 Reviewer verification"
+      const nodeButtons = [...document.querySelectorAll('.map-node')];
+      const allConnections = [...document.querySelectorAll('.connection')];
+      function selectNode(key) {
+        const detail = details[key] || details.state;
+        nodeButtons.forEach((button) => button.setAttribute('aria-pressed', button.dataset.node === key ? 'true' : 'false'));
+        allConnections.forEach((path) => path.classList.toggle('active', detail.links.includes(path.id)));
+        document.getElementById('detail-code').textContent = detail.code;
+        document.getElementById('detail-title').textContent = detail.title;
+        document.getElementById('detail-copy').textContent = detail.copy;
+        document.getElementById('detail-list').innerHTML = detail.list.map((item) => `<span>${item}</span>`).join('');
+        document.getElementById('detail-score').textContent = detail.score;
+        document.getElementById('detail-meter').style.width = detail.width;
       }
-    };
+      nodeButtons.forEach((button) => button.addEventListener('click', () => selectNode(button.dataset.node)));
 
-    function selectMemory(key, el) {
-      document.querySelectorAll('.mem-item').forEach(i => i.classList.remove('active'));
-      el.classList.add('active');
+      const memoryExamples = {
+        decision: {
+          command: 'arc memory why M_44',
+          output: `Memory M_44\n\nType:             decision\nStatus:           active\nValid:            event 850 → current\nDerived from:     event 842, event 850\nDelivered to:     T17 / codex_2, T21 / claude_1\nDownstream:       2 accepted patches · 0 rejected patches\n\nDecision: All auth APIs return domain result objects, not tuples.`
+        },
+        failure: {
+          command: 'arc memory why M_18',
+          output: `Memory M_18\n\nType:             failure\nStatus:           active\nValid:            event 621 → current\nDerived from:     gate.rejected / event 621\nDelivered to:     T22 / recovery-agent\nDownstream:       procedure candidate created\n\nFailure: Integration tests require the postgres service before pytest.`
+        },
+        superseded: {
+          command: 'arc memory why M_07',
+          output: `Memory M_07\n\nType:             fact\nStatus:           superseded\nValid:            event 212 → event 417\nSuperseded by:    M_31\nDefault retrieval: EXCLUDED\n\nOld fact: AuthClient.login returned Result[Token].\nCurrent fact: See M_31.`
+        }
+      };
+      document.querySelectorAll('[data-memory]').forEach((button) => {
+        button.addEventListener('click', () => {
+          const key = button.dataset.memory;
+          document.querySelectorAll('[data-memory]').forEach((item) => item.setAttribute('aria-pressed', item === button ? 'true' : 'false'));
+          document.getElementById('memory-command').textContent = memoryExamples[key].command;
+          document.getElementById('memory-output').textContent = memoryExamples[key].output;
+        });
+      });
+    })();
+  </script>
 
-      const data = memoryData[key];
-      const panel = document.getElementById('memDetailPanel');
-      
-      panel.innerHTML = `
-        <div style="font-family:var(--mono); color:var(--text-dim); font-size:0.8rem; margin-bottom:8px;">$ arc memory why ${data.id}</div>
-        <h3 style="font-size:1.4rem; font-weight:800; display:flex; align-items:center; gap:10px;">
-          ${data.id}
-          <span style="font-size:0.75rem; padding:3px 10px; border-radius:999px; background:rgba(0,242,180,0.15); color:var(--${data.statusClass}); font-family:var(--mono);">${data.status.toUpperCase()}</span>
-        </h3>
-        
-        <div style="margin-top:18px; display:grid; gap:12px; font-size:0.92rem;">
-          <div><strong style="color:var(--text-muted);">Type:</strong> ${data.type}</div>
-          <div><strong style="color:var(--text-muted);">Source Event:</strong> <code>${data.events}</code></div>
-          <div><strong style="color:var(--text-muted);">Validity Interval:</strong> ${data.valid}</div>
-          <div><strong style="color:var(--text-muted);">Supersession Record:</strong> <span style="color:var(--cyan);">${data.supersedes}</span></div>
-          <div style="padding:14px; background:rgba(255,255,255,0.03); border-radius:10px; border-left:3px solid var(--emerald); margin:8px 0;">
-            <strong>Content:</strong> ${data.content}
-          </div>
-          <div><strong style="color:var(--text-muted);">Delivered To:</strong> ${data.deliveredTo}</div>
-          <div><strong style="color:var(--text-muted);">Downstream Gate Outcomes:</strong> <span style="color:var(--emerald);">${data.outcomes}</span></div>
-        </div>
-      `;
+  <script type="module">
+    const canvas = document.getElementById('arc-scene');
+    const frame = document.getElementById('scene-frame');
+    const fallback = document.getElementById('scene-fallback');
+    const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+    if (canvas && frame && !reducedMotion) {
+      try {
+        const THREE = await import('https://cdn.jsdelivr.net/npm/three@0.180.0/build/three.module.js');
+
+        const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: true, powerPreference: 'high-performance' });
+        renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 1.7));
+        renderer.setClearColor(0x000000, 0);
+
+        const scene = new THREE.Scene();
+        scene.fog = new THREE.FogExp2(0x0b0c0b, 0.038);
+
+        const camera = new THREE.PerspectiveCamera(42, 1, 0.1, 120);
+        camera.position.set(0, 2.5, 14);
+
+        const root = new THREE.Group();
+        scene.add(root);
+
+        const amber = new THREE.Color(0xe8a143);
+        const radar = new THREE.Color(0x9bd4ad);
+        const dim = new THREE.Color(0x556058);
+
+        const coreGeometry = new THREE.IcosahedronGeometry(2.15, 1);
+        const coreMaterial = new THREE.MeshBasicMaterial({ color: amber, wireframe: true, transparent: true, opacity: 0.72 });
+        const core = new THREE.Mesh(coreGeometry, coreMaterial);
+        core.rotation.z = 0.25;
+        root.add(core);
+
+        const innerGeometry = new THREE.OctahedronGeometry(1.02, 0);
+        const innerMaterial = new THREE.MeshBasicMaterial({ color: radar, wireframe: true, transparent: true, opacity: 0.34 });
+        const inner = new THREE.Mesh(innerGeometry, innerMaterial);
+        root.add(inner);
+
+        const shellMaterial = new THREE.MeshBasicMaterial({ color: 0xd7d8cf, wireframe: true, transparent: true, opacity: 0.08 });
+        const shell = new THREE.Mesh(new THREE.IcosahedronGeometry(2.72, 2), shellMaterial);
+        root.add(shell);
+
+        const rings = [];
+        const ringConfigs = [
+          [3.25, 0.0, 0.15, amber, 0.23],
+          [3.95, 1.03, 0.32, radar, 0.18],
+          [4.75, 1.44, -0.54, dim, 0.16]
+        ];
+        ringConfigs.forEach(([radius, rx, ry, color, opacity]) => {
+          const points = [];
+          for (let i = 0; i <= 128; i++) {
+            const a = (i / 128) * Math.PI * 2;
+            points.push(new THREE.Vector3(Math.cos(a) * radius, 0, Math.sin(a) * radius));
+          }
+          const geometry = new THREE.BufferGeometry().setFromPoints(points);
+          const material = new THREE.LineBasicMaterial({ color, transparent: true, opacity });
+          const ring = new THREE.Line(geometry, material);
+          ring.rotation.x = rx;
+          ring.rotation.y = ry;
+          root.add(ring);
+          rings.push(ring);
+        });
+
+        const satellites = new THREE.Group();
+        root.add(satellites);
+        const satGeometry = new THREE.TetrahedronGeometry(0.17, 0);
+        for (let i = 0; i < 9; i++) {
+          const sat = new THREE.Mesh(satGeometry, new THREE.MeshBasicMaterial({ color: i % 3 === 0 ? amber : radar, wireframe: true, transparent: true, opacity: 0.72 }));
+          const angle = (i / 9) * Math.PI * 2;
+          const radius = 3.3 + (i % 3) * .48;
+          sat.position.set(Math.cos(angle) * radius, Math.sin(angle * 1.7) * 1.15, Math.sin(angle) * radius);
+          sat.userData = { angle, radius, speed: 0.18 + (i % 4) * .035, lift: .65 + (i % 3) * .3 };
+          satellites.add(sat);
+        }
+
+        const particleCount = 440;
+        const positions = new Float32Array(particleCount * 3);
+        for (let i = 0; i < particleCount; i++) {
+          const radius = 4 + Math.random() * 18;
+          const theta = Math.random() * Math.PI * 2;
+          const phi = Math.acos(2 * Math.random() - 1);
+          positions[i * 3] = radius * Math.sin(phi) * Math.cos(theta);
+          positions[i * 3 + 1] = (Math.random() - .5) * 12;
+          positions[i * 3 + 2] = radius * Math.sin(phi) * Math.sin(theta);
+        }
+        const particlesGeometry = new THREE.BufferGeometry();
+        particlesGeometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+        const particlesMaterial = new THREE.PointsMaterial({ color: 0xb9c5ba, size: 0.025, transparent: true, opacity: 0.38, sizeAttenuation: true });
+        const particles = new THREE.Points(particlesGeometry, particlesMaterial);
+        scene.add(particles);
+
+        const grid = new THREE.GridHelper(34, 34, 0x594b37, 0x242a25);
+        grid.position.y = -4.25;
+        grid.material.transparent = true;
+        grid.material.opacity = 0.24;
+        scene.add(grid);
+
+        const horizon = new THREE.Group();
+        const beamMaterial = new THREE.LineBasicMaterial({ color: radar, transparent: true, opacity: 0.1 });
+        for (let i = 0; i < 18; i++) {
+          const geometry = new THREE.BufferGeometry().setFromPoints([
+            new THREE.Vector3(0, -4.2, 0),
+            new THREE.Vector3((Math.random() - .5) * 30, -1 + Math.random() * 8, -8 - Math.random() * 16)
+          ]);
+          horizon.add(new THREE.Line(geometry, beamMaterial));
+        }
+        scene.add(horizon);
+
+        const pointer = { x: 0, y: 0, tx: 0, ty: 0 };
+        frame.addEventListener('pointermove', (event) => {
+          const rect = frame.getBoundingClientRect();
+          pointer.tx = ((event.clientX - rect.left) / rect.width - .5) * 2;
+          pointer.ty = ((event.clientY - rect.top) / rect.height - .5) * 2;
+        });
+        frame.addEventListener('pointerleave', () => { pointer.tx = 0; pointer.ty = 0; });
+
+        let mode = 'state';
+        const modes = {
+          state: { amber: 0xe8a143, radar: 0x9bd4ad, scale: 1.0, fog: 0.038 },
+          memory: { amber: 0x9bd4ad, radar: 0x7c9eb0, scale: .92, fog: 0.032 },
+          gate: { amber: 0xe96a4d, radar: 0xe8a143, scale: 1.08, fog: 0.046 }
+        };
+        document.querySelectorAll('[data-scene-mode]').forEach((button) => {
+          button.addEventListener('click', () => {
+            mode = button.dataset.sceneMode;
+            document.querySelectorAll('[data-scene-mode]').forEach((item) => item.setAttribute('aria-pressed', item === button ? 'true' : 'false'));
+            const cfg = modes[mode];
+            core.material.color.setHex(cfg.amber);
+            inner.material.color.setHex(cfg.radar);
+            scene.fog.density = cfg.fog;
+          });
+        });
+
+        function resize() {
+          const rect = frame.getBoundingClientRect();
+          const width = Math.max(1, Math.floor(rect.width));
+          const height = Math.max(1, Math.floor(rect.height));
+          renderer.setSize(width, height, false);
+          camera.aspect = width / height;
+          camera.updateProjectionMatrix();
+        }
+        resize();
+        const ro = new ResizeObserver(resize);
+        ro.observe(frame);
+
+        fallback.style.opacity = '0';
+
+        const clock = new THREE.Clock();
+        let frameId = 0;
+        function animate() {
+          const t = clock.getElapsedTime();
+          pointer.x += (pointer.tx - pointer.x) * .045;
+          pointer.y += (pointer.ty - pointer.y) * .045;
+
+          const cfg = modes[mode];
+          root.scale.lerp(new THREE.Vector3(cfg.scale, cfg.scale, cfg.scale), .035);
+          root.rotation.y = t * .085 + pointer.x * .28;
+          root.rotation.x = .08 + pointer.y * .12;
+          core.rotation.x += .0018;
+          core.rotation.y += .0022;
+          inner.rotation.x -= .004;
+          inner.rotation.z += .0035;
+          shell.rotation.y -= .0009;
+          rings[0].rotation.z = t * .035;
+          rings[1].rotation.z = -t * .026;
+          rings[2].rotation.z = t * .018;
+          particles.rotation.y = -t * .008;
+          grid.position.z = (t * .16) % 1;
+
+          satellites.children.forEach((sat, index) => {
+            const data = sat.userData;
+            const angle = data.angle + t * data.speed;
+            sat.position.x = Math.cos(angle) * data.radius;
+            sat.position.z = Math.sin(angle) * data.radius;
+            sat.position.y = Math.sin(angle * 1.6 + index) * data.lift;
+            sat.rotation.x += .008;
+            sat.rotation.y += .012;
+          });
+
+          camera.position.x = pointer.x * .7;
+          camera.position.y = 2.5 - pointer.y * .42;
+          camera.lookAt(0, 0, 0);
+          renderer.render(scene, camera);
+          frameId = requestAnimationFrame(animate);
+        }
+        animate();
+
+        document.addEventListener('visibilitychange', () => {
+          if (document.hidden) cancelAnimationFrame(frameId);
+          else animate();
+        });
+      } catch (error) {
+        console.warn('ARC 3D scene unavailable; using CSS fallback.', error);
+        fallback.style.opacity = '.8';
+      }
     }
-
-    // Initialize with first memory
-    selectMemory('m1', document.querySelector('.mem-item'));
   </script>
 </body>
 </html>
