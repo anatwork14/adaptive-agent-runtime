@@ -32,16 +32,14 @@ class MockAgentAdapter:
         if self.handler:
             return self.handler(context, workspace)
 
-        target: Path
-        if context.code_context:
+        raw_path = ""
+        if context.files_declared:
+            raw_path = str(context.files_declared[0])
+        elif context.code_context:
             raw_path = str(context.code_context[0].get("path", ""))
-            # Tests should declare concrete files. If a glob-like path slips in,
-            # write a deterministic file under .arc-mock instead of pretending
-            # to have modified the requested source tree.
-            if raw_path and not any(ch in raw_path for ch in "*?[]"):
-                target = workspace / raw_path
-            else:
-                target = workspace / ".arc-mock" / f"{context.task_id}.txt"
+
+        if raw_path and not any(ch in raw_path for ch in "*?[]") and not Path(raw_path).is_absolute():
+            target = workspace / raw_path
         else:
             target = workspace / ".arc-mock" / f"{context.task_id}.txt"
 
