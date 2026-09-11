@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "adaptive-agent-runtime"
-version = "0.2.0"
+version = "0.3.0"
 description = "Reliable context control for long-horizon multi-agent coding"
 readme = "README.md"
 requires-python = ">=3.11"
@@ -35,6 +35,8 @@ dependencies = [
     "rich>=13.0",
     "numpy>=1.24.0",
     "textual>=8.2,<9",
+    "fastapi>=0.141,<0.142",
+    "uvicorn>=0.52,<0.53",
 ]
 
 [project.urls]
@@ -49,6 +51,7 @@ dev = [
     "scipy>=1.10.0",
     "ruff>=0.6.0",
     "build>=1.2.0",
+    "httpx>=0.28.0",
 ]
 
 [project.scripts]
@@ -69,7 +72,11 @@ include = [
     "eval*",
     "cli*",
     "tui*",
+    "webui*",
 ]
+
+[tool.setuptools.package-data]
+webui = ["static/*"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
