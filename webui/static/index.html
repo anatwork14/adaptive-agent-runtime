@@ -1,0 +1,86 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="theme-color" content="#070a09">
+  <title>ARC Mission Control</title>
+  <link rel="stylesheet" href="/static/mission.css">
+</head>
+<body>
+  <div class="noise" aria-hidden="true"></div>
+  <header class="topbar">
+    <div class="brand"><span class="mark">A</span><div><b>ARC</b><small>MISSION CONTROL // LOCALHOST</small></div></div>
+    <div class="live"><i></i><span id="connection">CONNECTING</span></div>
+    <div class="top-actions"><button id="createTask">+ NEW TASK</button><button id="refresh">REFRESH</button></div>
+  </header>
+
+  <main>
+    <section class="hero-strip">
+      <div><span class="kicker">PROJECT</span><strong id="project">—</strong></div>
+      <div><span class="kicker">STATE VERSION</span><strong id="version">—</strong></div>
+      <div><span class="kicker">BUDGET</span><strong id="budget">—</strong></div>
+      <div><span class="kicker">MEMORY</span><strong id="memory">—</strong></div>
+      <div><span class="kicker">ACTIVE LEASES</span><strong id="leases">—</strong></div>
+    </section>
+
+    <section class="grid">
+      <article class="panel tasks-panel">
+        <div class="panel-head"><div><span class="idx">01</span><b>TASK DAG</b></div><span id="taskCount" class="badge">0</span></div>
+        <div id="tasks" class="task-list"></div>
+      </article>
+
+      <article class="panel agents-panel">
+        <div class="panel-head"><div><span class="idx">02</span><b>AGENTS</b></div><button id="addAgent" class="mini">ADD</button></div>
+        <div id="agents" class="agent-list"></div>
+      </article>
+
+      <article class="panel detail-panel">
+        <div class="panel-head"><div><span class="idx">03</span><b>MISSION DETAIL</b></div><span id="taskStatus" class="badge">NO TASK</span></div>
+        <div id="detailEmpty" class="empty">Select a task from the DAG.</div>
+        <div id="detail" hidden>
+          <div class="mission-title"><span id="detailId"></span><h2 id="detailGoal"></h2></div>
+          <div class="meters">
+            <div><span>RISK</span><div class="meter"><i id="riskBar"></i></div><b id="riskText"></b></div>
+            <div><span>ATTEMPTS</span><b id="attempts"></b></div>
+            <div><span>AGENT</span><b id="assignedAgent"></b></div>
+            <div><span>TOKEN CEILING</span><b id="tokenBudget"></b></div>
+          </div>
+          <div class="task-meta"><div><span>FILES</span><p id="files"></p></div><div><span>DEPENDENCIES</span><p id="deps"></p></div><div><span>ACCEPTANCE</span><p id="acceptance"></p></div></div>
+          <div class="mission-actions"><button id="runTask" class="primary">RUN</button><button id="inspectContext">CONTEXT</button><button id="retryTask">RETRY</button><button id="cancelTask" class="danger">CANCEL</button></div>
+          <pre id="contextPreview" class="context-preview" hidden></pre>
+        </div>
+      </article>
+
+      <article class="panel events-panel">
+        <div class="panel-head"><div><span class="idx">04</span><b>AUTHORITATIVE EVENT STREAM</b></div><span id="eventCursor" class="badge">#0</span></div>
+        <div id="events" class="event-log"></div>
+      </article>
+    </section>
+  </main>
+
+  <dialog id="taskDialog">
+    <form id="taskForm" method="dialog">
+      <div class="dialog-head"><b>NEW MISSION</b><button value="cancel" formmethod="dialog">×</button></div>
+      <label>Goal<textarea name="goal" required placeholder="Implement authentication middleware"></textarea></label>
+      <div class="two"><label>Files (comma separated)<input name="files" placeholder="src/auth.py, tests/test_auth.py"></label><label>Dependencies<input name="dependencies" placeholder="T001, T002"></label></div>
+      <div class="two"><label>Risk<input name="risk" type="number" min="0" max="1" step="0.05" value="0.5"></label><label>Token ceiling<input name="token_budget" type="number" min="1000" value="24000"></label></div>
+      <label>Acceptance criteria<textarea name="acceptance" placeholder="tests pass; public API remains stable"></textarea></label>
+      <div class="dialog-actions"><button value="cancel" formmethod="dialog">CANCEL</button><button class="primary" value="default">CREATE TASK</button></div>
+    </form>
+  </dialog>
+
+  <dialog id="agentDialog">
+    <form id="agentForm" method="dialog">
+      <div class="dialog-head"><b>ADD AGENT PROFILE</b><button value="cancel" formmethod="dialog">×</button></div>
+      <div class="two"><label>Name<input name="name" required placeholder="builder"></label><label>Provider<select name="provider"><option>mock</option><option>codex</option><option>claude</option><option>opencode</option><option>openrouter</option></select></label></div>
+      <div class="two"><label>Model<input name="model" placeholder="optional"></label><label>Role<input name="role" value="implementation"></label></div>
+      <label class="check"><input type="checkbox" name="make_default"> Make default execution profile</label>
+      <div class="dialog-actions"><button value="cancel" formmethod="dialog">CANCEL</button><button class="primary" value="default">SAVE PROFILE</button></div>
+    </form>
+  </dialog>
+
+  <div id="toast" class="toast" aria-live="polite"></div>
+  <script type="module" src="/static/mission.js"></script>
+</body>
+</html>
