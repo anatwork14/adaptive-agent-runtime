@@ -1,37 +1,57 @@
 # ARC Operator Guide
 
-This guide documents the operator-facing ARC v0.2 surface: repository-local configuration, task lifecycle, named coding-agent profiles, live event monitoring, and terminal Mission Control.
+This guide documents the ARC v0.4 operator surface: vendor-native provider login, repository-local agent profiles, authoritative task lifecycle, live monitoring, terminal Mission Control, and browser Agent Orchestration Control.
 
 ## Operating model
 
-All user interfaces call the same `ArcApplication` service layer. `ArcApplication` coordinates configuration and inspection, but the existing `Orchestrator` remains the single authoritative execution writer.
+Every ARC interface calls the same `ArcApplication` service boundary. The `Orchestrator` remains the single authoritative execution writer.
 
 ```text
-                      ArcApplication
-                            │
-          ┌─────────────────┼─────────────────┐
-          │                 │                 │
-        CLI/Typer       TUI/Textual       future API
-          │                 │                 │
-          └─────────────────┼─────────────────┘
-                            ▼
-                       Orchestrator
-                            │
-         authoritative events + Git integration
+                         ArcApplication
+                               │
+       ┌───────────────────────┼────────────────────────┐
+       │                       │                        │
+    CLI/Typer              TUI/Textual             FastAPI/Web
+       │                       │                        │
+       └───────────────────────┼────────────────────────┘
+                               ▼
+                          Orchestrator
+                               │
+             authoritative events + Git integration
 ```
 
 Adaptive memory remains derived and non-authoritative.
+
+Provider authentication is a separate boundary:
+
+```text
+arc login
+    │
+    ├── Codex native OAuth / credential store
+    ├── Claude native OAuth / credential store
+    └── Antigravity native Google OAuth / secure keyring
+
+ARC stores: provider/profile metadata only
+ARC does NOT store: access tokens, refresh tokens, OAuth codes, API keys
+```
 
 ## Command map
 
 ```text
 arc init
+arc login [codex|claude|antigravity]
+arc logout PROVIDER
+arc auth status [PROVIDER]
+arc auth login [PROVIDER]
+arc auth logout PROVIDER
+
 arc status
 arc events
 arc replay
 arc run TASK
 arc watch TASK
 arc dashboard
+arc web --open
 
 arc task create
 arc task list
@@ -50,18 +70,53 @@ arc config default-agent
 
 arc context build
 arc context inspect
-
 arc memory list
 arc memory why
 arc memory consolidate
 arc memory rebuild-index
-
 arc gate inspect
 ```
 
+## Provider login
+
+The normal setup path is:
+
+```bash
+arc login
+```
+
+When no provider is specified, ARC opens an interactive Textual picker using arrow-key navigation and Enter confirmation. After selection, the picker exits and ARC launches the provider CLI's own interactive authentication flow in the foreground.
+
+Direct forms:
+
+```bash
+arc login codex --profile builder --default
+arc login claude --profile reviewer
+arc login antigravity --profile researcher
+```
+
+If the repository is initialized, ARC registers the named profile after provider login. Authentication material remains provider-owned.
+
+Inspect status:
+
+```bash
+arc auth status
+arc auth status codex
+```
+
+### Provider behavior
+
+| Provider | Executable | ARC login delegation | Auth probe | ARC logout delegation |
+|---|---|---|---|---|
+| Codex | `codex` | `codex login` | `codex login status` | `codex logout` |
+| Claude Code | `claude` | `claude auth login` | `claude auth status --text` | `claude auth logout` |
+| Antigravity | `agy` | interactive `agy` first-run/session flow | authenticated `agy models` operation | not synthesized; use Antigravity's native `/logout` account control |
+
+ARC intentionally does not inspect provider credential files or secure keyrings.
+
 ## Repository configuration
 
-ARC stores configuration at:
+ARC stores non-secret configuration at:
 
 ```text
 .arc/config.yaml
@@ -97,38 +152,33 @@ agents:
     model: null
     role: verification
     enabled: true
+  researcher:
+    name: researcher
+    provider: antigravity
+    model: null
+    role: research
+    enabled: true
 ```
 
-`.arc/` is automatically added to the repository-local `.git/info/exclude` file so runtime metadata does not dirty the integration tree.
+`.arc/` is automatically added to repository-local `.git/info/exclude` so runtime metadata does not dirty the integration tree.
 
-## Named agent profiles
+## Agent profiles and readiness
 
-Create a Codex builder:
+You may still configure a profile separately from login:
 
 ```bash
-arc agent add builder \
-  --provider codex \
-  --role implementation \
-  --default
+arc agent add builder --provider codex --role implementation --default
+arc agent add reviewer --provider claude --role verification
+arc agent add researcher --provider antigravity --role research
 ```
 
-Create a Claude verifier profile:
+Provider-specific command overrides remain available where supported:
 
 ```bash
-arc agent add reviewer \
-  --provider claude \
-  --role verification
+arc agent add builder --provider codex --command 'codex exec --full-auto -'
 ```
 
-Use a provider-specific command override when a local CLI version needs a different invocation:
-
-```bash
-arc agent add builder \
-  --provider codex \
-  --command 'codex exec --full-auto -'
-```
-
-Equivalent environment overrides remain supported by the adapters:
+Environment overrides:
 
 ```bash
 export ARC_CODEX_COMMAND='codex exec --full-auto -'
@@ -136,28 +186,37 @@ export ARC_CLAUDE_COMMAND='claude -p'
 export ARC_OPENCODE_COMMAND='opencode run'
 ```
 
-Check readiness without starting an agent:
+Check readiness:
 
 ```bash
 arc agent doctor
-arc agent doctor builder reviewer
+arc agent doctor builder reviewer researcher
 ```
 
 Doctor states:
 
 | State | Meaning |
 |---|---|
-| `READY` | local executable/profile is available |
-| `MISSING` | required provider executable is absent |
+| `READY` | execution profile exists, CLI is installed, and native auth probe is healthy when supported |
+| `AUTH_REQUIRED` | provider CLI exists but native authentication is not currently available |
+| `MISSING` | provider executable is absent |
 | `GATEWAY_ONLY` | gateway exists but is not a filesystem coding executor |
 | `UNCONFIGURED` | required gateway configuration is absent |
 | `DISABLED` | profile is disabled |
 
-OpenRouter intentionally remains `GATEWAY_ONLY`; ARC will not convert plain text completion into a fake repository patch.
+Auth probes are cached briefly so the browser dashboard does not repeatedly call provider account/status endpoints during normal refreshes.
+
+OpenRouter intentionally remains `GATEWAY_ONLY`; ARC will not turn plain model completion into a fake repository patch.
+
+## Antigravity execution
+
+`AntigravityAgentAdapter` uses the real `agy` CLI in headless prompt mode. It does not parse textual output as a patch; ARC measures the actual Git worktree changes after the provider returns, just as it does for other real coding-agent adapters.
+
+Authentication must be completed interactively at least once before headless execution can work.
 
 ## Task lifecycle
 
-Create a task:
+Create:
 
 ```bash
 arc task create "Implement authentication middleware" \
@@ -167,17 +226,11 @@ arc task create "Implement authentication middleware" \
   --risk 0.6
 ```
 
-Task IDs are generated as `T001`, `T002`, and so on unless `--id` is supplied.
-
-Create a dependency:
+Dependencies:
 
 ```bash
-arc task create "Add authentication tests" \
-  --depends T001 \
-  --file tests/test_auth.py
+arc task create "Add authentication tests" --depends T001 --file tests/test_auth.py
 ```
-
-ARC leaves dependent tasks in `created` until all dependencies are completed; then the deterministic projection marks them `ready`.
 
 Inspect:
 
@@ -194,56 +247,50 @@ arc run T001 --agent builder
 arc task run T001 --agent builder
 ```
 
-Only `READY` tasks can execute. Execution goes through the normal ARC path: bounded context, isolated Git worktree, immutable candidate commit, fresh gate worktree, verification, and serialized integration.
+Only `READY` tasks execute. The normal path remains:
 
-Retry a failed or blocked task:
+```text
+bounded immutable context
+        ↓
+isolated Git worktree
+        ↓
+real provider or explicit mock
+        ↓
+immutable candidate commit
+        ↓
+fresh verification worktree
+        ↓
+serialized integration gate
+        ↓
+integration branch
+```
+
+Retry appends `recovery.retry`:
 
 ```bash
 arc task retry T001 --reason "provider recovered"
 ```
 
-This appends `recovery.retry`; it does not mutate the projected task row directly.
-
-Cancel an unfinished task:
+Cancel appends `task.abandoned`:
 
 ```bash
 arc task cancel T001 --reason "scope removed"
 ```
 
-This appends `task.abandoned` to authoritative history.
-
 ## Live monitoring
-
-Monitor one task in a normal terminal:
 
 ```bash
 arc watch T001
 ```
 
-The view refreshes task state and recent events until the task reaches `completed`, `failed`, or `abandoned`. Use `Ctrl-C` to stop early.
+The view follows authoritative state/events until `completed`, `failed`, or `abandoned`.
 
-For scripting or future APIs, the shared application layer also exposes `EventStream.poll()` and an asynchronous `EventStream.subscribe()` generator. Both read from the same SQLite append-only event store.
+The shared application layer also exposes `EventStream.poll()` and async `EventStream.subscribe()`.
 
-## Mission Control TUI
-
-Launch:
+## Terminal Mission Control
 
 ```bash
 arc dashboard
-```
-
-Mission Control contains:
-
-```text
-┌──────────────────────── ARC Mission Control ─────────────────────┐
-│ TASK DAG                              │ AGENTS / SYSTEM           │
-│ T001  implement auth   READY          │ ● builder   READY         │
-│ T002  tests            CREATED        │ ○ reviewer  READY         │
-├───────────────────────────────────────┼───────────────────────────┤
-│ TASK DETAIL                           │ AUTHORITATIVE EVENT STREAM │
-│ goal / agent / risk / files / events  │ #42 task.created          │
-│                                       │ #43 task.dispatched       │
-└───────────────────────────────────────┴───────────────────────────┘
 ```
 
 Keyboard actions:
@@ -256,55 +303,61 @@ Keyboard actions:
 | `r` | force refresh |
 | `q` | quit |
 
-The TUI periodically reads a shared application snapshot and only issues mutations through `ArcApplication`. It does not own a parallel task database or memory representation.
+The TUI consumes `ArcApplication`; it owns no parallel database.
+
+## Browser Agent Orchestration Control
+
+Launch:
+
+```bash
+arc web --open
+```
+
+The browser is inspired by orchestration dashboards rather than CRUD admin UIs. The main hierarchy is:
+
+```text
+ARC Root + provider orchestrators
+          ↓
+real runtime analytics
+          ↓
+live task execution ledger
+          ↓
+provider-grouped agent teams
+          ↓
+mission inspector + authoritative event trace
+```
+
+Provider cards for Codex, Claude, and Antigravity show real configured-profile/readiness state. If a provider is not configured or requires auth, the card surfaces a copyable terminal command such as:
+
+```bash
+arc login codex --profile codex
+```
+
+The browser does not execute OAuth and never accepts provider credentials.
+
+The circular activity indicator is based only on ARC-local assigned/running work. It is **not** a fabricated provider quota, usage-limit, or rate-limit metric.
+
+Web Mission Control remains localhost-first. Non-loopback binding still requires explicit `--allow-remote`; remote-user authentication/authorization is not yet a production boundary.
 
 ## Context inspection
-
-Compile the context a named agent would receive:
 
 ```bash
 arc context inspect T001 --agent builder
 ```
 
-The output includes the immutable packet ID/digest, project state version, delivered token count, derived memory categories, and code evidence count.
+The output includes immutable context ID/digest, authoritative state version, token count, derived memory categories, and code-evidence count. Risk may change allocation but never expands the hard task token ceiling.
 
-Risk may change context allocation, but never expands the task's hard token ceiling.
-
-## Memory inspection
-
-List active derived memory:
+## Memory and gate inspection
 
 ```bash
 arc memory list
-```
-
-Inspect provenance:
-
-```bash
 arc memory why M_44
-```
-
-Consolidate eligible failure memories into procedures:
-
-```bash
 arc memory consolidate
-```
-
-Rebuild derived indexes:
-
-```bash
 arc memory rebuild-index
-```
-
-Deleting/rebuilding a derived index must not erase authoritative project truth.
-
-## Gate inspection
-
-```bash
 arc gate inspect T001
 ```
 
-The gate verifies the exact candidate commit in a fresh worktree before integrating that same candidate into the main integration tree. A rejected candidate is not promoted to durable project memory.
+A rejected candidate is not promoted to durable project memory.
 
 ## Deterministic replay
 
@@ -312,35 +365,10 @@ The gate verifies the exact candidate commit in a fresh worktree before integrat
 arc replay
 ```
 
-Replay rebuilds project/task/budget/lease projections from authoritative events. Materialized memory outputs are replayed as recorded data rather than regenerated by an LLM.
-
-## Application API
-
-For integrations that should not shell out to the CLI:
-
-```python
-import asyncio
-from application.app import ArcApplication
-
-
-async def main() -> None:
-    with ArcApplication(".", "demo") as arc:
-        arc.initialize()
-        task = arc.create_task(
-            "Create an example artifact",
-            files=["example.txt"],
-        )
-        result = await arc.run_task(task.task_id, agent_name="mock")
-        print(result.status, result.merged_commit_sha)
-
-
-asyncio.run(main())
-```
-
-Future browser APIs should wrap this application boundary rather than directly manipulating `EventStore`, `MemoryLifecycle`, or the integration gate.
+Replay rebuilds project/task/budget/lease projections from authoritative events. Recorded materialized memory is replayed as data rather than regenerated by an LLM.
 
 ## Safety boundaries
 
-ARC executes code produced by coding agents. The command/test sandbox can use Docker isolation, while provider CLI execution is still experimental host-mode. Do not expose sensitive host credentials or run untrusted provider-generated code in valuable working copies.
+ARC executes agent-produced code. Provider CLI execution remains experimental host-mode even though command/test execution can use Docker isolation. Use disposable or protected working environments for untrusted tasks.
 
-The intended next UI layer is a localhost web/API control plane built on the same `ArcApplication` and event-stream abstractions—not a separate runtime implementation.
+Provider credentials remain in vendor-owned stores. ARC's repository config must stay non-secret.
