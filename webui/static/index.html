@@ -3,81 +3,111 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
-  <meta name="theme-color" content="#070a09">
-  <title>ARC Mission Control</title>
+  <meta name="theme-color" content="#090d14">
+  <title>ARC — Agent Orchestration Control</title>
   <link rel="stylesheet" href="/static/mission.css">
 </head>
 <body>
-  <div class="noise" aria-hidden="true"></div>
-  <header class="topbar">
-    <div class="brand"><span class="mark">A</span><div><b>ARC</b><small>MISSION CONTROL // LOCALHOST</small></div></div>
-    <div class="live"><i></i><span id="connection">CONNECTING</span></div>
-    <div class="top-actions"><button id="createTask">+ NEW TASK</button><button id="refresh">REFRESH</button></div>
-  </header>
+  <div class="ambient" aria-hidden="true"></div>
+  <div class="shell">
+    <header class="top">
+      <div class="brand">
+        <span class="brand-mark">A</span>
+        <div><h1>ARC <span>Agent Orchestration</span></h1><p>Reliable multi-agent coding control plane</p></div>
+      </div>
+      <div class="top-right">
+        <span class="live-pill"><i></i><span id="connection">CONNECTING</span><b id="clock">--:--:--</b></span>
+        <button id="createTask" class="primary">+ New task</button>
+        <button id="refresh">Refresh</button>
+      </div>
+    </header>
 
-  <main>
-    <section class="hero-strip">
-      <div><span class="kicker">PROJECT</span><strong id="project">—</strong></div>
-      <div><span class="kicker">STATE VERSION</span><strong id="version">—</strong></div>
-      <div><span class="kicker">BUDGET</span><strong id="budget">—</strong></div>
-      <div><span class="kicker">MEMORY</span><strong id="memory">—</strong></div>
-      <div><span class="kicker">ACTIVE LEASES</span><strong id="leases">—</strong></div>
+    <div class="meta-line"><span id="project">—</span> · authoritative state <b id="version">v—</b> · localhost control plane</div>
+
+    <section class="section orchestrators">
+      <div class="section-head"><div><span class="eyebrow">CONTROL PLANE</span><h2>Orchestrators</h2><p>Provider lanes, authentication state, active work and ARC runtime health.</p></div><span class="section-key">LIVE PROVIDERS</span></div>
+      <div id="orchestrators" class="orch-grid"></div>
     </section>
 
-    <section class="grid">
-      <article class="panel tasks-panel">
-        <div class="panel-head"><div><span class="idx">01</span><b>TASK DAG</b></div><span id="taskCount" class="badge">0</span></div>
-        <div id="tasks" class="task-list"></div>
-      </article>
+    <section class="analytics-strip">
+      <div><span>Tasks</span><b id="metricTasks">0</b></div>
+      <div><span>Running</span><b id="metricRunning">0</b></div>
+      <div><span>Resolved</span><b id="metricResolved">0</b></div>
+      <div><span>Failures</span><b id="metricFailed">0</b></div>
+      <div><span>Memory</span><b id="memory">0</b></div>
+      <div><span>Tokens used</span><b id="metricTokens">0</b></div>
+      <div><span>Cost</span><b id="budget">$0.00</b></div>
+      <div><span>Leases</span><b id="leases">0</b></div>
+    </section>
 
-      <article class="panel agents-panel">
-        <div class="panel-head"><div><span class="idx">02</span><b>AGENTS</b></div><button id="addAgent" class="mini">ADD</button></div>
-        <div id="agents" class="agent-list"></div>
-      </article>
+    <section class="section">
+      <div class="section-head"><div><span class="eyebrow">EXECUTION LEDGER</span><h2>Live tasks</h2><p>Newest missions first. Select a row to inspect context, gate history and actions.</p></div><span id="taskCount" class="section-key">0 TASKS</span></div>
+      <div class="live-table-wrap">
+        <div class="live-table head"><span>ID</span><span>Mission</span><span>Agent</span><span>Status</span><span>Attempt</span></div>
+        <div id="tasks" class="live-task-list"></div>
+      </div>
+    </section>
 
+    <section class="section">
+      <div class="section-head"><div><span class="eyebrow">ENGINE TEAMS</span><h2>Agent teams</h2><p>Profiles grouped by provider with running and idle workers separated.</p></div><button id="addAgent" class="subtle">+ Add profile</button></div>
+      <div id="teams" class="teams"></div>
+    </section>
+
+    <section class="section lower-grid">
       <article class="panel detail-panel">
-        <div class="panel-head"><div><span class="idx">03</span><b>MISSION DETAIL</b></div><span id="taskStatus" class="badge">NO TASK</span></div>
-        <div id="detailEmpty" class="empty">Select a task from the DAG.</div>
+        <div class="panel-head"><div><span class="eyebrow">MISSION INSPECTOR</span><h3 id="detailHeading">No task selected</h3></div><span id="taskStatus" class="badge">—</span></div>
+        <div id="detailEmpty" class="empty-state">Select a task from the execution ledger.</div>
         <div id="detail" hidden>
-          <div class="mission-title"><span id="detailId"></span><h2 id="detailGoal"></h2></div>
-          <div class="meters">
-            <div><span>RISK</span><div class="meter"><i id="riskBar"></i></div><b id="riskText"></b></div>
-            <div><span>ATTEMPTS</span><b id="attempts"></b></div>
-            <div><span>AGENT</span><b id="assignedAgent"></b></div>
-            <div><span>TOKEN CEILING</span><b id="tokenBudget"></b></div>
+          <div class="mission-id" id="detailId"></div>
+          <h2 id="detailGoal" class="mission-goal"></h2>
+          <div class="mission-stats">
+            <div><span>Risk</span><b id="riskText"></b><div class="meter"><i id="riskBar"></i></div></div>
+            <div><span>Attempts</span><b id="attempts"></b></div>
+            <div><span>Agent</span><b id="assignedAgent"></b></div>
+            <div><span>Token ceiling</span><b id="tokenBudget"></b></div>
           </div>
-          <div class="task-meta"><div><span>FILES</span><p id="files"></p></div><div><span>DEPENDENCIES</span><p id="deps"></p></div><div><span>ACCEPTANCE</span><p id="acceptance"></p></div></div>
-          <div class="mission-actions"><button id="runTask" class="primary">RUN</button><button id="inspectContext">CONTEXT</button><button id="retryTask">RETRY</button><button id="cancelTask" class="danger">CANCEL</button></div>
+          <div class="facts"><div><span>Files</span><p id="files"></p></div><div><span>Dependencies</span><p id="deps"></p></div><div><span>Acceptance</span><p id="acceptance"></p></div></div>
+          <div class="mission-actions"><button id="runTask" class="primary">Run mission</button><button id="inspectContext">Inspect context</button><button id="retryTask">Retry</button><button id="cancelTask" class="danger">Cancel</button></div>
           <pre id="contextPreview" class="context-preview" hidden></pre>
         </div>
       </article>
 
-      <article class="panel events-panel">
-        <div class="panel-head"><div><span class="idx">04</span><b>AUTHORITATIVE EVENT STREAM</b></div><span id="eventCursor" class="badge">#0</span></div>
+      <article class="panel event-panel">
+        <div class="panel-head"><div><span class="eyebrow">AUTHORITATIVE TRACE</span><h3>Event stream</h3></div><span id="eventCursor" class="badge">#0</span></div>
         <div id="events" class="event-log"></div>
       </article>
     </section>
-  </main>
+
+    <footer>ARC keeps provider credentials in Codex / Claude / Antigravity native stores. Adaptive memory is never authoritative.</footer>
+  </div>
 
   <dialog id="taskDialog">
     <form id="taskForm" method="dialog">
-      <div class="dialog-head"><b>NEW MISSION</b><button value="cancel" formmethod="dialog">×</button></div>
+      <div class="dialog-head"><div><span class="eyebrow">DISPATCH</span><b>New mission</b></div><button value="cancel" formmethod="dialog">×</button></div>
       <label>Goal<textarea name="goal" required placeholder="Implement authentication middleware"></textarea></label>
-      <div class="two"><label>Files (comma separated)<input name="files" placeholder="src/auth.py, tests/test_auth.py"></label><label>Dependencies<input name="dependencies" placeholder="T001, T002"></label></div>
+      <div class="two"><label>Files<input name="files" placeholder="src/auth.py, tests/test_auth.py"></label><label>Dependencies<input name="dependencies" placeholder="T001, T002"></label></div>
       <div class="two"><label>Risk<input name="risk" type="number" min="0" max="1" step="0.05" value="0.5"></label><label>Token ceiling<input name="token_budget" type="number" min="1000" value="24000"></label></div>
       <label>Acceptance criteria<textarea name="acceptance" placeholder="tests pass; public API remains stable"></textarea></label>
-      <div class="dialog-actions"><button value="cancel" formmethod="dialog">CANCEL</button><button class="primary" value="default">CREATE TASK</button></div>
+      <div class="dialog-actions"><button value="cancel" formmethod="dialog">Cancel</button><button class="primary" value="default">Create task</button></div>
     </form>
   </dialog>
 
   <dialog id="agentDialog">
     <form id="agentForm" method="dialog">
-      <div class="dialog-head"><b>ADD AGENT PROFILE</b><button value="cancel" formmethod="dialog">×</button></div>
-      <div class="two"><label>Name<input name="name" required placeholder="builder"></label><label>Provider<select name="provider"><option>mock</option><option>codex</option><option>claude</option><option>opencode</option><option>openrouter</option></select></label></div>
+      <div class="dialog-head"><div><span class="eyebrow">TEAM CONFIG</span><b>Add agent profile</b></div><button value="cancel" formmethod="dialog">×</button></div>
+      <div class="two"><label>Name<input name="name" required placeholder="builder"></label><label>Provider<select name="provider"><option>codex</option><option>claude</option><option>antigravity</option><option>opencode</option><option>mock</option><option>openrouter</option></select></label></div>
       <div class="two"><label>Model<input name="model" placeholder="optional"></label><label>Role<input name="role" value="implementation"></label></div>
       <label class="check"><input type="checkbox" name="make_default"> Make default execution profile</label>
-      <div class="dialog-actions"><button value="cancel" formmethod="dialog">CANCEL</button><button class="primary" value="default">SAVE PROFILE</button></div>
+      <p class="hint">Authentication is configured separately with <code>arc login</code>. ARC never asks this browser for API keys or OAuth tokens.</p>
+      <div class="dialog-actions"><button value="cancel" formmethod="dialog">Cancel</button><button class="primary" value="default">Save profile</button></div>
     </form>
+  </dialog>
+
+  <dialog id="loginDialog" class="login-dialog">
+    <div class="dialog-head"><div><span class="eyebrow">PROVIDER AUTH</span><b id="loginTitle">Connect provider</b></div><button id="closeLogin">×</button></div>
+    <p>Run this command in the terminal where ARC is installed. The provider opens its own OAuth/account flow; ARC never receives the credential.</p>
+    <div class="command-box"><code id="loginCommand">arc login codex</code><button id="copyLogin">Copy</button></div>
+    <p id="loginHint" class="hint"></p>
   </dialog>
 
   <div id="toast" class="toast" aria-live="polite"></div>
