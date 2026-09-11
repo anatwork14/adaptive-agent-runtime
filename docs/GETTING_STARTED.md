@@ -1,6 +1,6 @@
 # ARC Getting Started
 
-ARC exposes the normal operator flow directly through the CLI, terminal Mission Control, and a localhost browser Mission Control. You do not need to write Python just to create and run a task.
+ARC exposes one runtime through the CLI, terminal Mission Control, and localhost browser Agent Orchestration Control. You do not need to write Python to configure providers or run tasks.
 
 ## 1. Install
 
@@ -26,27 +26,81 @@ arc status
 
 ARC writes local runtime state under `.arc/` and automatically adds `.arc/` to the repository-local Git exclude file (`.git/info/exclude`). It does not force a committed `.gitignore` change.
 
-## 3. Check available agents
+## 3. Connect a coding-agent account
 
-Every initialized project starts with a deterministic `mock` profile for zero-credential smoke tests.
+Run:
 
 ```bash
-arc agent list
+arc login
+```
+
+ARC opens an arrow-key login picker:
+
+```text
+ARC  ·  CONNECT PROVIDER
+
+Select login method
+
+> OpenAI Codex    · ChatGPT / OpenAI OAuth
+  Claude Code     · Anthropic OAuth
+  Antigravity     · Google OAuth
+
+↑/↓ Navigate   Enter Confirm   Esc Cancel
+```
+
+After you choose a provider, ARC exits the picker and invokes the **provider's own native authentication flow** in the foreground. ARC does not receive, copy, or persist OAuth tokens.
+
+You can skip the picker:
+
+```bash
+arc login codex --profile builder --default
+arc login claude --profile reviewer
+arc login antigravity --profile researcher
+```
+
+When the current repository is already initialized, `--profile` registers the authenticated provider as an ARC agent profile after login. Credentials remain in the provider CLI's own credential/keyring store.
+
+Inspect account state at any time:
+
+```bash
+arc auth status
+arc auth status codex
+```
+
+Typical states are:
+
+```text
+AUTHENTICATED
+SIGNED_OUT
+MISSING
+UNKNOWN
+```
+
+ARC's agent doctor also distinguishes installation from authentication:
+
+```bash
 arc agent doctor
 ```
 
-Add a real provider profile after installing and authenticating its CLI:
+Typical execution states are:
 
-```bash
-arc agent add builder \
-  --provider codex \
-  --role implementation \
-  --default
-
-arc agent doctor builder
+```text
+READY
+AUTH_REQUIRED
+MISSING
+GATEWAY_ONLY
+DISABLED
 ```
 
-Other supported profile providers are `claude` and `opencode`. `openrouter` remains gateway-only until ARC has a filesystem tool loop for it.
+### Supported native login flows
+
+| Provider | ARC profile provider | Native auth |
+|---|---|---|
+| OpenAI Codex | `codex` | ChatGPT / OpenAI OAuth |
+| Claude Code | `claude` | Anthropic OAuth |
+| Google Antigravity | `antigravity` | Google OAuth / secure keyring |
+
+`opencode` remains available as a CLI execution provider, and `openrouter` remains gateway-only until ARC owns a filesystem tool loop for it.
 
 ## 4. Create a task
 
@@ -65,6 +119,8 @@ arc task show T001
 ```
 
 ## 5. Run a zero-credential smoke task
+
+Every project still starts with the deterministic `mock` profile so ARC itself can be validated without provider cost:
 
 ```bash
 arc run T001 --agent mock
@@ -88,9 +144,26 @@ transactional integration gate
 integration branch
 ```
 
-The mock profile exists to validate ARC itself without spending provider tokens.
+## 6. Run with a connected provider
 
-## 6. Watch a mission live
+If you used:
+
+```bash
+arc login codex --profile builder --default
+```
+
+then:
+
+```bash
+arc agent doctor builder
+arc run T001 --agent builder
+```
+
+For Claude or Antigravity, use the profile name you registered.
+
+ARC does not fabricate provider success. Missing executables, missing authentication, provider failures, or empty repository edits surface as failures instead of silently falling back to the mock adapter.
+
+## 7. Watch a mission live
 
 In another terminal:
 
@@ -100,7 +173,7 @@ arc watch T001
 
 `arc watch` reads the same append-only authoritative event stream used by replay and both Mission Control interfaces.
 
-## 7. Open terminal Mission Control
+## 8. Open terminal Mission Control
 
 ```bash
 arc dashboard
@@ -116,9 +189,7 @@ x  cancel selected task
 q  quit
 ```
 
-The Textual TUI shows the task DAG, configured agents and readiness, project/budget state, active memory, task detail, and a live authoritative event log.
-
-## 8. Open browser Mission Control
+## 9. Open browser Agent Orchestration Control
 
 ```bash
 arc web --open
@@ -130,13 +201,26 @@ Then open:
 http://127.0.0.1:8787
 ```
 
-The browser UI exposes the same project/task state plus interactive task creation, run/retry/cancel controls, context inspection, named agent profiles, and a live WebSocket event stream.
+The redesigned UI is orchestration-first rather than a generic admin dashboard. It provides:
 
-It is intentionally localhost-only by default. ARC refuses a non-loopback bind unless you explicitly supply `--allow-remote`; the current UI has no built-in authentication, so do not expose it directly to an untrusted network.
+- ARC Root + Codex + Claude + Antigravity orchestrator cards;
+- real provider/profile readiness and authentication states;
+- live task execution ledger;
+- agent teams grouped by provider, with running vs idle workers;
+- real ARC state/budget/memory metrics;
+- mission inspector and context inspection;
+- authoritative WebSocket event stream;
+- copyable `arc login ...` commands when a provider needs connection.
+
+The activity rings represent **ARC local workload share**, not fabricated provider quota or rate-limit data.
+
+The browser never accepts provider API keys or OAuth tokens. Native interactive login remains a terminal/provider responsibility.
+
+The web control plane is intentionally localhost-only by default. ARC refuses a non-loopback bind unless you explicitly supply `--allow-remote`; the current UI has no built-in remote-user authentication.
 
 See [`WEB_MISSION_CONTROL.md`](WEB_MISSION_CONTROL.md) for API and security details.
 
-## 9. Inspect what ARC used
+## 10. Inspect what ARC used
 
 ```bash
 arc events
@@ -151,19 +235,5 @@ For a specific memory:
 ```bash
 arc memory why M_44
 ```
-
-## 10. Run with Codex
-
-After `arc agent doctor builder` reports `READY`:
-
-```bash
-arc task create "Implement the requested repository change" \
-  --file src/example.py \
-  --accept "tests pass"
-
-arc run T002 --agent builder
-```
-
-ARC does not fabricate provider success. If the Codex executable is missing or the provider process fails, the task execution fails explicitly.
 
 For the full operator command reference and configuration format, see [`OPERATOR_GUIDE.md`](OPERATOR_GUIDE.md).
