@@ -20,13 +20,10 @@ class IntegrationGateError(RuntimeError):
 class IntegrationGate:
     """Serialize candidate integration through an isolated verification worktree.
 
-    The previous implementation validated ``workspace_path`` without applying
-    the submitted patch. That allowed a textual/fake patch to be accepted while
-    the actual candidate changes disappeared with the agent worktree. The gate
-    now consumes an immutable candidate commit, cherry-picks it onto a temporary
-    worktree at the current integration HEAD, verifies that exact tree, then
-    cherry-picks the same commit into the integration branch only after all
-    configured checks pass.
+    The gate consumes an immutable candidate commit, cherry-picks it onto a
+    temporary worktree at the current integration HEAD, verifies that exact
+    tree, then cherry-picks the same commit into the integration branch only
+    after all configured checks pass.
     """
 
     def __init__(
@@ -40,7 +37,12 @@ class IntegrationGate:
         self.project_id = project_id
         self.workspace_path = Path(workspace_path).resolve()
         self.verification_level = verification_level
-        self.gate_root = self.workspace_path / ".arc" / "gates"
+        self.gate_root = (
+            self.workspace_path.parent
+            / ".arc-runtime"
+            / self.workspace_path.name
+            / "gates"
+        )
         self.gate_root.mkdir(parents=True, exist_ok=True)
         self.reviewer = CodeReviewer()
 
@@ -67,16 +69,10 @@ class IntegrationGate:
 
     def _ensure_clean_integration_tree(self) -> None:
         result = self._git(["status", "--porcelain"], check=False)
-        dirty = []
-        for line in result.stdout.splitlines():
-            path = line[3:] if len(line) > 3 else line
-            if path.startswith(".arc/") or path == ".arc":
-                continue
-            dirty.append(line)
-        if dirty:
+        if result.stdout.strip():
             raise IntegrationGateError(
                 "integration worktree is dirty; ARC requires a clean single-writer tree: "
-                + "; ".join(dirty[:10])
+                + "; ".join(result.stdout.splitlines()[:10])
             )
 
     def _create_gate_worktree(self, gate_run_id: str) -> Path:
@@ -184,7 +180,6 @@ class IntegrationGate:
                 staleness_score=staleness_score,
             )
 
-        # Ensure the immutable candidate object exists before touching a gate worktree.
         candidate_exists = self._git(
             ["cat-file", "-e", f"{submission.candidate_commit_sha}^{{commit}}"],
             check=False,
@@ -203,10 +198,15 @@ class IntegrationGate:
         gate_path: Optional[Path] = None
         try:
             gate_path = self._create_gate_worktree(gate_run_id)
-
-            # G0 — rebase-equivalent integration check via cherry-pick onto current HEAD.
             apply_res = self._git(
-                ["-c", "user.name=ARC Gate", "-c", "user.email=arc-gate@local", "cherry-pick", submission.candidate_commit_sha],
+                [
+                    "-c",
+                    "user.name=ARC Gate",
+                    "-c",
+                    "user.email=arc-gate@local",
+                    "cherry-pick",
+                    submission.candidate_commit_sha,
+                ],
                 cwd=gate_path,
                 check=False,
             )
@@ -223,7 +223,6 @@ class IntegrationGate:
                 )
             stages_passed.append("G0_candidate_applied")
 
-            # G1 — syntax/static check on the candidate tree, not the unchanged main tree.
             static_res = StaticVerifier(gate_path).verify_syntax()
             if not static_res.passed:
                 return self._reject(
@@ -237,9 +236,6 @@ class IntegrationGate:
                 )
             stages_passed.append("G1_static")
 
-            # G2 — visible tests are optional only when the project has not configured a command.
-            # The outcome is explicit in stages_passed so evaluations cannot mistake a skipped
-            # test stage for a passed test suite.
             if visible_test_cmd:
                 test_res = AdversarialTestRunner(gate_path).run_tests(visible_test_cmd)
                 if not test_res.passed:
@@ -256,7 +252,6 @@ class IntegrationGate:
             else:
                 stages_passed.append("G2_not_configured")
 
-            # G3 — independent review sees the candidate diff/spec summary, not builder reasoning.
             if self.verification_level in ("V2", "V3"):
                 review_res = self.reviewer.review_patch(submission.diff, submission.summary)
                 if not review_res.passed:
@@ -271,11 +266,15 @@ class IntegrationGate:
                     )
                 stages_passed.append("V2_reviewer")
 
-            # Final serialized integration. Because the orchestrator is the single writer and
-            # the integration tree is required clean, this should be equivalent to the gate
-            # worktree. If it nevertheless conflicts, fail closed and leave main unchanged.
             merge_res = self._git(
-                ["-c", "user.name=ARC Gate", "-c", "user.email=arc-gate@local", "cherry-pick", submission.candidate_commit_sha],
+                [
+                    "-c",
+                    "user.name=ARC Gate",
+                    "-c",
+                    "user.email=arc-gate@local",
+                    "cherry-pick",
+                    submission.candidate_commit_sha,
+                ],
                 check=False,
             )
             if merge_res.returncode != 0:
