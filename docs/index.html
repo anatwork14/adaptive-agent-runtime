@@ -1,0 +1,186 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="description" content="ARC is a reliable context control plane for long-horizon multi-agent coding." />
+  <meta name="theme-color" content="#0b0d0f" />
+  <title>ARC — Reliable context for coding-agent teams</title>
+  <style>
+    :root {
+      color-scheme: dark;
+      --bg: #0b0d0f;
+      --panel: #11151a;
+      --panel2: #151b21;
+      --text: #f4f7f8;
+      --muted: #9da8b2;
+      --line: #27313a;
+      --accent: #88f7c5;
+      --accent2: #7db7ff;
+      --warn: #ffd479;
+      --bad: #ff8e8e;
+      --shadow: 0 28px 80px rgba(0,0,0,.36);
+      --mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+      --sans: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    }
+    * { box-sizing: border-box; }
+    html { scroll-behavior: smooth; }
+    body { margin:0; background:var(--bg); color:var(--text); font:16px/1.65 var(--sans); }
+    a { color:inherit; }
+    .shell { width:min(1160px, calc(100% - 36px)); margin:auto; }
+    header { display:flex; align-items:center; justify-content:space-between; gap:24px; padding:24px 0; }
+    .brand { display:flex; align-items:center; gap:10px; text-decoration:none; font-weight:800; }
+    .mark { display:grid; place-items:center; width:32px; height:32px; border-radius:10px; background:linear-gradient(135deg,var(--accent),var(--accent2)); color:#08110d; }
+    nav { display:flex; gap:22px; align-items:center; color:var(--muted); font-size:.92rem; }
+    nav a { text-decoration:none; }
+    .button { display:inline-flex; align-items:center; gap:8px; padding:11px 17px; border:1px solid var(--line); border-radius:999px; text-decoration:none; font-weight:700; background:var(--text); color:#0b0d0f; }
+    .button.secondary { background:transparent; color:var(--text); }
+    .hero { padding:72px 0 92px; }
+    .eyebrow { color:var(--accent); font:700 .75rem/1 var(--mono); letter-spacing:.14em; text-transform:uppercase; }
+    h1,h2,h3 { margin:0; letter-spacing:-.045em; line-height:1.02; }
+    h1 { max-width:950px; font-size:clamp(3rem,8vw,6.8rem); }
+    h2 { font-size:clamp(2rem,5vw,4.2rem); }
+    h3 { font-size:1.35rem; }
+    .hero p { max-width:760px; color:var(--muted); font-size:clamp(1rem,2vw,1.25rem); margin:26px 0 0; }
+    .cta { display:flex; gap:12px; flex-wrap:wrap; margin-top:30px; }
+    .terminal { margin-top:44px; border:1px solid var(--line); border-radius:18px; overflow:hidden; background:#07090b; box-shadow:var(--shadow); }
+    .terminal .bar { display:flex; gap:7px; padding:13px 16px; border-bottom:1px solid var(--line); }
+    .dot { width:9px; height:9px; border-radius:50%; background:#39434b; }
+    pre { margin:0; padding:24px; overflow:auto; font:14px/1.8 var(--mono); color:#dce6eb; }
+    .accent { color:var(--accent); }
+    section { padding:100px 0; border-top:1px solid var(--line); }
+    .lede { color:var(--muted); max-width:700px; font-size:1.08rem; margin:22px 0 0; }
+    .grid3 { display:grid; grid-template-columns:repeat(3,1fr); gap:18px; margin-top:42px; }
+    .card { padding:24px; border:1px solid var(--line); border-radius:18px; background:linear-gradient(180deg,var(--panel2),var(--panel)); }
+    .card p { color:var(--muted); margin:12px 0 0; }
+    .pill { display:inline-flex; padding:5px 9px; border-radius:999px; background:#18302a; color:var(--accent); font:700 .72rem var(--mono); margin-bottom:14px; }
+    .pill.warn { background:#302918; color:var(--warn); }
+    .diagram { margin-top:44px; padding:32px; border:1px solid var(--line); border-radius:22px; background:var(--panel); overflow:auto; }
+    .flow { min-width:850px; display:grid; grid-template-columns:1fr 68px 1fr 68px 1fr; align-items:center; gap:8px; }
+    .node { border:1px solid #34414b; background:#0d1115; border-radius:16px; padding:22px; min-height:150px; }
+    .node strong { display:block; margin-bottom:10px; }
+    .node ul { margin:0; padding-left:18px; color:var(--muted); }
+    .arrow { text-align:center; color:var(--accent); font-size:2rem; }
+    .status { display:grid; grid-template-columns:1fr 1fr; gap:18px; margin-top:38px; }
+    .row { display:flex; gap:12px; padding:12px 0; border-bottom:1px solid var(--line); }
+    .row:last-child { border-bottom:0; }
+    .ok { color:var(--accent); }
+    .road { color:var(--warn); }
+    code { font-family:var(--mono); }
+    .research { background:linear-gradient(180deg,#0f1717 0,#0b0d0f 100%); }
+    .quote { margin-top:36px; padding:28px; border-left:3px solid var(--accent); background:#0d1215; color:#dce6eb; font-size:1.1rem; }
+    footer { padding:70px 0; border-top:1px solid var(--line); color:var(--muted); }
+    footer .footerline { display:flex; justify-content:space-between; gap:20px; flex-wrap:wrap; }
+    @media (max-width:780px) {
+      nav { display:none; }
+      .grid3,.status { grid-template-columns:1fr; }
+      .hero { padding-top:48px; }
+      section { padding:74px 0; }
+    }
+  </style>
+</head>
+<body>
+  <header class="shell">
+    <a class="brand" href="#top"><span class="mark">A</span> ARC</a>
+    <nav>
+      <a href="#architecture">Architecture</a>
+      <a href="#status">Status</a>
+      <a href="#research">Research</a>
+      <a href="https://github.com/anatwork14/adaptive-agent-runtime">GitHub</a>
+    </nav>
+  </header>
+
+  <main id="top">
+    <div class="shell hero">
+      <div class="eyebrow">Adaptive Agent Runtime</div>
+      <h1>Reliable context for coding-agent teams.</h1>
+      <p>ARC gives Codex-, Claude-, and OpenCode-style workers a versioned project state, provenance-aware memory, immutable task context, and a transactional integration gate. Agents can forget. The project cannot.</p>
+      <div class="cta">
+        <a class="button" href="https://github.com/anatwork14/adaptive-agent-runtime">View on GitHub →</a>
+        <a class="button secondary" href="#quickstart">Quickstart</a>
+      </div>
+
+      <div class="terminal" id="quickstart">
+        <div class="bar"><span class="dot"></span><span class="dot"></span><span class="dot"></span></div>
+        <pre><span class="accent">$</span> git clone https://github.com/anatwork14/adaptive-agent-runtime.git
+<span class="accent">$</span> cd adaptive-agent-runtime
+<span class="accent">$</span> python -m venv .venv &amp;&amp; source .venv/bin/activate
+<span class="accent">$</span> pip install -e ".[dev]"
+<span class="accent">$</span> arc --help</pre>
+      </div>
+    </div>
+
+    <section>
+      <div class="shell">
+        <div class="eyebrow">The problem</div>
+        <h2>More agents do not automatically create a better team.</h2>
+        <p class="lede">Long-running coding sessions fail in boring but expensive ways: stale assumptions, duplicated exploration, lossy handoffs, conflicting edits, and “verification” that accidentally tests the wrong tree.</p>
+        <div class="grid3">
+          <article class="card"><span class="pill warn">STALE CONTEXT</span><h3>Agent B starts from yesterday’s truth.</h3><p>ARC tags context with a project state version and checks relevant changes again before integration.</p></article>
+          <article class="card"><span class="pill warn">LOSSY MEMORY</span><h3>A summary silently becomes ground truth.</h3><p>ARC keeps memory derived and rebuildable. The authoritative event log remains the source of truth.</p></article>
+          <article class="card"><span class="pill warn">FAKE VERIFICATION</span><h3>The tests pass — on the unchanged branch.</h3><p>ARC verifies the immutable candidate commit in a fresh gate worktree before it can reach integration.</p></article>
+        </div>
+      </div>
+    </section>
+
+    <section id="architecture">
+      <div class="shell">
+        <div class="eyebrow">Architecture</div>
+        <h2>State first. Memory second. Integration last.</h2>
+        <p class="lede">The core design rule is simple: if deleting the memory index would make you lose what actually happened, that information was stored in the wrong plane.</p>
+        <div class="diagram">
+          <div class="flow">
+            <div class="node"><strong>Authoritative state</strong><ul><li>append-only events</li><li>task DAG + versions</li><li>leases + budgets</li><li>candidate / merged commits</li></ul></div>
+            <div class="arrow">→</div>
+            <div class="node"><strong>Context control</strong><ul><li>versioned memory</li><li>provenance + supersession</li><li>real code evidence</li><li>hard token budget</li></ul></div>
+            <div class="arrow">→</div>
+            <div class="node"><strong>Transactional execution</strong><ul><li>isolated worktree</li><li>real coding-agent CLI</li><li>candidate commit</li><li>gate → cherry-pick</li></ul></div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section id="status">
+      <div class="shell">
+        <div class="eyebrow">Current status</div>
+        <h2>Research prototype, with explicit boundaries.</h2>
+        <div class="status">
+          <div class="card">
+            <h3>Implemented / hardened</h3>
+            <div class="row"><span class="ok">●</span><span>SQLite WAL authoritative event store</span></div>
+            <div class="row"><span class="ok">●</span><span>Versioned memory with provenance + supersession</span></div>
+            <div class="row"><span class="ok">●</span><span>Hard-budget context compiler with code hashes</span></div>
+            <div class="row"><span class="ok">●</span><span>Git worktree isolation + immutable candidate commits</span></div>
+            <div class="row"><span class="ok">●</span><span>Serialized gate verifies actual candidate tree</span></div>
+            <div class="row"><span class="ok">●</span><span>Deterministic memory materialization/replay path</span></div>
+          </div>
+          <div class="card">
+            <h3>Still experimental</h3>
+            <div class="row"><span class="road">◆</span><span>Provider CLI compatibility across versions</span></div>
+            <div class="row"><span class="road">◆</span><span>Container-level isolation for untrusted agent execution</span></div>
+            <div class="row"><span class="road">◆</span><span>Real semantic embedding provider (current fallback is deterministic lexical hashing)</span></div>
+            <div class="row"><span class="road">◆</span><span>Repository-scale benchmark + iso-cost evaluation</span></div>
+            <div class="row"><span class="road">◆</span><span>Learned risk/write/allocation policies</span></div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="research" id="research">
+      <div class="shell">
+        <div class="eyebrow">Research thesis</div>
+        <h2>Can context control improve reliability without buying the result with more tokens?</h2>
+        <p class="lede">ARC is designed to compare transcript handoff, static structured handoff, vector top-k memory, versioned memory, and adaptive context compilation under matched cost and hidden-test evaluation.</p>
+        <div class="quote">Never hand agents history by default. Hand them a versioned, provenance-aware compilation of the current project state and the minimum useful derived memory for their task.</div>
+      </div>
+    </section>
+  </main>
+
+  <footer>
+    <div class="shell footerline">
+      <span>ARC · Adaptive Agent Runtime</span>
+      <span><a href="https://github.com/anatwork14/adaptive-agent-runtime">Source</a> · Apache-2.0 · Experimental</span>
+    </div>
+  </footer>
+</body>
+</html>
