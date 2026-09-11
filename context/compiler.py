@@ -35,6 +35,7 @@ class ContextPacket(BaseModel):
     acceptance_criteria: List[str] = Field(default_factory=list)
     constraints: List[str] = Field(default_factory=list)
     dependency_state: List[Dict[str, Any]] = Field(default_factory=list)
+    files_declared: List[str] = Field(default_factory=list)
     decisions: List[Dict[str, Any]] = Field(default_factory=list)
     assumptions: List[Dict[str, Any]] = Field(default_factory=list)
     code_context: List[Dict[str, Any]] = Field(default_factory=list)
@@ -163,7 +164,13 @@ class ContextCompiler:
         ]
 
         authoritative_text = "\n".join(
-            [goal, *acceptance_criteria, *constraints, *request.dependencies]
+            [
+                goal,
+                *acceptance_criteria,
+                *constraints,
+                *request.dependencies,
+                *request.files_declared,
+            ]
         )
         authoritative_tokens = self.allocator.estimate_tokens(authoritative_text)
         if authoritative_tokens > budgets.total_budget:
@@ -205,12 +212,20 @@ class ContextCompiler:
             if memory.valid_to_event is not None and memory.valid_to_event < request.state_version:
                 continue
 
-            cost = max(1, memory.token_size or self.allocator.estimate_tokens(memory.content_text))
+            cost = max(
+                1,
+                memory.token_size
+                or self.allocator.estimate_tokens(memory.content_text),
+            )
             bucket: Optional[str] = None
             target: Optional[List[Dict[str, Any]]] = None
             entry: Dict[str, Any]
 
-            if memory.type in (MemoryType.DECISION, MemoryType.CONSTRAINT, MemoryType.FACT):
+            if memory.type in (
+                MemoryType.DECISION,
+                MemoryType.CONSTRAINT,
+                MemoryType.FACT,
+            ):
                 bucket, target = "decisions", decisions
                 entry = {
                     "memory_id": memory.memory_id,
@@ -273,18 +288,18 @@ class ContextCompiler:
         if self.repo_path is None and request.files_declared:
             risk_flags.append("CODE_EVIDENCE_UNAVAILABLE")
 
-        compiled_event = self.event_store.current_version(request.project_id)
         packet_dict: Dict[str, Any] = {
             "context_id": context_id,
             "project_id": request.project_id,
             "task_id": request.task_id,
             "agent_id": request.agent_id,
             "state_version": request.state_version,
-            "compiled_event": compiled_event,
+            "compiled_event": self.event_store.current_version(request.project_id),
             "goal": goal,
             "acceptance_criteria": acceptance_criteria,
             "constraints": constraints,
             "dependency_state": dependency_state,
+            "files_declared": list(request.files_declared),
             "decisions": decisions,
             "assumptions": assumptions,
             "code_context": code_context,
@@ -312,6 +327,7 @@ class ContextCompiler:
                 "token_count": total_tokens,
                 "hard_budget": request.token_budget,
                 "memory_ids": packet_dict["memory_ids"],
+                "files_declared": packet_dict["files_declared"],
                 "code_files": [item["path"] for item in code_context],
             },
         )
