@@ -5,6 +5,7 @@ from __future__ import annotations
 import os
 import shlex
 import shutil
+import time
 from dataclasses import dataclass
 from typing import Optional
 
@@ -14,6 +15,7 @@ from adapters.codex import CodexAgentAdapter
 from adapters.mock import MockAgentAdapter
 from adapters.opencode import OpenCodeAgentAdapter
 from adapters.openrouter import OpenRouterAgentAdapter
+from application.auth import ProviderAuthStatus, auth_status
 from application.config import AgentProfile
 
 
@@ -40,6 +42,19 @@ _PROVIDER_COMMAND_ENV = {
     "claude": "ARC_CLAUDE_COMMAND",
     "opencode": "ARC_OPENCODE_COMMAND",
 }
+
+_AUTH_CACHE_TTL = 30.0
+_AUTH_CACHE: dict[str, tuple[float, ProviderAuthStatus]] = {}
+
+
+def _cached_auth_status(provider: str) -> ProviderAuthStatus:
+    now = time.monotonic()
+    cached = _AUTH_CACHE.get(provider)
+    if cached and now - cached[0] < _AUTH_CACHE_TTL:
+        return cached[1]
+    result = auth_status(provider)
+    _AUTH_CACHE[provider] = (now, result)
+    return result
 
 
 def build_agent(profile: AgentProfile):
@@ -68,12 +83,7 @@ def build_agent(profile: AgentProfile):
 
 
 def doctor_profile(profile: AgentProfile) -> AgentDoctorResult:
-    """Perform non-invasive provider readiness checks.
-
-    This checks installation only. Authentication is intentionally handled by
-    the separate auth subsystem so status polling does not repeatedly hit
-    vendor login endpoints.
-    """
+    """Check installation plus vendor-native authentication where supported."""
     if not profile.enabled:
         return AgentDoctorResult(
             profile.name, profile.provider, profile.model, None, False, "DISABLED", "profile disabled"
@@ -102,12 +112,35 @@ def doctor_profile(profile: AgentProfile) -> AgentDoctorResult:
         except ValueError:
             pass
     resolved = shutil.which(executable)
+    if not resolved:
+        return AgentDoctorResult(
+            profile.name,
+            profile.provider,
+            profile.model,
+            executable,
+            False,
+            "MISSING",
+            f"executable {executable!r} not found on PATH",
+        )
+
+    if profile.provider in {"codex", "claude", "antigravity"} and not override:
+        auth = _cached_auth_status(profile.provider)
+        return AgentDoctorResult(
+            profile.name,
+            profile.provider,
+            profile.model,
+            executable,
+            True,
+            "READY" if auth.authenticated else "AUTH_REQUIRED",
+            auth.detail,
+        )
+
     return AgentDoctorResult(
         profile.name,
         profile.provider,
         profile.model,
         executable,
-        resolved is not None,
-        "READY" if resolved else "MISSING",
-        resolved or f"executable {executable!r} not found on PATH",
+        True,
+        "READY",
+        resolved,
     )
