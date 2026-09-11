@@ -1,6 +1,6 @@
 # ARC — Adaptive Agent Runtime
 
-> **Reliable context control and Mission Control for long-horizon coding agents.**
+> **Reliable context control and agent orchestration for long-horizon coding agents.**
 
 [![CI](https://github.com/anatwork14/adaptive-agent-runtime/actions/workflows/ci.yml/badge.svg)](https://github.com/anatwork14/adaptive-agent-runtime/actions/workflows/ci.yml)
 [![Python 3.11+](https://img.shields.io/badge/python-3.11%2B-3776ab.svg)](https://www.python.org/)
@@ -29,9 +29,9 @@ The core rule is:
 
 Authoritative project state lives in an append-only event stream plus Git state. Memory is a rebuildable, versioned projection used to compile the smallest useful context for each task.
 
-ARC exposes that runtime through four synchronized operator surfaces: the Typer CLI, live `arc watch`, a Textual terminal Mission Control, and a localhost browser Mission Control powered by FastAPI + WebSocket events.
+ARC exposes that runtime through synchronized CLI, live watch, Textual terminal Mission Control, and a localhost browser Agent Orchestration Control surface. ARC 0.4 also provides vendor-native login orchestration for Codex, Claude Code, and Antigravity without becoming a second credential vault.
 
-**Status:** experimental / pre-alpha. The control-plane substrate, CLI v2, deterministic mock execution, transactional Git integration, terminal dashboard, and localhost browser control plane are implemented. Real provider wrappers, semantic retrieval, stronger provider sandboxing, remote authentication/authorization, and repository-scale research evaluation remain active work.
+**Status:** experimental / pre-alpha. The control-plane substrate, CLI task lifecycle, transactional Git integration, provider-native authentication orchestration, Codex/Claude/Antigravity execution adapters, terminal dashboard, and localhost browser control plane are implemented. Semantic retrieval, stronger provider sandboxing, remote authentication/authorization, and repository-scale research evaluation remain active work.
 
 ---
 
@@ -47,23 +47,57 @@ source .venv/bin/activate
 pip install -e ".[dev]"
 ```
 
-Then, from a clean Git repository that ARC should operate on:
+Then, from a clean Git repository ARC should operate on:
 
 ```bash
 arc init . --project-id demo
-arc agent doctor
+arc login
+```
 
+`arc login` opens an arrow-key provider selector:
+
+```text
+ARC  ·  CONNECT PROVIDER
+
+Select login method
+
+> OpenAI Codex    · ChatGPT / OpenAI OAuth
+  Claude Code     · Anthropic OAuth
+  Antigravity     · Google OAuth
+
+↑/↓ Navigate   Enter Confirm   Esc Cancel
+```
+
+ARC then delegates to the provider's **native** account flow. Tokens remain in Codex / Claude / Antigravity credential stores; ARC only stores non-secret profile metadata.
+
+Direct setup examples:
+
+```bash
+arc login codex --profile builder --default
+arc login claude --profile reviewer
+arc login antigravity --profile researcher
+arc auth status
+arc agent doctor
+```
+
+Create and run work:
+
+```bash
 arc task create "Create a traceable ARC demo artifact" \
   --file arc_demo.txt \
   --accept "artifact integrates through the gate" \
   --risk 0.2
 
-arc run T001 --agent mock
+arc run T001 --agent builder
 arc task show T001
 arc events
 ```
 
-The built-in `mock` profile is a deterministic zero-credential agent used to validate the **real ARC execution path** without provider costs. It writes a real repository change which must still survive worktree isolation, candidate commit creation, verification, and the integration gate.
+The built-in `mock` profile remains available for deterministic zero-credential validation of the **real ARC execution path**:
+
+```bash
+arc run T001 --agent mock
+```
 
 Open terminal Mission Control:
 
@@ -71,7 +105,7 @@ Open terminal Mission Control:
 arc dashboard
 ```
 
-Open browser Mission Control:
+Open browser Agent Orchestration Control:
 
 ```bash
 arc web --open
@@ -91,6 +125,41 @@ arc watch T001
 
 ---
 
+## Provider authentication
+
+ARC treats authentication as a vendor-owned boundary.
+
+| Provider | ARC provider | Login flow | Execution adapter |
+|---|---|---|---|
+| OpenAI Codex | `codex` | ChatGPT / OpenAI OAuth | ✅ |
+| Claude Code | `claude` | Anthropic OAuth | ✅ |
+| Google Antigravity | `antigravity` | Google OAuth / secure keyring | ✅ |
+
+Useful commands:
+
+```bash
+arc login
+arc login codex --profile builder --default
+arc auth status
+arc auth status claude
+arc logout codex
+```
+
+ARC never reads or copies provider token files/keyrings. For Antigravity, account sign-out remains a native Antigravity `/logout` operation rather than ARC deleting secure-keyring state.
+
+`arc agent doctor` now distinguishes an installed CLI from an authenticated executor:
+
+```text
+READY
+AUTH_REQUIRED
+MISSING
+GATEWAY_ONLY
+UNCONFIGURED
+DISABLED
+```
+
+---
+
 ## Mission Control
 
 ### Terminal Mission Control
@@ -100,8 +169,8 @@ arc watch T001
 ```text
 ┌──────────────────────── ARC Mission Control ─────────────────────┐
 │ TASK DAG                              │ AGENTS / SYSTEM           │
-│ T001  auth middleware   READY         │ ● builder   READY         │
-│ T002  auth tests        CREATED       │ ○ reviewer  READY         │
+│ T001  auth middleware   READY          │ ● builder   READY         │
+│ T002  auth tests        CREATED        │ ○ reviewer  READY         │
 ├───────────────────────────────────────┼───────────────────────────┤
 │ TASK DETAIL                           │ AUTHORITATIVE EVENTS       │
 │ goal / agent / risk / files / history │ #42 task.created          │
@@ -112,34 +181,54 @@ arc watch T001
 [g] run   [y] retry   [x] cancel   [r] refresh   [q] quit
 ```
 
-### Browser Mission Control
+### Browser Agent Orchestration Control
 
 `arc web` launches a localhost-first FastAPI control plane and responsive browser UI over the same `ArcApplication`.
 
+The UI is orchestration-first:
+
+```text
+ARC Root + Codex + Claude + Antigravity orchestrator cards
+                           ↓
+                    runtime analytics
+                           ↓
+                    live task ledger
+                           ↓
+               provider-grouped agent teams
+                           ↓
+          mission inspector + authoritative trace
+```
+
 It provides:
 
-- task DAG and mission detail;
-- named agent readiness / doctor state;
-- budget, state-version, memory, and lease telemetry;
+- real configured-provider/auth readiness;
+- live task execution ledger;
+- running vs idle agent-team grouping;
+- budget, state-version, token, memory, and lease telemetry;
 - task create/run/retry/cancel controls;
 - ContextPacket inspection;
 - live authoritative events over WebSocket;
+- copyable `arc login ...` commands for providers requiring setup;
 - local API docs at `/api/docs`.
 
-The browser currently has **no built-in authentication**, so ARC binds to `127.0.0.1` by default and refuses non-loopback exposure unless `--allow-remote` is explicitly supplied. `--allow-remote` is an opt-in safety override, not an authentication mechanism.
+Activity rings represent **ARC-local active workload**, not fabricated provider quota or rate-limit data.
+
+The browser never accepts API keys or OAuth tokens. Interactive account setup stays in the terminal/provider CLI.
+
+The browser currently has **no remote-user authentication**, so ARC binds to `127.0.0.1` by default and refuses non-loopback exposure unless `--allow-remote` is explicitly supplied. `--allow-remote` is a safety override, not an authentication mechanism.
 
 See [docs/WEB_MISSION_CONTROL.md](docs/WEB_MISSION_CONTROL.md).
 
-There is no separate TUI/Web project database and no duplicated execution logic.
-
 ---
 
-## CLI v2
-
-The main operator surface is:
+## CLI surface
 
 ```text
 arc init
+arc login [PROVIDER]
+arc logout PROVIDER
+arc auth status [PROVIDER]
+
 arc status
 arc events
 arc replay
@@ -156,26 +245,15 @@ arc memory list | why | consolidate | rebuild-index
 arc gate inspect
 ```
 
-Example named Codex profile:
-
-```bash
-arc agent add builder \
-  --provider codex \
-  --role implementation \
-  --default
-
-arc agent doctor builder
-arc run T001 --agent builder
-```
-
 Provider-named adapters never silently fall back to a mock success:
 
 - `CodexAgentAdapter` invokes a real Codex CLI or fails;
 - `ClaudeAgentAdapter` invokes a real Claude CLI or fails;
+- `AntigravityAgentAdapter` invokes a real `agy` headless task or fails;
 - `OpenCodeAgentAdapter` invokes a real OpenCode CLI or fails;
 - OpenRouter remains gateway-only until ARC has a real filesystem tool loop for it.
 
-Provider command overrides remain available:
+Provider command overrides remain available where supported:
 
 ```bash
 export ARC_CODEX_COMMAND='codex exec --full-auto -'
@@ -207,9 +285,9 @@ CLI, TUI, browser UI, and future APIs share one service layer:
                     event state + Git integration
 ```
 
-`ArcApplication` centralizes task lifecycle, agent/profile resolution, context inspection, project snapshots, and live event access. The existing `Orchestrator` remains the single authoritative execution writer.
+`ArcApplication` centralizes task lifecycle, agent/profile resolution, context inspection, project snapshots, and live event access. The `Orchestrator` remains the single authoritative execution writer.
 
-The browser server adds a single execution lock for web-triggered runs so one server instance does not launch competing integration mutations from two simultaneous button presses.
+The browser server adds one execution lock for web-triggered runs so a single server instance does not launch competing integration mutations from simultaneous clicks.
 
 ---
 
@@ -313,7 +391,7 @@ PASS → cherry-pick same candidate into integration
 FAIL → discard candidate integration attempt
 ```
 
-ARC keeps `.arc/` out of Git status through the repository-local `.git/info/exclude`, so runtime metadata does not violate the gate's clean-tree invariant and no committed `.gitignore` edit is required.
+ARC keeps `.arc/` out of Git status through repository-local `.git/info/exclude`, so runtime metadata does not violate the gate's clean-tree invariant and no committed `.gitignore` edit is required.
 
 ---
 
@@ -324,11 +402,14 @@ ARC keeps `.arc/` out of Git status through the repository-local `.git/info/excl
 | SQLite WAL authoritative event store | ✅ implemented |
 | Deterministic project/task replay | ✅ implemented |
 | Shared `ArcApplication` service layer | ✅ implemented |
-| CLI v2 task lifecycle | ✅ implemented |
-| Named agent profiles + `agent doctor` | ✅ implemented |
+| CLI task lifecycle | ✅ implemented |
+| Native provider login orchestration | ✅ implemented |
+| Auth-aware agent doctor | ✅ implemented |
+| Codex / Claude / Antigravity execution adapters | 🧪 experimental |
+| Named agent profiles | ✅ implemented |
 | Live `arc watch` | ✅ implemented |
 | Textual `arc dashboard` Mission Control | ✅ implemented |
-| FastAPI `arc web` browser Mission Control | ✅ implemented |
+| FastAPI `arc web` orchestration UI | ✅ implemented |
 | WebSocket authoritative event stream | ✅ implemented |
 | Versioned memory + provenance | ✅ implemented |
 | Memory materialization replay path | ✅ implemented |
@@ -339,7 +420,6 @@ ARC keeps `.arc/` out of Git status through the repository-local `.git/info/excl
 | Transactional integration gate | ✅ implemented |
 | Explicit mock test adapter | ✅ implemented |
 | Docker-backed command/test sandbox | ✅ implemented |
-| Codex / Claude / OpenCode CLI wrappers | 🧪 experimental |
 | Provider CLI credential/container boundary | 🚧 not complete |
 | Browser authentication / remote multi-user mode | 🚧 not complete |
 | Real semantic embedding provider | 🚧 not complete |
@@ -353,11 +433,11 @@ ARC keeps `.arc/` out of Git status through the repository-local `.git/info/excl
 
 ```text
 adaptive-agent-runtime/
-├── application/    # shared app/service layer + config + agent resolution + events
-├── adapters/       # provider CLI adapters + explicit MockAgentAdapter
-├── cli/            # Typer CLI v2 + installed UI-aware entrypoint
-├── tui/            # Textual terminal Mission Control
-├── webui/          # FastAPI + packaged localhost browser Mission Control
+├── application/    # shared app layer + auth/config/agent/event services
+├── adapters/       # Codex/Claude/Antigravity/OpenCode + Mock adapters
+├── cli/            # Typer CLI + provider login and web entrypoint
+├── tui/            # terminal Mission Control + login picker
+├── webui/          # FastAPI + packaged browser orchestration control
 ├── context/        # retrieval, ranking, allocation, compiler, staleness
 ├── memory/         # lifecycle, provenance, supersession, consolidation
 ├── runtime/        # orchestrator, gate, leases, recovery, replay, budgets
@@ -400,7 +480,9 @@ The CI matrix runs on Python 3.11 and 3.12 and checks:
 - public-homepage and Web Mission Control JavaScript syntax;
 - the full pytest suite;
 - real Git worktree/candidate/gate integration with `MockAgentAdapter`;
-- CLI v2 lifecycle/profile flows;
+- provider auth command/probe behavior without real secrets;
+- headless arrow-key login picker;
+- CLI task/profile flows;
 - authoritative retry/cancel semantics;
 - headless Textual dashboard startup;
 - FastAPI snapshot/task/context/run flows;
@@ -420,6 +502,8 @@ python -m build
 ## Security
 
 ARC executes code produced by AI agents. Treat that as untrusted-code execution.
+
+Provider credentials remain in provider-owned credential stores and secure keyrings. ARC does not copy those tokens into `.arc/` or the browser UI.
 
 The command/test execution path can use Docker isolation with network disabled, dropped capabilities, resource limits, and a read-only root filesystem. Provider coding CLIs are still experimental host-mode because safely brokering provider authentication into isolated containers requires additional design.
 
