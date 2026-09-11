@@ -7,6 +7,14 @@
 [![License: Apache-2.0](https://img.shields.io/badge/license-Apache--2.0-6b7280.svg)](LICENSE)
 [![Website](https://img.shields.io/badge/site-GitHub%20Pages-88f7c5.svg)](https://anatwork14.github.io/adaptive-agent-runtime/)
 
+<p align="center">
+  <img src="docs/assets/hero_banner.jpg" alt="ARC Adaptive Agent Runtime Hero Banner" width="100%">
+</p>
+
+<p align="center">
+  👉 <strong><a href="https://anatwork14.github.io/adaptive-agent-runtime/">Explore the Interactive Live Documentation & Architecture Simulator</a></strong>
+</p>
+
 ARC is a research-oriented runtime for coordinating coding agents without treating chat history, summaries, or vector memory as project truth.
 
 The core rule is:
@@ -33,9 +41,17 @@ Adding more coding agents creates new failure modes:
 
 ARC treats these as **state, context, and integration problems**, not prompt-engineering problems.
 
+<p align="center">
+  <img src="docs/assets/comparison_diagram.jpg" alt="Naive Vector Memory vs ARC Deterministic State Plane" width="100%">
+</p>
+
 ---
 
 ## Architecture
+
+<p align="center">
+  <img src="docs/assets/architecture_diagram.jpg" alt="ARC Two-Plane Architecture: Authoritative State vs Adaptive Memory" width="100%">
+</p>
 
 ```text
                               USER / TASK SPEC
@@ -101,6 +117,10 @@ The current branch/runtime addresses several prototype failure modes:
 Agent changes are first materialized as an immutable candidate commit.
 
 The gate then:
+
+<p align="center">
+  <img src="docs/assets/gate_pipeline.jpg" alt="ARC Serialized Integration Gate Stages: G0 Candidate Commit to G3 Main Branch" width="100%">
+</p>
 
 ```text
 candidate commit
