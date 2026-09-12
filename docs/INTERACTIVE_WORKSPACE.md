@@ -1,6 +1,6 @@
 # ARC Interactive Workspace
 
-ARC 0.8 exposes four coordinated surfaces above the same authoritative runtime:
+ARC 0.8.1 exposes four coordinated surfaces above the same authoritative runtime:
 
 ```text
 arc            → conversation-first terminal supervisor
@@ -422,15 +422,19 @@ Both converge on the same integration gate.
 
 ## Security
 
-`arc ui` remains localhost-only by default and does not yet provide ARC-user authentication/RBAC.
+`arc ui` and `arc web` are unauthenticated privileged local control planes. In ARC 0.8.1 they are **strictly loopback-only**, not merely loopback-by-default. The legacy `--allow-remote` option remains for pre-alpha compatibility but no longer bypasses the loopback bind restriction. Authenticated remote/multi-user mode is future work.
+
+Browser HTTP requests that include an `Origin` header must identify an explicit localhost name or literal loopback IP. External, opaque, and arbitrary DNS-alias origins are rejected. Event WebSocket connections apply the same Origin policy before acceptance. Non-browser clients may omit `Origin`; ARC therefore does not claim authentication against a hostile process already running as the same local OS user.
 
 Provider authentication stays owned by the provider CLI. GitHub authentication stays owned by `gh`. ARC does not copy those credentials into `.arc/` or browser payloads.
 
 Runtime event persistence redacts obvious secret-valued command arguments. Preview binding is loopback-only. The preview is not reverse-proxied through the ARC control-plane origin.
 
+See [LOCAL_CONTROL_PLANE_SECURITY.md](LOCAL_CONTROL_PLANE_SECURITY.md) for the explicit threat model, browser-Origin boundary, security headers, limitations, and requirements for any future remote mode.
+
 ## Current boundaries
 
-Implemented through v0.8:
+Implemented through v0.8.1:
 
 - persistent worker metadata/transcript/worktree;
 - multi-turn worker conversations;
@@ -444,6 +448,9 @@ Implemented through v0.8:
 - runtime cleanup before worktree deletion;
 - interactive terminal supervisor;
 - session-centric browser Workspace;
+- strict loopback-only binding for `arc ui` and `arc web`;
+- HTTP browser-Origin guard for both browser control planes;
+- WebSocket Origin validation before event-stream acceptance;
 - GitHub PR publishing/updating through existing `gh` auth;
 - normalized CI/review/inline-comment ingestion;
 - actionable feedback routed to the owning worker;
