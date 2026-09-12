@@ -357,7 +357,7 @@ def web_mission_control(
     allow_remote: bool = typer.Option(
         False,
         "--allow-remote",
-        help="Allow binding beyond loopback. The current web UI has no authentication.",
+        help="Deprecated compatibility flag; remote binding remains disabled until ARC has authenticated remote mode.",
     ),
     open_browser: bool = typer.Option(False, "--open", help="Open the browser after starting"),
 ) -> None:

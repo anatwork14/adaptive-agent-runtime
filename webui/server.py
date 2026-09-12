@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import asyncio
-import socket
 import webbrowser
 from pathlib import Path
 from typing import Any, Optional
@@ -16,6 +15,12 @@ from pydantic import BaseModel, Field
 
 from application.app import ArcApplication
 from application.config import AgentProfile
+from application.version import arc_version
+from webui.local_security import (
+    LocalOriginGuardMiddleware,
+    is_loopback_origin,
+    require_loopback_bind,
+)
 
 
 class CreateTaskRequest(BaseModel):
@@ -137,11 +142,12 @@ def create_web_app(
     static_dir = Path(__file__).parent / "static"
     app = FastAPI(
         title="ARC Mission Control",
-        version="0.5.0",
+        version=arc_version(),
         docs_url="/api/docs",
         redoc_url=None,
     )
     app.state.arc_service = service
+    app.add_middleware(LocalOriginGuardMiddleware)
     app.mount("/static", StaticFiles(directory=static_dir), name="static")
 
     @app.get("/", include_in_schema=False)
@@ -332,6 +338,9 @@ def create_web_app(
 
     @app.websocket("/ws/events")
     async def websocket_events(websocket: WebSocket) -> None:
+        if not is_loopback_origin(websocket.headers.get("origin")):
+            await websocket.close(code=1008, reason="ARC local control plane rejected Origin")
+            return
         await websocket.accept()
         cursor = 0
         try:
@@ -356,15 +365,6 @@ def create_web_app(
     return app
 
 
-def _is_loopback(host: str) -> bool:
-    if host in {"localhost", "127.0.0.1", "::1"}:
-        return True
-    try:
-        return socket.gethostbyname(host).startswith("127.")
-    except OSError:
-        return False
-
-
 def run_web(
     *,
     repo: str | Path = ".",
@@ -374,16 +374,13 @@ def run_web(
     allow_remote: bool = False,
     open_browser: bool = False,
 ) -> None:
-    """Run Mission Control, refusing remote exposure unless explicitly allowed."""
-    if not allow_remote and not _is_loopback(host):
-        raise ValueError(
-            "ARC Web Mission Control is unauthenticated and localhost-only by default. "
-            "Use --allow-remote only inside a trusted network boundary."
-        )
+    """Run Mission Control as an unauthenticated loopback-only control plane."""
+    # Keep `allow_remote` in the pre-alpha call surface for compatibility, but
+    # never let it weaken the security boundary before authenticated remote mode.
+    require_loopback_bind(host, "ARC Web Mission Control")
 
     app = create_web_app(repo=repo, project_id=project_id)
-    url_host = "127.0.0.1" if host in {"0.0.0.0", "::"} else host
-    url = f"http://{url_host}:{port}"
+    url = f"http://{host}:{port}"
     if open_browser:
         webbrowser.open(url)
     uvicorn.run(app, host=host, port=port, log_level="info")

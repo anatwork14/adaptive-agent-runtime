@@ -8,7 +8,6 @@ review state is mounted as a non-authoritative integration surface.
 from __future__ import annotations
 
 import asyncio
-import socket
 import webbrowser
 from collections import defaultdict
 from pathlib import Path
@@ -21,6 +20,12 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
 from application.session_app import SessionArcApplication
+from application.version import arc_version
+from webui.local_security import (
+    LocalOriginGuardMiddleware,
+    is_loopback_origin,
+    require_loopback_bind,
+)
 from webui.review_routes import register_review_routes
 
 
@@ -102,11 +107,12 @@ def create_workspace_app(
     static_dir = Path(__file__).parent / "static"
     app = FastAPI(
         title="ARC Workspace",
-        version="0.9.0",
+        version=arc_version(),
         docs_url="/api/docs",
         redoc_url=None,
     )
     app.state.arc_workspace = service
+    app.add_middleware(LocalOriginGuardMiddleware)
     app.mount("/static", StaticFiles(directory=static_dir), name="static")
 
     @app.get("/", include_in_schema=False)
@@ -339,6 +345,9 @@ def create_workspace_app(
 
     @app.websocket("/ws/events")
     async def websocket_events(websocket: WebSocket) -> None:
+        if not is_loopback_origin(websocket.headers.get("origin")):
+            await websocket.close(code=1008, reason="ARC local control plane rejected Origin")
+            return
         await websocket.accept()
         cursor = 0
         raw = websocket.query_params.get("after")
@@ -366,15 +375,6 @@ def create_workspace_app(
     return app
 
 
-def _is_loopback(host: str) -> bool:
-    if host in {"localhost", "127.0.0.1", "::1"}:
-        return True
-    try:
-        return socket.gethostbyname(host).startswith("127.")
-    except OSError:
-        return False
-
-
 def run_workspace(
     *,
     repo: str | Path = ".",
@@ -384,14 +384,11 @@ def run_workspace(
     allow_remote: bool = False,
     open_browser: bool = False,
 ) -> None:
-    if not allow_remote and not _is_loopback(host):
-        raise ValueError(
-            "ARC Workspace is unauthenticated and localhost-only by default. "
-            "Do not expose it remotely without a trusted boundary."
-        )
+    # `allow_remote` remains in the pre-alpha API for compatibility, but it no
+    # longer weakens the bind boundary. Authenticated remote mode is future work.
+    require_loopback_bind(host, "ARC Workspace")
     app = create_workspace_app(repo=repo, project_id=project_id)
-    url_host = "127.0.0.1" if host in {"0.0.0.0", "::"} else host
-    url = f"http://{url_host}:{port}"
+    url = f"http://{host}:{port}"
     if open_browser:
         webbrowser.open(url)
     uvicorn.run(app, host=host, port=port, log_level="info")
