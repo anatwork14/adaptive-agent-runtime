@@ -12,8 +12,10 @@ from rich.console import Console
 from rich.panel import Panel
 from rich.table import Table
 
+from application.config import AgentProfile
 from application.session_app import SessionArcApplication
 from cli.launcher import app, session_app
+from runtime.environment import build_execution_environment, environment_key_manifest
 from tui.shell import run_shell
 from webui.workspace_server import run_workspace
 
@@ -49,9 +51,68 @@ def _runtime_panel(state) -> Panel:
     if state.url:
         body += f"url={state.url}\n"
     if state.command:
-        body += "command=" + " ".join(state.command)
+        body += "command=" + " ".join(state.command) + "\n"
+    if state.environment_keys:
+        body += "environment_keys=" + ",".join(state.environment_keys)
     color = "green" if state.ready else "yellow" if state.running else "dim"
     return Panel(body.rstrip(), title=f"{state.kind} // {state.session_id}", border_style=color)
+
+
+@app.command("env-policy")
+def execution_environment_policy(
+    agent: str = typer.Argument(..., help="Named agent profile"),
+    allow: list[str] = typer.Option(
+        [],
+        "--allow",
+        help="Extra environment variable name to forward; repeatable. Values remain host-owned.",
+    ),
+    clear: bool = typer.Option(False, "--clear", help="Remove all profile-specific extra names"),
+    repo: Path = typer.Option(Path("."), help="Repository root"),
+    project_id: Optional[str] = typer.Option(None),
+) -> None:
+    """Inspect or replace one profile's extra environment-variable allowlist.
+
+    ARC stores names only. Values are read from the live host environment when a
+    worker starts and are never written to `.arc/config.yaml` by this command.
+    """
+    if clear and allow:
+        raise typer.BadParameter("Use either --clear or --allow, not both")
+    try:
+        with _open(repo, project_id) as arc:
+            existing = arc.config.agents.get(agent)
+            if not existing:
+                raise typer.BadParameter(f"Agent profile {agent!r} not found")
+            if clear or allow:
+                payload = existing.model_dump()
+                payload["env_allow"] = [] if clear else allow
+                profile = AgentProfile.model_validate(payload)
+                arc.add_agent(profile, make_default=arc.config.default_agent == agent)
+            else:
+                profile = existing
+
+            effective = build_execution_environment(
+                provider=profile.provider,
+                extra_names=profile.env_allow,
+            )
+            table = Table(title=f"Execution environment // {profile.name}")
+            table.add_column("Policy")
+            table.add_column("Names", ratio=3)
+            table.add_row(
+                "profile extras",
+                ", ".join(profile.env_allow) or "-",
+            )
+            table.add_row(
+                "present effective keys",
+                ", ".join(environment_key_manifest(effective)) or "-",
+            )
+            console.print(table)
+            console.print(
+                "[dim]Values are intentionally not displayed or persisted by ARC.[/dim]"
+            )
+    except typer.BadParameter:
+        raise
+    except Exception as exc:
+        raise typer.BadParameter(str(exc)) from exc
 
 
 @app.command("ui")
