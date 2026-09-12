@@ -102,6 +102,8 @@ class LiveTurnSupervisor:
                 self._errors[session_id] = str(exc)
             finally:
                 arc.close()
+                self._cancel_events.pop(session_id, None)
+                self._cancel_requested.discard(session_id)
                 if lock.locked():
                     lock.release()
 
