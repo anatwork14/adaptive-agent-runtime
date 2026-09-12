@@ -11,6 +11,7 @@ from starlette.websockets import WebSocketDisconnect
 
 from application.app import ArcApplication
 from application.session_app import SessionArcApplication
+from application.version import arc_version
 from webui.local_security import is_loopback_host, is_loopback_origin
 from webui.server import create_web_app, run_web
 from webui.workspace_server import create_workspace_app, run_workspace
@@ -112,12 +113,13 @@ def test_legacy_remote_opt_in_no_longer_bypasses_local_boundary(tmp_path: Path) 
         run_web(repo=repo, host="0.0.0.0", port=8787, allow_remote=True)
 
 
-def test_browser_app_versions_match_security_patch(tmp_path: Path) -> None:
+def test_browser_app_versions_match_installed_arc_distribution(tmp_path: Path) -> None:
     repo = _git_repo(tmp_path)
     with SessionArcApplication(repo, "workspace-version") as arc:
         arc.initialize()
     with ArcApplication(repo, "mission-version") as arc:
         arc.initialize()
 
-    assert create_workspace_app(repo=repo, project_id="workspace-version").version == "0.9.1"
-    assert create_web_app(repo=repo, project_id="mission-version").version == "0.9.1"
+    expected = arc_version()
+    assert create_workspace_app(repo=repo, project_id="workspace-version").version == expected
+    assert create_web_app(repo=repo, project_id="mission-version").version == expected
