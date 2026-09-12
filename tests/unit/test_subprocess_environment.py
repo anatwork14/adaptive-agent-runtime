@@ -10,18 +10,41 @@ from adapters.base import AgentBudget
 from adapters.cli_process import SubprocessCodingAgent
 
 
-class _FakeProcess:
-    returncode = 0
+class _FakeStdin:
+    def __init__(self) -> None:
+        self.payload = b""
 
-    async def communicate(self, payload: bytes):
-        self.payload = payload
-        return b"completed", b""
+    def write(self, payload: bytes) -> None:
+        self.payload += payload
 
-    def kill(self) -> None:
+    async def drain(self) -> None:
         return None
 
+    def close(self) -> None:
+        return None
+
+    async def wait_closed(self) -> None:
+        return None
+
+
+class _FakeProcess:
+    def __init__(self) -> None:
+        self.returncode = 0
+        self.stdin = _FakeStdin()
+        self.stdout = asyncio.StreamReader()
+        self.stderr = asyncio.StreamReader()
+        self.stdout.feed_data(b"completed\n")
+        self.stdout.feed_eof()
+        self.stderr.feed_eof()
+
+    def terminate(self) -> None:
+        self.returncode = -15
+
+    def kill(self) -> None:
+        self.returncode = -9
+
     async def wait(self) -> int:
-        return 0
+        return self.returncode
 
 
 def test_subprocess_agent_passes_explicit_least_privilege_environment(
@@ -32,7 +55,9 @@ def test_subprocess_agent_passes_explicit_least_privilege_environment(
     async def fake_create_subprocess_exec(*command, **kwargs):
         captured["command"] = list(command)
         captured["env"] = dict(kwargs["env"])
-        return _FakeProcess()
+        process = _FakeProcess()
+        captured["process"] = process
+        return process
 
     monkeypatch.setattr(
         "adapters.cli_process.asyncio.create_subprocess_exec",
@@ -65,6 +90,9 @@ def test_subprocess_agent_passes_explicit_least_privilege_environment(
     assert environment["ARC_TEST_EXTRA"] == "explicit-extra"
     assert "ANTHROPIC_API_KEY" not in environment
     assert "DATABASE_PASSWORD" not in environment
+    process = captured["process"]
+    assert isinstance(process, _FakeProcess)
+    assert process.stdin.payload == b"test prompt"
     trace = result.tool_trace[0]
     assert "OPENAI_API_KEY" in trace["environment_keys"]
     assert "ANTHROPIC_API_KEY" not in trace["environment_keys"]
