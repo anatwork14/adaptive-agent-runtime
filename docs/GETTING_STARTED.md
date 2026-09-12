@@ -94,7 +94,7 @@ routing_policy: balanced
 
 Available routing policies are `balanced`, `quality`, and `cost`.
 
-The built-in mock remains available for deterministic smoke tests, but automatic routing treats it as fallback-only when an eligible real READY coding agent exists.
+The built-in mock remains available for deterministic smoke tests. Automatic routing chooses mock only when **no capable real executor profile is configured for that task**. If a capable real provider is configured but is signed out, missing, or saturated, ARC defers instead of hiding the provider problem behind mock execution.
 
 ## 5. Create one task manually
 
@@ -198,7 +198,9 @@ You can create tasks and run:
 arc orchestrate
 ```
 
-When no real READY provider can satisfy a task, mock is a valid fallback route. It still writes a real repository change that must survive the normal worktree, candidate commit, verification, and integration path.
+Mock is an automatic route only when no capable real executor profile is configured for that task. If you configured a capable Codex/Claude/Antigravity/OpenCode profile and it is unavailable, ARC will defer rather than silently replace it with mock. You can always intentionally run a smoke task with `arc run TASK --agent mock`.
+
+The mock still writes a real repository change that must survive the normal worktree, candidate commit, verification, and integration path.
 
 ## 9. Watch missions live
 
