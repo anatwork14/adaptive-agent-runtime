@@ -110,7 +110,7 @@ def test_product_cli_exposes_session_attach_and_ui(tmp_path: Path) -> None:
         ["session", "open", "T001", "--agent", "mock", "--repo", str(repo), "--project-id", "demo"],
     )
     assert result.exit_code == 0, result.output
-    assert "Worker opened" in result.output
+    assert "ARC worker opened" in result.output
 
     result = runner.invoke(
         product_app,
