@@ -62,7 +62,7 @@ def _write_fake_provider(path: Path, version: str) -> None:
     path.chmod(0o755)
 
 
-def test_runtime_lock_detects_provider_and_arc_engine_drift(tmp_path) -> None:
+def test_runtime_lock_detects_provider_arc_commit_and_dirty_tree_drift(tmp_path) -> None:
     module = _runtime_lock_module()
     repo = tmp_path / "repo"
     _init_git_repo(repo)
@@ -87,9 +87,16 @@ def test_runtime_lock_detects_provider_and_arc_engine_drift(tmp_path) -> None:
     lock_path = tmp_path / "runtime-lock.json"
     module.freeze(repo, "builder", lock_path, arc_repo)
     payload = json.loads(lock_path.read_text(encoding="utf-8"))
-    assert payload["schema_version"] == "arc-empirical-runtime-lock-v3"
+    assert payload["schema_version"] == "arc-empirical-runtime-lock-v4"
     assert payload["provider_cli_version"] == "fake-codex 1.0.0"
     assert payload["arc_commit"] == frozen_arc_commit
+    assert payload["arc_worktree_clean"] is True
+    module.verify(repo, "builder", lock_path, arc_repo)
+
+    (arc_repo / "engine.py").write_text("VALUE = 99\n", encoding="utf-8")
+    with pytest.raises(SystemExit, match="worktree must be clean"):
+        module.verify(repo, "builder", lock_path, arc_repo)
+    _git(arc_repo, "checkout", "--", "engine.py")
     module.verify(repo, "builder", lock_path, arc_repo)
 
     _write_fake_provider(provider, "fake-codex 2.0.0")
