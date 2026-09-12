@@ -17,8 +17,8 @@ def test_installed_cli_registers_benchmark_surfaces() -> None:
     result = runner.invoke(app, ["benchmark", "--help"])
     assert result.exit_code == 0
     plain = _plain_output(result.output)
-    assert "paired" in plain
-    assert "repeated" in plain
+    for command in ("paired", "repeated", "preregister", "run-plan", "export"):
+        assert command in plain
     assert "reproducible ARC research benchmarks" in plain
 
 
@@ -41,3 +41,18 @@ def test_repeated_benchmark_help_exposes_statistical_controls() -> None:
     assert "--repeats" in plain
     assert "--bootstrap-samples" in plain
     assert "--ci" in plain
+
+
+def test_preregister_help_exposes_frozen_contract_controls() -> None:
+    result = runner.invoke(app, ["benchmark", "preregister", "--help"])
+    assert result.exit_code == 0
+    plain = _plain_output(result.output)
+    assert "--study-id" in plain
+    assert "--exclude" in plain
+    assert "--hidden-test-dir" in plain
+
+
+def test_run_plan_help_exposes_attempt_identity() -> None:
+    result = runner.invoke(app, ["benchmark", "run-plan", "--help"])
+    assert result.exit_code == 0
+    assert "--attempt-id" in _plain_output(result.output)
