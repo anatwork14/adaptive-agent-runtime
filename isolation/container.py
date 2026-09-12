@@ -11,6 +11,9 @@ from pathlib import Path
 from typing import Dict, List, Optional
 
 
+WORKSPACE_PYTHONPATH = "/workspace/src:/workspace"
+
+
 @dataclass
 class ExecutionResult:
     command: List[str]
@@ -28,8 +31,9 @@ class SandboxUnavailable(RuntimeError):
 class SandboxRunner:
     """Run commands in a hardened Docker container, fail-closed.
 
-    The repository is the only host path mounted into the container. Network is
-    disabled by default, capabilities are dropped, privilege escalation is
+    The repository is the primary host path mounted into the container. Trusted
+    evaluation assets may be attached through explicit read-only mounts. Network
+    is disabled by default, capabilities are dropped, privilege escalation is
     disabled, and CPU/memory/PID limits are enforced. The container runs with
     the host uid/gid on POSIX so tools can create repository-local build/test
     artifacts without granting root ownership on the host.
@@ -84,12 +88,30 @@ class SandboxRunner:
             ) from exc
         return "/workspace" if str(relative) == "." else f"/workspace/{relative.as_posix()}"
 
+    @staticmethod
+    def _validate_read_only_mount(source: str | Path, destination: str) -> tuple[Path, str]:
+        src = Path(source).resolve()
+        if not src.exists():
+            raise SandboxUnavailable(f"read-only sandbox mount does not exist: {src}")
+        if not destination.startswith("/") or destination == "/":
+            raise SandboxUnavailable(
+                f"read-only sandbox destination must be an absolute non-root path: {destination!r}"
+            )
+        if destination == "/workspace" or destination.startswith("/workspace/"):
+            raise SandboxUnavailable(
+                "read-only sandbox mounts cannot shadow the candidate /workspace tree"
+            )
+        if "," in destination:
+            raise SandboxUnavailable("read-only sandbox destination cannot contain a comma")
+        return src, destination
+
     def run_command(
         self,
         command: List[str],
         cwd: Optional[Path] = None,
         env_vars: Optional[Dict[str, str]] = None,
         timeout: Optional[int] = None,
+        read_only_mounts: Optional[Dict[str | Path, str]] = None,
     ) -> ExecutionResult:
         """Execute ``command`` in a least-privilege Docker container."""
         if not command:
@@ -125,6 +147,13 @@ class SandboxRunner:
             docker_cmd.extend(["--user", f"{os.getuid()}:{os.getgid()}"])
         if not self.network_enabled:
             docker_cmd.extend(["--network", "none"])
+
+        mounts = read_only_mounts or {}
+        for source, destination in sorted(mounts.items(), key=lambda item: item[1]):
+            src, dst = self._validate_read_only_mount(source, destination)
+            docker_cmd.extend(
+                ["--mount", f"type=bind,src={src},dst={dst},readonly"]
+            )
 
         # Never inherit the host environment. Only explicit non-secret values
         # supplied by the caller are forwarded.
