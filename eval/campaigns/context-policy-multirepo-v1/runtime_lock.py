@@ -2,9 +2,9 @@
 
 This is deliberately outside ARC's generic preregistration schema. It closes
 empirical reproducibility gaps in v0.16 without changing historical plan
-digests: profile command overrides, reasoning-effort flags, and provider CLI
-version are otherwise live operator state. The lock stores a digest of the
-effective argv, never argv itself.
+digests: profile command overrides, reasoning-effort flags, provider CLI
+version, and the ARC evaluation engine commit are otherwise live operator
+state. The lock stores a digest of the effective argv, never argv itself.
 """
 
 from __future__ import annotations
@@ -20,7 +20,8 @@ from typing import Any
 from application.agents import build_agent
 from application.config import ConfigStore
 
-SCHEMA = "arc-empirical-runtime-lock-v2"
+SCHEMA = "arc-empirical-runtime-lock-v3"
+DEFAULT_ARC_REPO = Path(__file__).resolve().parents[3]
 
 
 def _canonical(payload: Any) -> bytes:
@@ -75,7 +76,14 @@ def _git_head(path: Path) -> str:
         text=True,
         check=False,
     )
-    return proc.stdout.strip() if proc.returncode == 0 else ""
+    if proc.returncode != 0 or not proc.stdout.strip():
+        detail = (proc.stderr or proc.stdout or "git rev-parse failed").strip()
+        raise SystemExit(f"cannot resolve ARC engine commit in {path}: {detail}")
+    return proc.stdout.strip()
+
+
+def _arc_repo(path: Path | None) -> Path:
+    return (path or DEFAULT_ARC_REPO).resolve()
 
 
 def runtime_payload(repo: Path, profile_name: str) -> dict[str, Any]:
@@ -110,7 +118,7 @@ def freeze(repo: Path, profile: str, output: Path, arc_repo: Path | None) -> Non
     payload.update(
         {
             "created_at_utc": datetime.now(timezone.utc).isoformat(),
-            "arc_commit": _git_head(arc_repo.resolve()) if arc_repo else "",
+            "arc_commit": _git_head(_arc_repo(arc_repo)),
             "lock_digest": "",
         }
     )
@@ -122,17 +130,24 @@ def freeze(repo: Path, profile: str, output: Path, arc_repo: Path | None) -> Non
     )
     print(f"runtime_lock={output.resolve()}")
     print(f"lock_digest={payload['lock_digest']}")
+    print(f"arc_commit={payload['arc_commit']}")
     print(f"effective_argv_sha256={payload['effective_argv_sha256']}")
     print(f"provider_cli_version={payload['provider_cli_version']}")
 
 
-def verify(repo: Path, profile: str, lock: Path) -> None:
+def verify(
+    repo: Path,
+    profile: str,
+    lock: Path,
+    arc_repo: Path | None = None,
+) -> None:
     frozen = json.loads(lock.read_text(encoding="utf-8"))
     if frozen.get("schema_version") != SCHEMA:
         raise SystemExit("unsupported runtime-lock schema")
     if frozen.get("lock_digest") != lock_digest(frozen):
         raise SystemExit("runtime-lock digest mismatch: lock was modified")
     live = runtime_payload(repo, profile)
+    live["arc_commit"] = _git_head(_arc_repo(arc_repo))
     keys = (
         "profile",
         "provider",
@@ -142,6 +157,7 @@ def verify(repo: Path, profile: str, lock: Path) -> None:
         "effective_argv_sha256",
         "provider_cli_version",
         "env_allow",
+        "arc_commit",
     )
     mismatches = [key for key in keys if frozen.get(key) != live.get(key)]
     if mismatches:
@@ -166,11 +182,12 @@ def main() -> None:
     verify_p.add_argument("--repo", type=Path, default=Path("."))
     verify_p.add_argument("--profile", default="builder")
     verify_p.add_argument("--lock", type=Path, required=True)
+    verify_p.add_argument("--arc-repo", type=Path)
     args = parser.parse_args()
     if args.command == "freeze":
         freeze(args.repo.resolve(), args.profile, args.output, args.arc_repo)
     else:
-        verify(args.repo.resolve(), args.profile, args.lock)
+        verify(args.repo.resolve(), args.profile, args.lock, args.arc_repo)
 
 
 if __name__ == "__main__":
