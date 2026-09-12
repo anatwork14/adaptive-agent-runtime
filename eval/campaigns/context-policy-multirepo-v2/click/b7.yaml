@@ -3,7 +3,7 @@ baseline: B7
 execution_mode: sequence
 seed: 20260912
 agent_profile: builder
-model: gpt-5.3-codex
+model: gpt-5.5
 repo_commit: 6aabf099bfdd4c1e75fe8d0e0d4241372b988ab1
 context_token_budget: 12000
 hard_task_usd: 2.0
