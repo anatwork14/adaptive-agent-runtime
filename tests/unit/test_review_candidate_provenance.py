@@ -20,37 +20,32 @@ def _git_repo(tmp_path: Path) -> Path:
     return repo
 
 
+def _rev(repo: Path, *args: str) -> str:
+    return subprocess.run(
+        ["git", "-C", str(repo), *args],
+        capture_output=True,
+        text=True,
+        check=True,
+    ).stdout.strip()
+
+
 def test_multi_commit_worker_freezes_without_rewriting_public_branch(tmp_path: Path) -> None:
     repo = _git_repo(tmp_path)
+    base_sha = _rev(repo, "rev-parse", "HEAD")
     manager = WorktreeManager(repo)
     worktree = manager.create_worktree("T001")
 
     (worktree / "one.txt").write_text("one\n", encoding="utf-8")
     first = manager.commit_candidate("T001", "first")
-    assert first == subprocess.run(
-        ["git", "-C", str(worktree), "rev-parse", "HEAD"],
-        capture_output=True,
-        text=True,
-        check=True,
-    ).stdout.strip()
+    assert first == _rev(worktree, "rev-parse", "HEAD")
 
     (worktree / "two.txt").write_text("two\n", encoding="utf-8")
     synthetic = manager.commit_candidate("T001", "second")
-    public_head = subprocess.run(
-        ["git", "-C", str(worktree), "rev-parse", "HEAD"],
-        capture_output=True,
-        text=True,
-        check=True,
-    ).stdout.strip()
+    public_head = _rev(worktree, "rev-parse", "HEAD")
 
     assert synthetic != public_head
     assert manager.branch_name("T001") == "arc/task/T001"
-    branch_ref = subprocess.run(
-        ["git", "-C", str(repo), "rev-parse", manager.branch_name("T001")],
-        capture_output=True,
-        text=True,
-        check=True,
-    ).stdout.strip()
+    branch_ref = _rev(repo, "rev-parse", manager.branch_name("T001"))
     assert branch_ref == public_head
 
     # The synthetic candidate contains the complete branch delta, not only the
@@ -58,10 +53,4 @@ def test_multi_commit_worker_freezes_without_rewriting_public_branch(tmp_path: P
     diff = manager.get_commit_diff(synthetic)
     assert "one.txt" in diff
     assert "two.txt" in diff
-    ahead = subprocess.run(
-        ["git", "-C", str(worktree), "rev-list", "--count", "HEAD", "--not", "master"],
-        capture_output=True,
-        text=True,
-        check=True,
-    ).stdout.strip()
-    assert ahead == "2"
+    assert _rev(worktree, "rev-list", "--count", "HEAD", "--not", base_sha) == "2"
