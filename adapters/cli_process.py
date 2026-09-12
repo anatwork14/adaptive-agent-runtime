@@ -33,7 +33,7 @@ def render_context_prompt(context: ContextPacket) -> str:
 
 
 class SubprocessCodingAgent:
-    """Run a real CLI coding agent in the task worktree.
+    """Run a real CLI coding agent in a task worktree.
 
     ``command`` must point to a provider CLI that reads the task prompt from
     stdin and performs repository edits in its current working directory.
@@ -74,17 +74,22 @@ class SubprocessCodingAgent:
                 "ARC real adapters never silently fall back to a mock."
             )
 
-    async def run(
+    async def run_prompt(
         self,
         *,
-        context: ContextPacket,
+        prompt: str,
         workspace: Path,
         budget: AgentBudget,
+        memory_references: Optional[list[str]] = None,
     ) -> AgentRunResult:
+        """Run one provider turn with an explicit prompt in an existing workspace.
+
+        Persistent worker sessions use this method to continue editing the same
+        worktree across multiple operator instructions. Provider processes may be
+        re-launched per turn; the durable state is the worktree + ARC event log.
+        """
         command = self.build_command()
         self.ensure_available(command)
-        prompt = render_context_prompt(context)
-
         process = await asyncio.create_subprocess_exec(
             *command,
             cwd=str(workspace),
@@ -103,6 +108,7 @@ class SubprocessCodingAgent:
             return AgentRunResult(
                 status="failed",
                 summary=f"{self.name} timed out after {budget.timeout_seconds}s",
+                memory_references=list(memory_references or []),
                 tool_trace=[{"action": "cli_timeout", "command": command}],
             )
 
@@ -112,6 +118,7 @@ class SubprocessCodingAgent:
             return AgentRunResult(
                 status="failed",
                 summary=f"{self.name} exited with code {process.returncode}: {err[-4000:]}",
+                memory_references=list(memory_references or []),
                 tool_trace=[
                     {
                         "action": "cli_run",
@@ -121,14 +128,12 @@ class SubprocessCodingAgent:
                 ],
             )
 
-        # ARC measures the actual git diff/commit after the adapter returns. CLI
-        # output is retained only as an execution summary, not trusted as a patch.
         return AgentRunResult(
             status="completed",
             patch_ref="WORKTREE",
             diff="",
             summary=out[-8000:] or f"{self.name} completed without textual output",
-            memory_references=list(context.memory_ids),
+            memory_references=list(memory_references or []),
             tool_trace=[
                 {
                     "action": "cli_run",
@@ -136,9 +141,20 @@ class SubprocessCodingAgent:
                     "returncode": process.returncode,
                 }
             ],
-            # Provider-neutral CLI mode cannot reliably infer token usage/cost.
-            # Keep these zero rather than fabricate numbers. Provider-specific
-            # adapters can override this when usage metadata is available.
             token_usage={},
             cost_usd=0.0,
+        )
+
+    async def run(
+        self,
+        *,
+        context: ContextPacket,
+        workspace: Path,
+        budget: AgentBudget,
+    ) -> AgentRunResult:
+        return await self.run_prompt(
+            prompt=render_context_prompt(context),
+            workspace=workspace,
+            budget=budget,
+            memory_references=list(context.memory_ids),
         )
