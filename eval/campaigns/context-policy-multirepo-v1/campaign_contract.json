@@ -31,7 +31,9 @@
       "pytest",
       "-q",
       "-m",
-      "not network"
+      "not network",
+      "-o",
+      "cache_dir=/tmp/pytest-cache"
     ],
     "verification_level": "V1",
     "repeats": 6,
