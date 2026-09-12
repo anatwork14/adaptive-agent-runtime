@@ -7,6 +7,7 @@ import json
 import os
 import shlex
 import shutil
+import signal
 from collections.abc import Awaitable, Callable, Iterable
 from pathlib import Path
 from typing import List, Optional
@@ -50,16 +51,56 @@ async def _emit_stream(callback: StreamCallback | None, stream: str, text: str) 
         await result
 
 
-async def _terminate_process(process: asyncio.subprocess.Process, *, grace_seconds: float = 2.0) -> None:
-    """Terminate a provider process and escalate to kill if it ignores termination."""
-    if process.returncode is not None:
-        return
-    process.terminate()
-    try:
-        await asyncio.wait_for(process.wait(), timeout=grace_seconds)
-    except asyncio.TimeoutError:
-        process.kill()
-        await process.wait()
+def _process_spawn_kwargs() -> dict[str, object]:
+    """Create an isolated process group for one disposable provider turn.
+
+    Provider CLIs routinely spawn shell/tool subprocesses. On POSIX a new session
+    makes the provider PID the process-group leader so cancellation can stop the
+    whole supervised turn instead of only its top-level CLI process.
+    """
+    if os.name == "posix":
+        return {"start_new_session": True}
+    return {}
+
+
+async def _terminate_process(
+    process: asyncio.subprocess.Process,
+    *,
+    grace_seconds: float = 2.0,
+) -> None:
+    """Terminate the supervised provider process tree and escalate if needed."""
+    if os.name == "posix":
+        try:
+            os.killpg(process.pid, signal.SIGTERM)
+        except ProcessLookupError:
+            pass
+    elif process.returncode is None:
+        process.terminate()
+
+    if process.returncode is None:
+        try:
+            await asyncio.wait_for(process.wait(), timeout=grace_seconds)
+        except asyncio.TimeoutError:
+            if os.name == "posix":
+                try:
+                    os.killpg(process.pid, signal.SIGKILL)
+                except ProcessLookupError:
+                    pass
+            else:
+                process.kill()
+            await process.wait()
+    elif os.name == "posix":
+        # The group leader may already have exited while descendants remain.
+        # Give TERM a short interval before escalating the surviving group.
+        await asyncio.sleep(min(grace_seconds, 0.1))
+        try:
+            os.killpg(process.pid, 0)
+        except ProcessLookupError:
+            return
+        try:
+            os.killpg(process.pid, signal.SIGKILL)
+        except ProcessLookupError:
+            pass
 
 
 class SubprocessCodingAgent:
@@ -169,6 +210,7 @@ class SubprocessCodingAgent:
             stderr=asyncio.subprocess.PIPE,
             env=environment,
             limit=1024 * 1024,
+            **_process_spawn_kwargs(),
         )
         stdout_tail = ""
         stderr_tail = ""
