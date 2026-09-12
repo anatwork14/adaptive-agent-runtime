@@ -1,6 +1,21 @@
 """Pre-registration and offline export helpers for ARC provider studies."""
 
 from eval.studies.export import export_study_tidy
+from eval.studies.meta import (
+    HierarchicalMetric,
+    MetaPairedComparison,
+    MetaStudyPlan,
+    MetaStudyResult,
+    RepositoryPlanRef,
+    RepositoryStudyData,
+    aggregate_meta_study,
+    compute_meta_plan_digest,
+    create_meta_preregistration,
+    load_meta_preregistration,
+    load_study_plans,
+    save_meta_preregistration,
+    validate_meta_inputs,
+)
 from eval.studies.preregistration import (
     PRIMARY_METRICS,
     PreregisteredStudy,
@@ -26,4 +41,17 @@ __all__ = [
     "tree_digest",
     "validate_execution_environment",
     "export_study_tidy",
+    "RepositoryPlanRef",
+    "MetaStudyPlan",
+    "RepositoryStudyData",
+    "HierarchicalMetric",
+    "MetaPairedComparison",
+    "MetaStudyResult",
+    "compute_meta_plan_digest",
+    "create_meta_preregistration",
+    "save_meta_preregistration",
+    "load_meta_preregistration",
+    "validate_meta_inputs",
+    "aggregate_meta_study",
+    "load_study_plans",
 ]
