@@ -3,7 +3,8 @@
 from dataclasses import dataclass
 from pathlib import Path
 from typing import List, Optional
-from isolation.container import ExecutionResult, SandboxRunner
+
+from isolation.container import ExecutionResult, SandboxRunner, WORKSPACE_PYTHONPATH
 
 
 @dataclass
@@ -23,7 +24,13 @@ class AdversarialTestRunner:
 
     def run_tests(self, test_command: Optional[List[str]] = None) -> AdversarialTestResult:
         cmd = test_command or ["python", "-m", "pytest", "-v"]
-        result: ExecutionResult = self.sandbox.run_command(cmd)
+        result: ExecutionResult = self.sandbox.run_command(
+            cmd,
+            env_vars={
+                "PYTHONPATH": WORKSPACE_PYTHONPATH,
+                "PYTHONDONTWRITEBYTECODE": "1",
+            },
+        )
 
         passed = result.exit_code == 0
         output = result.stdout + "\n" + result.stderr
