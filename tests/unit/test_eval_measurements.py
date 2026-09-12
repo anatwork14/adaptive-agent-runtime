@@ -10,13 +10,13 @@ from eval.telemetry import collect_trace_telemetry
 from state.models import Event, GateResult, GateStatus
 
 
-def _event(event_id: int, kind: str, payload: dict) -> Event:
+def _event(event_id: int, kind: str, payload: dict, task_id: str = "T001") -> Event:
     return Event(
         id=event_id,
         actor="test",
         kind=kind,
         project_id="eval",
-        task_id="T001",
+        task_id=task_id,
         payload=payload,
         content_hash=f"hash-{event_id}",
     )
@@ -85,6 +85,31 @@ def test_trace_collector_aggregates_only_observed_usage() -> None:
     assert trace.handoff_count == 1
     assert trace.gate_failure_count == 1
     assert trace.retry_count == 1
+
+
+def test_trace_collector_ignores_concurrent_other_task_events() -> None:
+    events = [
+        _event(2, "budget.consumed", {"usd": 0.10, "tokens": 100}),
+        _event(3, "budget.consumed", {"usd": 9.99, "tokens": 99999}, task_id="T_OTHER"),
+        _event(
+            4,
+            "context.compiled",
+            {"context_id": "CTX_OTHER", "token_count": 7777, "hard_budget": 8000},
+            task_id="T_OTHER",
+        ),
+        _event(
+            5,
+            "context.compiled",
+            {"context_id": "CTX_TARGET", "token_count": 1200, "hard_budget": 8000},
+        ),
+    ]
+
+    trace = collect_trace_telemetry(events, _gate())
+
+    assert trace.cost_usd == pytest.approx(0.10)
+    assert trace.provider_tokens == 100
+    assert trace.context_id == "CTX_TARGET"
+    assert trace.context_tokens == 1200
 
 
 def test_manifest_rejects_unmatched_context_budgets() -> None:
