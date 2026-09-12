@@ -99,10 +99,11 @@ def test_provider_blinding_removes_treatment_metadata_but_keeps_semantics() -> N
             }
         ],
         failures=[{"memory_id": "M_FAIL_1", "text": "Old failure", "status": "active"}],
+        episodes=[{"text": "Task Summary [T000]: introduced the shared parser abstraction"}],
         leases=[{"resource": "parser.py", "fencing_token": 99}],
         risk_flags=["STALE_MEMORY_DELIVERED"],
         context_token_count=777,
-        memory_ids=["M_DEC_1"],
+        memory_ids=["M_DEC_1", "M_TSUM_1"],
         stale_memory_ids=["M_DEC_1"],
         retrieval_strategies=["naive_vector_topk"],
         digest="sha256:secret",
@@ -113,6 +114,9 @@ def test_provider_blinding_removes_treatment_metadata_but_keeps_semantics() -> N
     assert blinded.goal == packet.goal
     assert blinded.decisions == [{"text": "Keep the parser API stable"}]
     assert blinded.failures == [{"text": "Old failure"}]
+    assert blinded.episodes == [
+        {"text": "Task Summary [T000]: introduced the shared parser abstraction"}
+    ]
     assert blinded.context_policy == "BLINDED"
     assert blinded.project_id == "benchmark"
     assert blinded.state_version == 0

@@ -42,6 +42,7 @@ class ContextPacket(BaseModel):
     code_context: List[Dict[str, Any]] = Field(default_factory=list)
     failures: List[Dict[str, Any]] = Field(default_factory=list)
     procedures: List[Dict[str, Any]] = Field(default_factory=list)
+    episodes: List[Dict[str, Any]] = Field(default_factory=list)
     open_questions: List[Dict[str, Any]] = Field(default_factory=list)
     leases: List[Dict[str, Any]] = Field(default_factory=list)
     risk_flags: List[str] = Field(default_factory=list)
@@ -208,6 +209,7 @@ class ContextCompiler:
         assumptions: List[Dict[str, Any]] = []
         failures: List[Dict[str, Any]] = []
         procedures: List[Dict[str, Any]] = []
+        episodes: List[Dict[str, Any]] = []
         memory_ids: List[str] = []
         stale_memory_ids: List[str] = []
 
@@ -216,12 +218,14 @@ class ContextCompiler:
             "assumptions": 0,
             "failures": 0,
             "procedures": 0,
+            "episodes": 0,
         }
         class_caps = {
             "decisions": budgets.c1_decisions,
             "assumptions": budgets.c3_assumptions,
             "failures": budgets.c4_failures,
             "procedures": budgets.c5_procedures,
+            "episodes": budgets.c6_episodes,
         }
 
         for candidate in retrieval.candidates:
@@ -278,6 +282,11 @@ class ContextCompiler:
                     "status": memory.status.value,
                     "source_events": memory.source_events,
                 }
+            elif memory.type in (MemoryType.TASK_SUMMARY, MemoryType.EPISODE):
+                bucket, target = "episodes", episodes
+                # Provider-visible episode context contains semantic content only.
+                # Audit provenance remains available through memory_ids/event telemetry.
+                entry = {"text": memory.content_text}
             else:
                 continue
 
@@ -331,6 +340,7 @@ class ContextCompiler:
             "code_context": code_context,
             "failures": failures,
             "procedures": procedures,
+            "episodes": episodes,
             "open_questions": [],
             "leases": leases,
             "risk_flags": risk_flags,
