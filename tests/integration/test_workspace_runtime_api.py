@@ -73,7 +73,11 @@ def test_workspace_runtime_api_start_status_stop(tmp_path: Path, monkeypatch) ->
 
     with SessionArcApplication(repo, "demo") as arc:
         arc.initialize()
+        # Persist the profile override because the Workspace intentionally opens
+        # a fresh application instance for every request. The test therefore
+        # exercises the same restart/config-reload boundary as the product.
         arc.config.agents["mock"].command_override = "python -V"
+        arc.config_store.save(arc.config)
         task = arc.create_task("Expose runtime controls in Workspace")
         session = arc.sessions.create(task.task_id, agent_name="mock")
         session_id = session.session_id
