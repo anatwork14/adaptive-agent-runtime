@@ -7,6 +7,7 @@ from typing import Any, Dict, List, Optional
 
 from adapters.base import AgentAdapter, AgentBudget, AgentRunResult
 from context.compiler import ContextCompiler
+from context.policy import ContextPolicy, RuntimeContextPolicy
 from context.request import ContextRequest
 from context.retrieval import MemoryRetriever
 from context.staleness import StalenessDetector
@@ -124,8 +125,17 @@ class Orchestrator:
         task_id: str,
         agent: AgentAdapter,
         agent_id: str,
+        *,
+        context_policy: ContextPolicy | None = None,
     ) -> GateResult:
-        """Run one task from versioned context through transactional integration."""
+        """Run one task from a selected context policy through one shared gate path.
+
+        ``context_policy`` changes only context construction. Leases, provider
+        budget, worktree isolation, candidate creation, staleness detection,
+        transactional integration, recovery, and durable memory processing remain
+        identical across research baselines. Production callers omit the argument
+        and receive the normal B7 provenance-aware runtime policy.
+        """
         task = self.scheduler.get_task(task_id)
         if not task:
             raise ValueError(f"Task {task_id} not found")
@@ -135,8 +145,6 @@ class Orchestrator:
         leases: List[Lease] = []
         worktree_path: Optional[Path] = None
         try:
-            # Acquire all declared file surfaces before authoritative dispatch.
-            # A conflict therefore leaves the task READY and safely retryable.
             leases = self._acquire_task_leases(task_id, agent_id, task.files_declared)
             self.scheduler.dispatch_task(task_id, agent_id)
             dispatch_v = self.event_store.current_version(self.project_id)
@@ -154,18 +162,31 @@ class Orchestrator:
                 dependencies=task.dependencies,
                 token_budget=task.token_budget,
             )
-            retrieval_res = self.retriever.retrieve(context_req)
             projection = self.get_projection()
             leases_info = [
                 {"resource": lease.resource, "fencing_token": lease.fencing_token}
                 for lease in leases
             ]
-            packet = self.compiler.compile(
+            policy = context_policy or RuntimeContextPolicy(self.retriever, self.compiler)
+            build = policy.build(
                 request=context_req,
-                retrieval=retrieval_res,
                 project_state=projection.project.state,
                 task_state=task,
                 active_leases=leases_info,
+            )
+            packet = build.packet
+            self.event_store.append(
+                actor="orchestrator",
+                kind="context.policy_measured",
+                project_id=self.project_id,
+                task_id=task_id,
+                payload={
+                    "context_id": packet.context_id,
+                    "context_policy": build.policy_id,
+                    "retrieval_latency_ms": build.retrieval_latency_ms,
+                    "context_compile_latency_ms": build.compile_latency_ms,
+                    "retrieval_strategies": list(build.retrieval_strategies),
+                },
             )
 
             worktree_path = self.worktree_mgr.create_worktree(task_id)
@@ -241,8 +262,6 @@ class Orchestrator:
                 },
             )
 
-            # Only the integration phase is serialized. The expensive provider
-            # work above remains concurrent across independent tasks.
             async with self._integration_lock:
                 staleness = self.staleness_detector.evaluate_submission(
                     submission=submission,
@@ -262,8 +281,6 @@ class Orchestrator:
                         dispatch_v,
                         project_id=self.project_id,
                     )
-                    # Concurrent tasks can emit events after this task's dispatch.
-                    # Only this accepted task crosses the durable-memory boundary.
                     for event in latest_events:
                         if event.task_id == task_id:
                             self.memory_lifecycle.process_event(event)

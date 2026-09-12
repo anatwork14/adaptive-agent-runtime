@@ -1,6 +1,7 @@
 """Evaluation, benchmarks, fault injection, and reproducible research records."""
 
 from eval.analysis.stats import BootstrapResult, StatisticalAnalyzer
+from eval.baselines.normalized import StaticStructuredContextPolicy, VectorTopKContextPolicy
 from eval.comparison import (
     PairedComparison,
     compare_paired_measurements,
@@ -21,7 +22,12 @@ from eval.models import (
     FaultSpec,
     TaskMeasurement,
 )
-from eval.runners.experiment import ExperimentRunner, ExperimentSummary, TaskMetric
+from eval.runners.experiment import (
+    NORMALIZED_BASELINES,
+    ExperimentRunner,
+    ExperimentSummary,
+    TaskMetric,
+)
 from eval.telemetry import TraceTelemetry, collect_trace_telemetry
 
 __all__ = [
@@ -34,6 +40,9 @@ __all__ = [
     "ExperimentRunner",
     "ExperimentSummary",
     "TaskMetric",
+    "NORMALIZED_BASELINES",
+    "StaticStructuredContextPolicy",
+    "VectorTopKContextPolicy",
     "BenchmarkManifest",
     "EvaluationTaskSpec",
     "FaultSpec",

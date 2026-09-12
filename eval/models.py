@@ -89,9 +89,12 @@ class TaskMeasurement(BaseModel):
     rejection_stage: str | None = None
     context_id: str | None = None
     context_digest: str | None = None
+    context_policy: str | None = None
     context_tokens: int | None = None
     context_hard_budget: int | None = None
     memory_ids: list[str] = Field(default_factory=list)
+    stale_memory_ids: list[str] = Field(default_factory=list)
+    retrieval_strategies: list[str] = Field(default_factory=list)
 
     provider_tokens: int | None = None
     cost_usd: float | None = None

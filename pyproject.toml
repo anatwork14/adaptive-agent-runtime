@@ -4,8 +4,8 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "adaptive-agent-runtime"
-version = "0.11.0"
-description = "Persistent multi-agent coding supervision with reproducible context/memory evaluation, live turns, and transactional integration"
+version = "0.12.0"
+description = "Persistent multi-agent coding supervision with normalized context baselines, reproducible evaluation, and transactional integration"
 readme = "README.md"
 requires-python = ">=3.11"
 license = { text = "Apache-2.0" }

@@ -31,6 +31,7 @@ class ContextPacket(BaseModel):
     agent_id: str
     state_version: int
     compiled_event: int
+    context_policy: str = "B7"
     goal: str
     acceptance_criteria: List[str] = Field(default_factory=list)
     constraints: List[str] = Field(default_factory=list)
@@ -47,13 +48,15 @@ class ContextPacket(BaseModel):
     budget_remaining_tokens: int = 0
     context_token_count: int = 0
     memory_ids: List[str] = Field(default_factory=list)
+    stale_memory_ids: List[str] = Field(default_factory=list)
+    retrieval_strategies: List[str] = Field(default_factory=list)
     digest: str = ""
 
     model_config = {"frozen": True}
 
 
 class ContextCompiler:
-    """Compile authoritative state + derived memory into bounded task context."""
+    """Compile authoritative state + selected memory into bounded task context."""
 
     def __init__(
         self,
@@ -139,6 +142,18 @@ class ContextCompiler:
             used += cost
         return evidence, used
 
+    @staticmethod
+    def _memory_is_stale(memory, state_version: int) -> bool:
+        if memory.status in (
+            MemoryStatus.SUPERSEDED,
+            MemoryStatus.DELETED,
+            MemoryStatus.ARCHIVED,
+        ):
+            return True
+        if memory.valid_from_event > state_version:
+            return True
+        return memory.valid_to_event is not None and memory.valid_to_event < state_version
+
     def compile(
         self,
         request: ContextRequest,
@@ -146,8 +161,17 @@ class ContextCompiler:
         project_state: ProjectState,
         task_state: Optional[TaskState] = None,
         active_leases: Optional[List[Dict[str, Any]]] = None,
+        *,
+        policy_id: str = "B7",
+        enforce_memory_validity: bool = True,
     ) -> ContextPacket:
-        """Compile context while enforcing ``request.token_budget`` as a hard ceiling."""
+        """Compile context while enforcing ``request.token_budget`` as a hard ceiling.
+
+        ``enforce_memory_validity`` defaults to the safe production behavior. It
+        exists so research baselines can intentionally deliver stale/superseded
+        memory while still sharing the exact same packet assembly and execution
+        path. Production callers should not disable it.
+        """
         context_id = f"CTX_{uuid.uuid4().hex[:8]}"
         budgets: ClassBudgets = self.allocator.allocate(
             risk=request.risk,
@@ -185,6 +209,7 @@ class ContextCompiler:
         failures: List[Dict[str, Any]] = []
         procedures: List[Dict[str, Any]] = []
         memory_ids: List[str] = []
+        stale_memory_ids: List[str] = []
 
         class_used = {
             "decisions": 0,
@@ -201,15 +226,8 @@ class ContextCompiler:
 
         for candidate in retrieval.candidates:
             memory = candidate.memory
-            if memory.status in (
-                MemoryStatus.SUPERSEDED,
-                MemoryStatus.DELETED,
-                MemoryStatus.ARCHIVED,
-            ):
-                continue
-            if memory.valid_from_event > request.state_version:
-                continue
-            if memory.valid_to_event is not None and memory.valid_to_event < request.state_version:
+            is_stale = self._memory_is_stale(memory, request.state_version)
+            if is_stale and enforce_memory_validity:
                 continue
 
             cost = max(
@@ -233,6 +251,7 @@ class ContextCompiler:
                     "source_events": memory.source_events,
                     "valid_from_event": memory.valid_from_event,
                     "valid_to_event": memory.valid_to_event,
+                    "status": memory.status.value,
                 }
             elif memory.type == MemoryType.ASSUMPTION:
                 bucket, target = "assumptions", assumptions
@@ -248,6 +267,7 @@ class ContextCompiler:
                 entry = {
                     "memory_id": memory.memory_id,
                     "text": memory.content_text,
+                    "status": memory.status.value,
                     "source_events": memory.source_events,
                 }
             elif memory.type == MemoryType.PROCEDURE:
@@ -255,6 +275,7 @@ class ContextCompiler:
                 entry = {
                     "memory_id": memory.memory_id,
                     "text": memory.content_text,
+                    "status": memory.status.value,
                     "source_events": memory.source_events,
                 }
             else:
@@ -267,6 +288,8 @@ class ContextCompiler:
             class_used[bucket] += cost
             remaining_total -= cost
             memory_ids.append(memory.memory_id)
+            if is_stale:
+                stale_memory_ids.append(memory.memory_id)
 
         code_cap = min(budgets.c2_code, remaining_total)
         code_context, code_tokens = self._code_evidence(
@@ -285,6 +308,8 @@ class ContextCompiler:
             risk_flags.append("HIGH_RISK_TASK")
         if any(item.get("status") == "disputed" for item in assumptions):
             risk_flags.append("CONTRADICTORY_ASSUMPTIONS_PRESENT")
+        if stale_memory_ids:
+            risk_flags.append("STALE_MEMORY_DELIVERED")
         if self.repo_path is None and request.files_declared:
             risk_flags.append("CODE_EVIDENCE_UNAVAILABLE")
 
@@ -295,6 +320,7 @@ class ContextCompiler:
             "agent_id": request.agent_id,
             "state_version": request.state_version,
             "compiled_event": self.event_store.current_version(request.project_id),
+            "context_policy": policy_id,
             "goal": goal,
             "acceptance_criteria": acceptance_criteria,
             "constraints": constraints,
@@ -311,6 +337,8 @@ class ContextCompiler:
             "budget_remaining_tokens": remaining_total,
             "context_token_count": total_tokens,
             "memory_ids": sorted(set(memory_ids)),
+            "stale_memory_ids": sorted(set(stale_memory_ids)),
+            "retrieval_strategies": list(retrieval.strategies_used),
         }
         digest = compute_context_digest(packet_dict)
         packet_dict["digest"] = digest
@@ -326,7 +354,11 @@ class ContextCompiler:
                 "digest": digest,
                 "token_count": total_tokens,
                 "hard_budget": request.token_budget,
+                "context_policy": policy_id,
+                "memory_validity_enforced": enforce_memory_validity,
                 "memory_ids": packet_dict["memory_ids"],
+                "stale_memory_ids": packet_dict["stale_memory_ids"],
+                "retrieval_strategies": packet_dict["retrieval_strategies"],
                 "files_declared": packet_dict["files_declared"],
                 "code_files": [item["path"] for item in code_context],
             },
