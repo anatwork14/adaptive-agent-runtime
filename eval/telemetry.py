@@ -16,9 +16,14 @@ from state.models import Event, GateResult
 class TraceTelemetry:
     context_id: str | None = None
     context_digest: str | None = None
+    context_policy: str | None = None
     context_tokens: int | None = None
     context_hard_budget: int | None = None
     memory_ids: tuple[str, ...] = ()
+    stale_memory_ids: tuple[str, ...] = ()
+    retrieval_strategies: tuple[str, ...] = ()
+    retrieval_latency_ms: float | None = None
+    context_compile_latency_ms: float | None = None
     provider_tokens: int | None = None
     cost_usd: float | None = None
     token_usage_observed: bool = False
@@ -27,6 +32,7 @@ class TraceTelemetry:
     handoff_count: int = 0
     gate_failure_count: int = 0
     candidate_commit_sha: str | None = None
+
 
 
 def collect_trace_telemetry(events: Iterable[Event], gate_result: GateResult) -> TraceTelemetry:
@@ -41,9 +47,14 @@ def collect_trace_telemetry(events: Iterable[Event], gate_result: GateResult) ->
     """
     context_id: str | None = None
     context_digest: str | None = None
+    context_policy: str | None = None
     context_tokens: int | None = None
     context_hard_budget: int | None = None
     memory_ids: tuple[str, ...] = ()
+    stale_memory_ids: tuple[str, ...] = ()
+    retrieval_strategies: tuple[str, ...] = ()
+    retrieval_latency_ms: float | None = None
+    context_compile_latency_ms: float | None = None
     provider_tokens_total = 0
     cost_total = 0.0
     token_observed = False
@@ -60,11 +71,32 @@ def collect_trace_telemetry(events: Iterable[Event], gate_result: GateResult) ->
         if event.kind == "context.compiled":
             context_id = str(payload.get("context_id") or "") or None
             context_digest = str(payload.get("digest") or "") or None
+            context_policy = str(payload.get("context_policy") or "") or context_policy
             raw_tokens = payload.get("token_count")
             raw_budget = payload.get("hard_budget")
             context_tokens = int(raw_tokens) if raw_tokens is not None else None
             context_hard_budget = int(raw_budget) if raw_budget is not None else None
             memory_ids = tuple(str(item) for item in payload.get("memory_ids", []))
+            stale_memory_ids = tuple(
+                str(item) for item in payload.get("stale_memory_ids", [])
+            )
+            retrieval_strategies = tuple(
+                str(item) for item in payload.get("retrieval_strategies", [])
+            )
+        elif event.kind == "context.policy_measured":
+            context_policy = str(payload.get("context_policy") or "") or context_policy
+            raw_retrieval = payload.get("retrieval_latency_ms")
+            raw_compile = payload.get("context_compile_latency_ms")
+            retrieval_latency_ms = (
+                float(raw_retrieval) if raw_retrieval is not None else retrieval_latency_ms
+            )
+            context_compile_latency_ms = (
+                float(raw_compile) if raw_compile is not None else context_compile_latency_ms
+            )
+            if payload.get("retrieval_strategies") is not None:
+                retrieval_strategies = tuple(
+                    str(item) for item in payload.get("retrieval_strategies", [])
+                )
         elif event.kind == "budget.consumed":
             tokens = int(payload.get("tokens", 0) or 0)
             usd = float(payload.get("usd", 0.0) or 0.0)
@@ -85,9 +117,14 @@ def collect_trace_telemetry(events: Iterable[Event], gate_result: GateResult) ->
     return TraceTelemetry(
         context_id=context_id,
         context_digest=context_digest,
+        context_policy=context_policy,
         context_tokens=context_tokens,
         context_hard_budget=context_hard_budget,
         memory_ids=memory_ids,
+        stale_memory_ids=stale_memory_ids,
+        retrieval_strategies=retrieval_strategies,
+        retrieval_latency_ms=retrieval_latency_ms,
+        context_compile_latency_ms=context_compile_latency_ms,
         provider_tokens=provider_tokens_total if token_observed else None,
         cost_usd=cost_total if cost_observed else None,
         token_usage_observed=token_observed,

@@ -9,6 +9,8 @@ from statistics import fmean
 from typing import List, Optional
 
 from adapters.base import AgentAdapter
+from context.policy import ContextPolicy
+from eval.baselines.normalized import StaticStructuredContextPolicy, VectorTopKContextPolicy
 from eval.grading.hidden_tests import HiddenTestGrader
 from eval.models import BenchmarkManifest, EvaluationSummary, TaskMeasurement
 from eval.telemetry import collect_trace_telemetry
@@ -20,9 +22,14 @@ TaskMetric = TaskMeasurement
 ExperimentSummary = EvaluationSummary
 
 
+NORMALIZED_BASELINES = {"B3", "B5", "B7"}
+
+
+
 def _mean(values: list[float | int | None]) -> float | None:
     observed = [float(value) for value in values if value is not None]
     return fmean(observed) if observed else None
+
 
 
 def _p95(values: list[float | None]) -> float | None:
@@ -31,6 +38,7 @@ def _p95(values: list[float | None]) -> float | None:
         return None
     rank = max(1, math.ceil(0.95 * len(observed)))
     return observed[rank - 1]
+
 
 
 def summarize_measurements(measurements: list[TaskMeasurement]) -> EvaluationSummary:
@@ -83,12 +91,12 @@ def summarize_measurements(measurements: list[TaskMeasurement]) -> EvaluationSum
 
 
 class ExperimentRunner:
-    """Run gate-equivalent ARC tasks and collect only observable measurements.
+    """Run normalized context baselines through one ARC execution/gating path.
 
-    v0.11 intentionally starts with B7/runtime execution. Other baseline policies
-    can reuse the same measurement schema once their context construction is made
-    genuinely matched-budget. This prevents a misleading cross-baseline table from
-    being produced before the policies are experimentally comparable.
+    ARC 0.12 normalizes B3, B5, and B7. They differ only in context selection
+    and validity semantics; leases, provider budget, worktree isolation,
+    candidate creation, staleness checks, IntegrationGate, hidden grading, and
+    trace-derived measurement are shared.
     """
 
     def __init__(self, grader: Optional[HiddenTestGrader] = None) -> None:
@@ -132,27 +140,41 @@ class ExperimentRunner:
                     + ", ".join(mismatches)
                 )
 
+    @staticmethod
+    def _context_policy(
+        orchestrator: Orchestrator,
+        baseline: str,
+    ) -> ContextPolicy | None:
+        if baseline == "B7":
+            # None deliberately selects the production RuntimeContextPolicy inside
+            # Orchestrator, keeping the default runtime path itself under test.
+            return None
+        if baseline == "B3":
+            return StaticStructuredContextPolicy(orchestrator.compiler)
+        if baseline == "B5":
+            return VectorTopKContextPolicy(
+                orchestrator.compiler,
+                orchestrator.memory_lifecycle,
+                top_k=5,
+            )
+        raise ValueError(
+            f"baseline {baseline} is not normalized in ARC 0.12; supported: B3, B5, B7"
+        )
+
     async def run_manifest(
         self,
         orchestrator: Orchestrator,
         manifest: BenchmarkManifest,
         agent: AgentAdapter,
     ) -> ExperimentSummary:
-        """Execute a validated B7 manifest from its declared repository base.
-
-        Fault declarations are fail-closed for now: the existing FaultInjector is
-        available, but v0.11 does not silently invent an application schedule for
-        those interventions. Fault-enabled manifests become executable only when
-        the schedule is explicit in the shared baseline runner.
-        """
-        if manifest.baseline != "B7":
+        """Execute a validated normalized manifest from its declared repository base."""
+        if manifest.baseline not in NORMALIZED_BASELINES:
             raise ValueError(
-                "v0.11 run_manifest supports B7 only; normalize B0/B2/B3/B5 behind "
-                "the shared gate/budget runner before comparing them"
+                f"ARC 0.12 normalizes B3/B5/B7 only; {manifest.baseline} remains unsupported"
             )
         if manifest.faults:
             raise ValueError(
-                "fault-enabled manifests are not executable in v0.11 until a deterministic "
+                "fault-enabled manifests are not executable in ARC 0.12 until a deterministic "
                 "fault schedule is wired into the shared runner"
             )
         if (
@@ -183,7 +205,7 @@ class ExperimentRunner:
             agent,
             agent_id=manifest.agent_profile,
             benchmark_id=manifest.benchmark_id,
-            baseline="B7",
+            baseline=manifest.baseline,
             repo_commit=head,
             model=manifest.model,
             seed=manifest.seed,
@@ -206,20 +228,24 @@ class ExperimentRunner:
         fault_kinds: Optional[list[str]] = None,
         hidden_test_patterns: Optional[dict[str, str]] = None,
     ) -> ExperimentSummary:
-        if baseline != "B7":
+        if baseline not in NORMALIZED_BASELINES:
             raise ValueError(
-                "ExperimentRunner currently measures B7 runtime execution only; "
-                "B0/B2/B3/B5 must use the same gate and matched-budget context contract "
-                "before cross-baseline results are valid"
+                f"ExperimentRunner normalizes B3/B5/B7 only; got {baseline}"
             )
         if not task_ids:
             raise ValueError("task_ids cannot be empty")
 
+        context_policy = self._context_policy(orchestrator, baseline)
         measurements: list[TaskMeasurement] = []
         for task_id in task_ids:
             event_start = orchestrator.event_store.current_version(orchestrator.project_id)
             started = time.perf_counter()
-            gate_result = await orchestrator.execute_task(task_id, agent, agent_id)
+            gate_result = await orchestrator.execute_task(
+                task_id,
+                agent,
+                agent_id,
+                context_policy=context_policy,
+            )
             end_to_end_ms = (time.perf_counter() - started) * 1000.0
             event_end = orchestrator.event_store.current_version(orchestrator.project_id)
             events = orchestrator.event_store.read_range(
@@ -228,6 +254,11 @@ class ExperimentRunner:
                 project_id=orchestrator.project_id,
             )
             trace = collect_trace_telemetry(events, gate_result)
+            if trace.context_policy != baseline:
+                raise RuntimeError(
+                    f"task {task_id} emitted context policy {trace.context_policy!r}; "
+                    f"expected {baseline!r}"
+                )
 
             hidden_passed: bool | None = None
             hidden_count: int | None = None
@@ -240,7 +271,7 @@ class ExperimentRunner:
             measurements.append(
                 TaskMeasurement(
                     benchmark_id=benchmark_id,
-                    baseline="B7",
+                    baseline=baseline,
                     task_id=task_id,
                     agent_profile=agent_id,
                     model=model,
@@ -260,10 +291,10 @@ class ExperimentRunner:
                     cost_observed=trace.cost_observed,
                     token_usage_observed=trace.token_usage_observed,
                     end_to_end_latency_ms=end_to_end_ms,
-                    retrieval_latency_ms=None,
-                    context_compile_latency_ms=None,
+                    retrieval_latency_ms=trace.retrieval_latency_ms,
+                    context_compile_latency_ms=trace.context_compile_latency_ms,
                     staleness_score=gate_result.staleness_score,
-                    stale_memories_delivered=None,
+                    stale_memories_delivered=len(trace.stale_memory_ids),
                     retry_count=trace.retry_count,
                     handoff_count=trace.handoff_count,
                     gate_failure_count=trace.gate_failure_count,
