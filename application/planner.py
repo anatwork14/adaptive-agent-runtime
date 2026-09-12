@@ -168,22 +168,43 @@ class DeterministicPlanner:
             )
 
         if len(tasks) > max_tasks:
-            # Deterministic compaction: keep the first max_tasks-1 tasks and
-            # combine the remaining surfaces into one tail task.
-            head = tasks[: max_tasks - 1]
-            tail = tasks[max_tasks - 1 :]
-            merged_files = [path for task in tail for path in task.files]
-            merged_deps = sorted({dep for task in tail for dep in task.dependencies})
+            # Keep a deterministic prefix and fold the rest into one tail task.
+            # Dependencies on tasks folded into the tail become internal work
+            # and therefore must not survive as dangling DAG references.
+            head = tasks[: max_tasks - 1] if max_tasks > 1 else []
+            tail = tasks[max_tasks - 1 :] if max_tasks > 1 else tasks
+            head_keys = {task.key for task in head}
+            merged_files = list(dict.fromkeys(path for task in tail for path in task.files))
+            merged_deps = sorted(
+                {
+                    dep
+                    for task in tail
+                    for dep in task.dependencies
+                    if dep in head_keys
+                }
+            )
+            tail_types = {task.task_type for task in tail}
+            if len(tail_types) == 1:
+                tail_type = next(iter(tail_types))
+                tail_caps = sorted(
+                    {cap for task in tail for cap in task.required_capabilities}
+                )
+            else:
+                # A mixed compacted task must not require one agent to advertise
+                # every specialist capability. Routing can use the task type/role
+                # as a soft signal while the context still contains all surfaces.
+                tail_type = "implementation"
+                tail_caps = []
             head.append(
                 PlanTask(
                     key="tail",
                     goal=f"{objective} — complete remaining planned surfaces",
-                    task_type="implementation",
+                    task_type=tail_type,
                     dependencies=merged_deps,
                     files=merged_files,
                     acceptance=acceptance,
-                    required_capabilities=["implementation"],
-                    risk=risk,
+                    required_capabilities=tail_caps,
+                    risk=max((task.risk for task in tail), default=risk),
                     token_budget=token_budget,
                 )
             )
