@@ -17,11 +17,8 @@ from eval.telemetry import collect_trace_telemetry
 from runtime.orchestrator import Orchestrator
 from state.models import GateStatus
 
-# Backward-compatible names for code importing the original runner types.
 TaskMetric = TaskMeasurement
 ExperimentSummary = EvaluationSummary
-
-
 NORMALIZED_BASELINES = {"B3", "B5", "B7"}
 
 
@@ -146,8 +143,6 @@ class ExperimentRunner:
         baseline: str,
     ) -> ContextPolicy | None:
         if baseline == "B7":
-            # None deliberately selects the production RuntimeContextPolicy inside
-            # Orchestrator, keeping the default runtime path itself under test.
             return None
         if baseline == "B3":
             return StaticStructuredContextPolicy(orchestrator.compiler)
@@ -283,9 +278,12 @@ class ExperimentRunner:
                     rejection_stage=gate_result.rejection_stage,
                     context_id=trace.context_id,
                     context_digest=trace.context_digest,
+                    context_policy=trace.context_policy,
                     context_tokens=trace.context_tokens,
                     context_hard_budget=trace.context_hard_budget,
                     memory_ids=list(trace.memory_ids),
+                    stale_memory_ids=list(trace.stale_memory_ids),
+                    retrieval_strategies=list(trace.retrieval_strategies),
                     provider_tokens=trace.provider_tokens,
                     cost_usd=trace.cost_usd,
                     cost_observed=trace.cost_observed,

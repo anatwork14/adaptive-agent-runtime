@@ -1,0 +1,28 @@
+benchmark_id: normalized-context-sequence
+baseline: B7
+execution_mode: sequence
+seed: 7
+agent_profile: builder
+model: provider-model-name
+repo_commit: 0123456789abcdef
+context_token_budget: 8000
+hard_task_usd: 1.0
+faults: []
+notes: >-
+  Template for normalized B3/B5/B7 comparison. Run each baseline from an
+  independent reset of the same Git/ARC base. B7 uses ARC's production
+  provenance/version-aware retrieval path.
+tasks:
+  - task_id: T001
+    goal: Preserve the public parser API while adding one accepted edge case.
+    files:
+      - src/parser.py
+      - tests/test_parser.py
+    acceptance:
+      - Existing visible tests pass.
+      - The new edge-case test passes.
+    risk: 0.4
+    token_budget: 8000
+    hidden_test_pattern: test_hidden_parser_*.py
+    metadata:
+      category: code-maintenance

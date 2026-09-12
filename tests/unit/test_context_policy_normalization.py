@@ -8,7 +8,7 @@ from context.compiler import ContextCompiler
 from context.digest import compute_context_digest
 from context.policy import RuntimeContextPolicy
 from context.request import ContextRequest
-from context.retrieval import MemoryRetriever
+from context.retrieval import MemoryRetriever, RetrievalResult
 from eval.baselines.normalized import StaticStructuredContextPolicy, VectorTopKContextPolicy
 from memory.lifecycle import MemoryLifecycle
 from memory.models import Memory, MemoryRepresentation, MemoryStatus, MemoryType
@@ -45,8 +45,6 @@ def test_compiled_packet_digest_matches_final_immutable_packet(tmp_path) -> None
         goal=task.goal,
         token_budget=task.token_budget,
     )
-
-    from context.retrieval import RetrievalResult
 
     packet = compiler.compile(request, RetrievalResult(), project, task)
 
@@ -116,11 +114,13 @@ def test_b3_b5_b7_change_only_context_selection_semantics(tmp_path) -> None:
     assert b3.packet.context_policy == "B3"
     assert b3.packet.memory_ids == []
     assert b3.packet.stale_memory_ids == []
+    assert b3.retrieval_strategies == ("static_no_memory",)
 
     assert b5.packet.context_policy == "B5"
     assert "M_STALE" in b5.packet.memory_ids
     assert "M_STALE" in b5.packet.stale_memory_ids
     assert "STALE_MEMORY_DELIVERED" in b5.packet.risk_flags
+    assert b5.retrieval_strategies == ("naive_vector_topk:k=5",)
 
     assert b7.packet.context_policy == "B7"
     assert "M_STALE" not in b7.packet.memory_ids

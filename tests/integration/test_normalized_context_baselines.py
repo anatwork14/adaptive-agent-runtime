@@ -58,13 +58,21 @@ def test_normalized_baselines_share_transactional_execution_path(tmp_path: Path,
         assert summary.resolved_rate == pytest.approx(1.0)
         measurement = runner.last_measurements[0]
         assert measurement.baseline == baseline
+        assert measurement.context_policy == baseline
         assert measurement.context_hard_budget == 8000
         assert measurement.context_tokens is not None
         assert measurement.context_tokens <= 8000
         assert measurement.retrieval_latency_ms is not None
         assert measurement.context_compile_latency_ms is not None
         assert measurement.stale_memories_delivered == 0
+        assert measurement.stale_memory_ids == []
         assert measurement.candidate_commit_sha
+        assert measurement.retrieval_strategies
+
+        if baseline == "B3":
+            assert measurement.retrieval_strategies == ["static_no_memory"]
+        elif baseline == "B5":
+            assert measurement.retrieval_strategies == ["naive_vector_topk:k=5"]
 
         task_events = arc.event_store.read_all(project_id=arc.project_id)
         task_events = [event for event in task_events if event.task_id == task.task_id]

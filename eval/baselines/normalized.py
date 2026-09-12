@@ -83,6 +83,10 @@ class VectorTopKContextPolicy:
         self.memory_lifecycle = memory_lifecycle
         self.top_k = top_k
 
+    @property
+    def strategy_id(self) -> str:
+        return f"naive_vector_topk:k={self.top_k}"
+
     def _project_memories(self, project_id: str) -> list[Memory]:
         """Replay the latest materialized value for every persisted memory.
 
@@ -114,7 +118,7 @@ class VectorTopKContextPolicy:
         if not memories:
             return RetrievalResult(
                 candidates=[],
-                strategies_used=["naive_vector_topk"],
+                strategies_used=[self.strategy_id],
                 total_found=0,
             )
 
@@ -140,13 +144,13 @@ class VectorTopKContextPolicy:
             ScoredCandidate(
                 memory=by_id[memory_id],
                 score=float(score),
-                retrieval_strategy="naive_vector_topk",
+                retrieval_strategy=self.strategy_id,
             )
             for memory_id, score in hits
         ]
         return RetrievalResult(
             candidates=candidates,
-            strategies_used=["naive_vector_topk"],
+            strategies_used=[self.strategy_id],
             total_found=len(candidates),
         )
 
