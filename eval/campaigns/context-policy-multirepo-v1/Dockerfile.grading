@@ -33,8 +33,18 @@ RUN python -m pip install --no-cache-dir \
     "uvicorn==0.35.0" \
     "ipython"
 
+# python-dotenv's upstream tests invoke the installed `dotenv` console script.
+# Installing python-dotenv into the image would reintroduce the exact ambiguity
+# this campaign is preventing, so expose a tiny launcher that always resolves
+# `python -m dotenv` through the candidate PYTHONPATH instead.
+RUN printf '%s\n' \
+    '#!/bin/sh' \
+    'exec python -m dotenv "$@"' \
+    > /usr/local/bin/dotenv \
+    && chmod 0755 /usr/local/bin/dotenv
+
 RUN useradd --create-home --uid 10001 arc
 USER arc
 WORKDIR /workspace
 
-CMD ["python", "-m", "pytest", "-q", "-m", "not network"]
+CMD ["python", "-m", "pytest", "-q", "-m", "not network", "-o", "cache_dir=/tmp/pytest-cache"]
