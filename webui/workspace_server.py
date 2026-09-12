@@ -1,7 +1,8 @@
 """ARC Workspace — session-centric localhost UI and API.
 
-This v0.6 surface complements the v0.5 mission dashboard. It treats persistent
-workers as the primary UI object while keeping tasks/events/gates authoritative.
+The Workspace treats persistent workers as the primary UI object while keeping
+tasks, events, candidate commits, and gates authoritative. External GitHub
+review state is mounted as a non-authoritative integration surface.
 """
 
 from __future__ import annotations
@@ -20,6 +21,7 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
 from application.session_app import SessionArcApplication
+from webui.review_routes import register_review_routes
 
 
 class CreateTaskRequest(BaseModel):
@@ -100,7 +102,7 @@ def create_workspace_app(
     static_dir = Path(__file__).parent / "static"
     app = FastAPI(
         title="ARC Workspace",
-        version="0.6.0",
+        version="0.7.0",
         docs_url="/api/docs",
         redoc_url=None,
     )
@@ -264,6 +266,7 @@ def create_workspace_app(
                         for event in arc.task_events(session.task_id, limit=120)
                     ],
                     "terminal_command": "arc attach " + session_id,
+                    "review": arc.reviews.status(session_id).model_dump(mode="json"),
                 }
         except HTTPException:
             raise
@@ -331,6 +334,8 @@ def create_workspace_app(
                 return {"diff": arc.sessions.diff(session_id)}
         except Exception as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    register_review_routes(app, service)
 
     @app.websocket("/ws/events")
     async def websocket_events(websocket: WebSocket) -> None:

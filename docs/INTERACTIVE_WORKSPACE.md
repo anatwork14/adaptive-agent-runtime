@@ -1,17 +1,18 @@
 # ARC Interactive Workspace
 
-ARC 0.6 adds two product surfaces above the same authoritative runtime:
+ARC 0.7 exposes three layers above the same authoritative runtime:
 
 ```text
-arc       → conversation-first terminal supervisor
-arc ui    → session-centric browser workspace
+arc            → conversation-first terminal supervisor
+arc ui         → session-centric browser workspace
+arc supervise  → GitHub PR / CI / review supervisor
 ```
 
-Both operate on the same task DAG, event log, provider profiles, ContextPackets, isolated Git worktrees, budgets, leases, and integration gate.
+All three operate on the same task DAG, event log, provider profiles, ContextPackets, isolated Git worktrees, budgets, leases, and integration gate.
 
 ## Product model
 
-ARC keeps **Task** and **WorkerSession** separate.
+ARC keeps **Task**, **WorkerSession**, and external **ReviewStatus** separate.
 
 A task is authoritative work:
 
@@ -40,7 +41,20 @@ WorkerSession
 └── submit/gate result
 ```
 
-The task remains authoritative. A conversation does not make work complete. Only a candidate that passes ARC's integration gate becomes integrated project state.
+GitHub review state is an external projection:
+
+```text
+ReviewStatus
+├── PR number + URL
+├── check states
+├── review decision
+├── inline/general review feedback
+├── snapshot digest
+├── actionable-feedback digest
+└── applied-feedback digest
+```
+
+The task remains authoritative. A conversation, pull request, green GitHub check, or approval does not make ARC work complete. Only a candidate that passes ARC's integration gate becomes integrated project state.
 
 ## Start the interactive CLI
 
@@ -85,11 +99,117 @@ Inspect before integration:
 /diff
 ```
 
-Submit explicitly:
+## Closed-loop GitHub review
+
+ARC delegates GitHub authentication to the existing `gh` CLI. It does not copy or persist GitHub tokens.
+
+Check the integration first:
+
+```bash
+gh auth status
+```
+
+From the focused interactive worker:
 
 ```text
-/submit
+/publish
 ```
+
+or script it directly:
+
+```bash
+arc session publish S_12345678
+```
+
+ARC commits the current draft if necessary, pushes the worker branch, and creates a pull request. Later calls push updates to the same PR.
+
+Synchronize checks and reviews:
+
+```text
+/review
+```
+
+or:
+
+```bash
+arc session review S_12345678
+```
+
+When GitHub reports a failing check or requested review change, ARC records normalized external state in its own event stream. Actionable feedback is visible in the same worker session.
+
+Apply the latest new feedback to the owning worker:
+
+```text
+/fix-review
+```
+
+or:
+
+```bash
+arc session review S_12345678 --apply
+```
+
+For ongoing synchronization:
+
+```bash
+arc supervise
+```
+
+To automatically route new actionable feedback into linked workers:
+
+```bash
+arc supervise --auto-apply
+```
+
+Run one synchronization pass for scripts/cron/systemd:
+
+```bash
+arc supervise --once
+arc supervise --once --auto-apply
+```
+
+The supervisor only acts on PR-linked active worker sessions.
+
+### Review events
+
+GitHub remains non-authoritative. ARC records the external projection as events:
+
+```text
+session.pr_published
+session.pr_updated
+session.review_synced
+session.review_feedback
+session.review_feedback_applied
+session.review_feedback_cleared
+session.review_sync_failed
+```
+
+Snapshot state and actionable feedback use separate digests. This prevents the same reviewer instruction from being sent back to an agent merely because an unrelated check/merge state changed.
+
+## Exact candidate after PR iteration
+
+A PR-backed worker may accumulate several commits:
+
+```text
+worker branch
+  A  initial implementation
+  B  CI fix
+  C  reviewer-requested fix
+```
+
+ARC's integration gate deliberately verifies exactly one immutable candidate. ARC therefore does **not** force-squash or rewrite the public review branch.
+
+At submit time, when the worker branch contains multiple unique commits, ARC creates an unattached synthetic squash candidate:
+
+```text
+review branch A-B-C  ──tree──► synthetic candidate S
+                                  parent = merge-base
+                                  tree   = current worker HEAD
+```
+
+`S` represents the complete worker branch delta in one immutable commit. The gate cherry-picks and verifies `S`; the published PR history remains untouched.
+
+A clean branch with no worker-authored commits still fails closed as a no-op.
 
 ## Scriptable worker lifecycle
 
@@ -102,6 +222,9 @@ arc session show S_12345678
 arc session send S_12345678 "add the edge-case tests"
 arc session files S_12345678
 arc session diff S_12345678
+arc session publish S_12345678
+arc session review S_12345678
+arc session review S_12345678 --apply
 arc session submit S_12345678
 ```
 
@@ -171,21 +294,25 @@ The UI is inspired by modern local agent-supervision workspaces: a project orche
 For a persistent session the inspector exposes:
 
 - **Chat** — send the next worker instruction;
-- **Files** — changed file surface;
-- **Diff** — current unsubmitted draft;
+- **Files** — uncommitted changed file surface;
+- **Diff** — current uncommitted draft;
+- **Review** — PR link, checks, requested changes, pending feedback, publish/sync/apply controls;
 - **Context** — the immutable initial ContextPacket;
-- **Events** — authoritative task/session trail;
+- **Events** — authoritative task/session/review trail;
 - **Terminal** — trusted `arc attach SESSION` command.
 
-Actions are explicit:
+Actions remain explicit:
 
 ```text
 Open worker
+Publish PR / Push update
+Sync review
+Apply feedback
 Submit
 Stop
 ```
 
-The browser never interprets chat output as a successful patch. Submission still creates a Git candidate and invokes the normal ARC gate.
+The browser never interprets chat output or a green GitHub PR as a successful ARC patch. Submission still creates an immutable Git candidate and invokes the normal ARC gate.
 
 ## Persistence model
 
@@ -195,9 +322,11 @@ Session durability comes from two places:
 append-only ARC events  +  persistent isolated Git worktree
 ```
 
-ARC deliberately does **not** promise that a vendor terminal process survives application restart. Process handles are ephemeral OS resources. After a restart, ARC reconstructs the worker and can launch another provider turn against the same draft worktree.
+Review-loop continuity also comes from ARC events. `arc supervise` is a foreground supervisor process; if that process stops, the PR linkage and last normalized review state remain replayable and synchronization can resume later.
 
-This makes recovery explicit and replayable.
+ARC deliberately does **not** claim that a vendor terminal process survives application restart. Process handles are ephemeral OS resources. After a restart, ARC reconstructs the worker and can launch another provider turn against the same draft worktree.
+
+This makes recovery explicit instead of pretending that PIDs are durable project state.
 
 ## Session events
 
@@ -210,6 +339,11 @@ session.resumed
 session.needs_input
 session.terminal_started
 session.terminal_stopped
+session.pr_published
+session.pr_updated
+session.review_synced
+session.review_feedback
+session.review_feedback_applied
 session.submitted
 session.accepted
 session.rejected
@@ -217,7 +351,7 @@ session.failed
 session.stopped
 ```
 
-The transcript is useful operational context, while task/gate/Git facts determine project correctness.
+The transcript and review projection are useful operational context, while task/gate/Git facts determine project correctness.
 
 ## Relationship to fleet orchestration
 
@@ -236,6 +370,8 @@ For supervised execution:
 ```bash
 arc session open T001
 arc session send ...
+arc session publish ...
+arc session review ... --apply
 arc session submit ...
 ```
 
@@ -247,11 +383,13 @@ Both routes converge on the same integration gate.
 
 Do not expose it to an untrusted network. `--allow-remote` only disables the loopback guard; it does not add authentication.
 
-Provider-native authentication remains owned by each provider CLI.
+Provider-native authentication remains owned by each provider CLI. GitHub authentication remains owned by `gh`.
+
+ARC does not put provider or GitHub credentials into `.arc/`, session events, or browser payloads.
 
 ## Current boundaries
 
-Implemented in v0.6:
+Implemented through v0.7:
 
 - persistent worker metadata and transcript;
 - persistent worktree across ARC restart;
@@ -260,13 +398,17 @@ Implemented in v0.6:
 - files/diff/context/event inspection;
 - explicit submit through ARC's transactional gate;
 - interactive terminal shell;
-- session-centric local browser workspace.
+- session-centric local browser workspace;
+- GitHub PR publishing/updating through existing `gh` auth;
+- normalized CI/review/inline-comment ingestion;
+- actionable review feedback routed to the owning worker;
+- foreground multi-worker review supervision;
+- digest-based external-state and feedback deduplication;
+- exact synthetic squash candidate for multi-commit reviewed branches.
 
-Not yet implemented:
+Still open after v0.7:
 
-- durable PTY multiplexing across daemon restarts;
-- per-worker browser preview;
-- GitHub pull-request / CI / review ingestion;
-- automatic review comments routed back to the owning worker;
+- per-worker browser/application preview;
+- stronger daemon/PTY supervision for long-lived provider processes;
 - remote multi-user auth/RBAC;
 - desktop packaging.
