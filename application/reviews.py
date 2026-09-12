@@ -170,10 +170,15 @@ class ReviewLoopManager:
 
         dirty = bool(self._git(workspace, ["status", "--porcelain"]).stdout.strip())
         if dirty:
-            commit_sha = self.app.orchestrator.worktree_mgr.commit_candidate(
+            # commit_candidate commits staged draft changes onto the task branch.
+            # On a multi-commit review branch it may return an unattached squash
+            # SHA for the ARC gate. A PR event must instead record the actual
+            # public branch HEAD that `git push` publishes.
+            self.app.orchestrator.worktree_mgr.commit_candidate(
                 session.task_id,
                 message=f"arc({session.task_id}): publish worker review from {session.agent_name}",
             )
+            commit_sha = self._git(workspace, ["rev-parse", "HEAD"]).stdout.strip()
         else:
             commit_sha = self._git(workspace, ["rev-parse", "HEAD"]).stdout.strip()
             if not existing.linked:
