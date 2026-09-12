@@ -79,6 +79,7 @@ include = [
 
 [tool.setuptools.package-data]
 webui = ["static/*"]
+eval = ["examples/*.yaml"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
