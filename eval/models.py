@@ -16,11 +16,15 @@ ExecutionMode = Literal["sequence"]
 
 
 class EvaluationTaskSpec(BaseModel):
-    """One benchmark task with a fixed correctness contract."""
+    """One benchmark task with a fixed correctness/context contract."""
 
     task_id: str = Field(min_length=1)
     goal: str = Field(min_length=1)
+    task_type: str = Field(default="code", min_length=1)
+    required_capabilities: list[str] = Field(default_factory=list)
+    dependencies: list[str] = Field(default_factory=list)
     files: list[str] = Field(default_factory=list)
+    symbols: list[str] = Field(default_factory=list)
     acceptance: list[str] = Field(default_factory=list)
     risk: float = Field(default=0.5, ge=0.0, le=1.0)
     token_budget: int = Field(default=24000, ge=1)
@@ -48,13 +52,14 @@ class BenchmarkManifest(BaseModel):
     repo_commit: str = Field(min_length=7, max_length=40, pattern=r"^[0-9a-fA-F]+$")
     context_token_budget: int = Field(ge=1)
     hard_task_usd: float | None = Field(default=None, ge=0.0)
+    project_constraints: list[str] = Field(default_factory=list)
     tasks: list[EvaluationTaskSpec] = Field(min_length=1)
     faults: list[FaultSpec] = Field(default_factory=list)
     notes: str = ""
 
     @model_validator(mode="after")
-    def enforce_matched_task_budget(self) -> "BenchmarkManifest":
-        """Prevent accidental baseline comparisons with different declared budgets."""
+    def enforce_sequence_contract(self) -> "BenchmarkManifest":
+        """Keep matched budgets and ordered dependencies explicit/replayable."""
         mismatched = [
             task.task_id
             for task in self.tasks
@@ -66,6 +71,18 @@ class BenchmarkManifest(BaseModel):
                 "all tasks must use manifest context_token_budget for matched-budget "
                 f"evaluation; mismatched tasks: {joined}"
             )
+
+        seen: set[str] = set()
+        for task in self.tasks:
+            if task.task_id in seen:
+                raise ValueError(f"duplicate benchmark task_id: {task.task_id}")
+            unknown = [dependency for dependency in task.dependencies if dependency not in seen]
+            if unknown:
+                raise ValueError(
+                    f"task {task.task_id} dependencies must reference earlier sequence tasks: "
+                    + ", ".join(unknown)
+                )
+            seen.add(task.task_id)
         return self
 
 
