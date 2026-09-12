@@ -43,6 +43,19 @@ from eval.runners.repeated import (
     aggregate_repeated_results,
     balanced_execution_orders,
 )
+from eval.studies import (
+    PRIMARY_METRICS,
+    PreregisteredStudy,
+    StudyDesign,
+    StudyRuntimeContract,
+    compute_plan_digest,
+    create_preregistration,
+    export_study_tidy,
+    load_preregistration,
+    save_preregistration,
+    tree_digest,
+    validate_execution_environment,
+)
 from eval.telemetry import TraceTelemetry, collect_trace_telemetry
 
 __all__ = [
@@ -83,4 +96,15 @@ __all__ = [
     "RepeatedPairedBenchmarkRunner",
     "aggregate_repeated_results",
     "balanced_execution_orders",
+    "PRIMARY_METRICS",
+    "PreregisteredStudy",
+    "StudyDesign",
+    "StudyRuntimeContract",
+    "compute_plan_digest",
+    "create_preregistration",
+    "load_preregistration",
+    "save_preregistration",
+    "tree_digest",
+    "validate_execution_environment",
+    "export_study_tidy",
 ]

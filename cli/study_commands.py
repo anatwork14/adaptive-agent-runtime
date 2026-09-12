@@ -1,0 +1,267 @@
+"""Pre-registration, execution, and tidy export commands for ARC research studies."""
+
+from __future__ import annotations
+
+import asyncio
+from pathlib import Path
+from typing import Optional
+
+import typer
+from rich.console import Console
+from rich.table import Table
+
+from application.agents import build_agent, doctor_profile
+from application.config import ConfigStore
+from eval.io import load_manifest
+from eval.runners.repeated import AggregateMetric, RepeatedPairedBenchmarkRunner
+from eval.studies.export import export_study_tidy
+from eval.studies.preregistration import (
+    create_preregistration,
+    load_preregistration,
+    save_preregistration,
+    validate_execution_environment,
+)
+
+
+console = Console()
+
+
+def _fmt_metric(metric: AggregateMetric, digits: int = 4) -> str:
+    if metric.mean_delta is None:
+        return "-"
+    lower = metric.ci_lower if metric.ci_lower is not None else metric.mean_delta
+    upper = metric.ci_upper if metric.ci_upper is not None else metric.mean_delta
+    return (
+        f"{metric.mean_delta:+.{digits}f} "
+        f"[{lower:+.{digits}f}, {upper:+.{digits}f}] "
+        f"n={metric.sample_count}"
+    )
+
+
+def _print_result(result) -> None:
+    table = Table(title=f"Preregistered study // {result.study_id}")
+    table.add_column("Pair", style="cyan")
+    table.add_column("W/T/L", justify="right")
+    table.add_column("Δ resolved")
+    table.add_column("Δ context")
+    table.add_column("Δ cost")
+    for aggregate in result.aggregates:
+        table.add_row(
+            f"{aggregate.baseline_a}-{aggregate.baseline_b}",
+            f"{aggregate.wins_a}/{aggregate.ties}/{aggregate.wins_b}",
+            _fmt_metric(aggregate.resolved_rate_delta),
+            _fmt_metric(aggregate.mean_context_tokens_delta, digits=1),
+            _fmt_metric(aggregate.mean_cost_usd_delta, digits=6),
+        )
+    console.print(table)
+    console.print(f"artifacts={result.artifact_dir}")
+
+
+def _load_configured_profile(manifests, repo: Path, project_id: Optional[str]):
+    profiles = {manifest.agent_profile for manifest in manifests}
+    models = {manifest.model for manifest in manifests}
+    if len(profiles) != 1:
+        raise typer.BadParameter("all manifests must declare one agent_profile")
+    if len(models) != 1:
+        raise typer.BadParameter("all manifests must declare one model")
+    config = ConfigStore(repo).load(project_id)
+    profile_name = next(iter(profiles))
+    profile = config.agents.get(profile_name)
+    if profile is None:
+        raise typer.BadParameter(
+            f"manifest agent_profile {profile_name!r} is not configured in ARC"
+        )
+    declared_model = next(iter(models))
+    if declared_model != profile.model:
+        raise typer.BadParameter(
+            "manifest model does not match configured agent profile: "
+            f"manifest={declared_model!r}, profile={profile.model!r}"
+        )
+    return config, profile
+
+
+def register_study_commands(benchmark_app: typer.Typer) -> None:
+    @benchmark_app.command("preregister")
+    def preregister_benchmark(
+        manifests: list[Path] = typer.Argument(
+            ...,
+            help="Matched B3/B5/B7 manifests to embed into the frozen study plan.",
+        ),
+        repo: Path = typer.Option(Path("."), help="Source Git repository under evaluation"),
+        project_id: Optional[str] = typer.Option(
+            None,
+            help="ARC config project override used only to resolve the agent profile",
+        ),
+        study_id: str = typer.Option(..., help="Stable preregistered study identifier"),
+        output: Path = typer.Option(
+            Path("arc-study-plan.json"),
+            help="New preregistration JSON file; existing files are never overwritten",
+        ),
+        repeats: int = typer.Option(6, min=2),
+        bootstrap_samples: int = typer.Option(2000, min=1),
+        ci: float = typer.Option(0.95, min=0.01, max=0.99),
+        hidden_test_dir: Optional[Path] = typer.Option(
+            None,
+            help="Optional external hidden-test tree to hash into the frozen contract",
+        ),
+        exclusion: list[str] = typer.Option(
+            [],
+            "--exclude",
+            help="Predeclared exclusion rule; repeat to register multiple rules",
+        ),
+    ) -> None:
+        """Freeze manifests, execution settings, analysis choices, and test digest."""
+        try:
+            if len(manifests) < 2:
+                raise typer.BadParameter("preregistration requires at least two manifests")
+            if output.exists():
+                raise typer.BadParameter(
+                    f"preregistration output already exists; choose a new path: {output}"
+                )
+            loaded = [load_manifest(path) for path in manifests]
+            config, profile = _load_configured_profile(loaded, repo, project_id)
+            plan = create_preregistration(
+                loaded,
+                repo,
+                study_id=study_id,
+                provider=profile.provider,
+                profile_role=profile.role,
+                profile_capabilities=profile.capabilities,
+                visible_test_cmd=config.visible_test_cmd,
+                hard_project_usd=config.hard_project_usd,
+                hidden_test_dir=hidden_test_dir,
+                repeats=repeats,
+                bootstrap_samples=bootstrap_samples,
+                ci=ci,
+                exclusions=exclusion,
+            )
+            saved = save_preregistration(output, plan)
+            console.print(f"preregistration={saved.resolve()}")
+            console.print(f"plan_digest={plan.plan_digest}")
+            console.print(f"repo_commit={plan.canonical_repo_commit}")
+            console.print("comparisons=" + ",".join(plan.planned_comparisons))
+            console.print(
+                "[dim]Provider login is not required to preregister. `run-plan` "
+                "revalidates the frozen contract and requires provider readiness.[/dim]"
+            )
+        except typer.BadParameter:
+            raise
+        except Exception as exc:
+            raise typer.BadParameter(str(exc)) from exc
+
+    @benchmark_app.command("run-plan")
+    def run_preregistered_plan(
+        plan_file: Path = typer.Argument(..., help="Preregistered ARC study plan JSON"),
+        repo: Path = typer.Option(Path("."), help="Source Git repository under evaluation"),
+        project_id: Optional[str] = typer.Option(
+            None,
+            help="ARC config project override used only to resolve the agent profile",
+        ),
+        attempt_id: str = typer.Option(
+            "a001",
+            help="Explicit attempt identifier retained in provenance; change it for retries",
+        ),
+        output_root: Optional[Path] = typer.Option(
+            None,
+            help="Persistent benchmark artifacts; defaults outside the source repository",
+        ),
+        workspace_root: Optional[Path] = typer.Option(
+            None,
+            help="Disposable benchmark runtime root; defaults outside the source repository",
+        ),
+        hidden_test_dir: Optional[Path] = typer.Option(
+            None,
+            help="External hidden-test tree; must match the preregistered digest",
+        ),
+    ) -> None:
+        """Execute exactly the frozen preregistered repeated-study contract."""
+        try:
+            if not attempt_id or any(ch.isspace() for ch in attempt_id):
+                raise typer.BadParameter(
+                    "attempt_id must be a non-empty token without whitespace"
+                )
+            plan = load_preregistration(plan_file)
+            config = ConfigStore(repo).load(project_id)
+            profile = config.agents.get(plan.runtime.agent_profile)
+            if profile is None:
+                raise typer.BadParameter(
+                    f"preregistered agent_profile {plan.runtime.agent_profile!r} "
+                    "is not configured in ARC"
+                )
+            doctor = doctor_profile(profile)
+            if doctor.status != "READY":
+                raise typer.BadParameter(
+                    f"agent profile {profile.name!r} is {doctor.status}: {doctor.detail}"
+                )
+            validate_execution_environment(
+                plan,
+                repo,
+                provider=profile.provider,
+                model=profile.model,
+                profile_role=profile.role,
+                profile_capabilities=profile.capabilities,
+                visible_test_cmd=config.visible_test_cmd,
+                hard_project_usd=config.hard_project_usd,
+                hidden_test_dir=hidden_test_dir,
+                verification_level=plan.runtime.verification_level,
+            )
+
+            runner = RepeatedPairedBenchmarkRunner(
+                repo,
+                output_root=output_root,
+                workspace_root=workspace_root,
+                verification_level=plan.runtime.verification_level,
+                visible_test_cmd=config.visible_test_cmd or None,
+                hard_project_usd=config.hard_project_usd,
+                hidden_test_dir=hidden_test_dir,
+            )
+            executed_study_id = f"{plan.study_id}-{attempt_id}"
+            result = asyncio.run(
+                runner.run(
+                    plan.manifests,
+                    lambda: build_agent(profile),
+                    repeats=plan.design.repeats,
+                    study_id=executed_study_id,
+                    n_bootstraps=plan.design.bootstrap_samples,
+                    ci=plan.design.ci,
+                    provenance_extra={
+                        "provider": profile.provider,
+                        "profile_role": profile.role,
+                        "profile_capabilities": list(profile.capabilities),
+                        "preregistered": True,
+                        "preregistered_study_id": plan.study_id,
+                        "attempt_id": attempt_id,
+                        "plan_digest": plan.plan_digest,
+                        "predeclared_exclusions": list(plan.design.exclusions),
+                    },
+                )
+            )
+            _print_result(result)
+            console.print(f"plan_digest={plan.plan_digest}")
+            console.print(
+                "[dim]Retries require a new explicit attempt ID and remain separate "
+                "artifact trees; ARC never silently overwrites an earlier attempt.[/dim]"
+            )
+        except typer.BadParameter:
+            raise
+        except Exception as exc:
+            raise typer.BadParameter(str(exc)) from exc
+
+    @benchmark_app.command("export")
+    def export_benchmark_study(
+        study_dir: Path = typer.Argument(
+            ...,
+            help="Completed repeated-study artifact directory",
+        ),
+        output_dir: Optional[Path] = typer.Option(
+            None,
+            help="Export destination; defaults to <study>/exports",
+        ),
+    ) -> None:
+        """Export task-, repetition-, and pair-level tidy CSV/JSONL tables offline."""
+        try:
+            outputs = export_study_tidy(study_dir, output_dir)
+            for name, path in outputs.items():
+                console.print(f"{name}={path}")
+        except Exception as exc:
+            raise typer.BadParameter(str(exc)) from exc

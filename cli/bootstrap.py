@@ -2,6 +2,9 @@
 
 from cli.benchmark import benchmark_app
 from cli.launcher import app
+from cli.study_commands import register_study_commands
+
+register_study_commands(benchmark_app)
 
 # Keep research tooling isolated from the interactive/session modules while
 # registering it on the same Typer application used by `cli.product`.
