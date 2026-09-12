@@ -58,6 +58,7 @@ Example:
 ```yaml
 benchmark_id: arc-context-iso-budget
 baseline: B7
+execution_mode: sequence
 seed: 7
 agent_profile: builder
 model: provider-model-name
@@ -75,6 +76,29 @@ tasks:
 ```
 
 Every task must use the manifest's `context_token_budget`. This is an intentional fail-closed rule for matched-budget experiments.
+
+### Ordered long-horizon sequence semantics
+
+ARC 0.11 supports `execution_mode: sequence`. A manifest is therefore an **ordered long-horizon scenario**, not a bag of independent benchmark tasks.
+
+```text
+repo_commit S0
+    ↓
+T001 → accepted code + validated memory → S1
+    ↓
+T002 sees S1                         → S2
+    ↓
+T003 sees S2                         → S3
+```
+
+An accepted earlier task can change the Git tree, authoritative event state, and validated memory available to later tasks. Consequently:
+
+- task order is part of the experimental treatment;
+- two manifests with the same task IDs in a different order are **not comparable**;
+- paired baseline runs must start from the same repository commit and use the same ordered task sequence;
+- ARC 0.11 must not be described as independently resetting the repository for every task.
+
+Independent-task evaluation would require an explicit reset/fork execution mode with isolated initial state for each task. That mode is intentionally not claimed or silently emulated in 0.11.
 
 See `eval/examples/iso_budget_b7.yaml`.
 
@@ -98,6 +122,7 @@ The next evaluation step is to migrate those baseline policies behind one shared
 
 Before two baseline result sets are compared, `validate_comparable_manifests(a, b)` requires equality of:
 
+- execution mode;
 - repository commit;
 - context token budget;
 - per-task USD ceiling;
@@ -105,7 +130,7 @@ Before two baseline result sets are compared, `validate_comparable_manifests(a, 
 - model;
 - seed;
 - fault declarations;
-- task IDs;
+- **ordered** task IDs;
 - goals;
 - declared files;
 - acceptance criteria;
@@ -115,7 +140,7 @@ Before two baseline result sets are compared, `validate_comparable_manifests(a, 
 
 Only the baseline policy may differ.
 
-This prevents an apparent improvement from actually being caused by a larger context window, different model, easier tests, different source tree, or different fault schedule.
+This prevents an apparent improvement from actually being caused by a larger context window, different model, easier tests, different source tree, reordered long-horizon scenario, or different fault schedule.
 
 ## Task measurements
 
@@ -237,7 +262,7 @@ B5 vector top-k
 B7 versioned/provenance-aware ARC
 ```
 
-under the same repository SHA, task set, model, seed, hidden tests, fault schedule, token budget, and USD ceiling.
+under the same repository SHA, **ordered task sequence**, model, seed, hidden tests, fault schedule, token budget, and USD ceiling.
 
 B2 should then stress handoff depth, and B0 should provide a single-agent control.
 
@@ -265,7 +290,8 @@ ARC 0.11 does **not** claim:
 - all providers expose trustworthy billing/token telemetry;
 - retrieval/compile phase latency is already separately measured;
 - stale-memory delivery can already be reconstructed perfectly for every historical baseline;
-- the prototype B0/B2/B3/B5 implementations are already fair iso-budget competitors.
+- the prototype B0/B2/B3/B5 implementations are already fair iso-budget competitors;
+- manifest tasks are independent resets from the same repository state.
 
 Those are experiment and baseline-normalization tasks, not facts to fill in by assumption.
 
