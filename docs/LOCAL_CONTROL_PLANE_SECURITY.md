@@ -13,7 +13,7 @@ arc ui   → http://127.0.0.1:8788
 arc web  → http://127.0.0.1:8787
 ```
 
-Valid bind targets are loopback addresses/names such as:
+Valid bind targets are explicit localhost names or literal loopback addresses such as:
 
 ```text
 127.0.0.1
@@ -36,7 +36,7 @@ Binding to loopback prevents direct remote network exposure, but a malicious pub
 
 ARC therefore validates browser `Origin` headers on both local control planes.
 
-Accepted browser origins must use HTTP(S) and resolve entirely to loopback, for example:
+Accepted browser origins must use HTTP(S) plus an explicit localhost name or a literal loopback IP, for example:
 
 ```text
 http://127.0.0.1:8788
@@ -44,10 +44,11 @@ http://localhost:8788
 http://[::1]:8788
 ```
 
-External or opaque origins are rejected, for example:
+ARC deliberately does not trust arbitrary DNS aliases simply because they happen to resolve to loopback. External, opaque, and DNS-alias origins are rejected, for example:
 
 ```text
 https://evil.example
+http://loopback.example:8788
 null
 ```
 
@@ -131,9 +132,10 @@ ARC's test suite now verifies:
 
 - IPv4 and IPv6 loopback classification;
 - wildcard/public bind rejection;
+- arbitrary DNS aliases are not accepted as local origins;
 - the legacy remote opt-in cannot bypass local-only binding;
 - hostile HTTP browser Origins receive `403`;
 - loopback browser Origins succeed;
 - non-browser clients without `Origin` still work;
 - hostile WebSocket Origins are rejected before event streaming;
-- Workspace and Mission Control version metadata match the 0.8.1 security patch.
+- Workspace and Mission Control version metadata match the 0.8.1 package metadata.
