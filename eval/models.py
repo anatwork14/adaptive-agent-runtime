@@ -12,6 +12,7 @@ from pydantic import BaseModel, Field, model_validator
 
 
 BaselineId = Literal["B0", "B2", "B3", "B5", "B7"]
+ExecutionMode = Literal["sequence"]
 
 
 class EvaluationTaskSpec(BaseModel):
@@ -36,10 +37,11 @@ class FaultSpec(BaseModel):
 
 
 class BenchmarkManifest(BaseModel):
-    """Immutable-by-convention description of one benchmark experiment."""
+    """Immutable-by-convention description of one ordered benchmark scenario."""
 
     benchmark_id: str = Field(min_length=1)
     baseline: BaselineId
+    execution_mode: ExecutionMode = "sequence"
     seed: int = 0
     agent_profile: str = Field(min_length=1)
     model: str | None = None
