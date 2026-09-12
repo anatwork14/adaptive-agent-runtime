@@ -50,11 +50,11 @@
 - [x] CLI help tests cover the new surfaces.
 - [x] End-to-end mock smoke test covers preregister -> run-plan -> export.
 - [x] Smoke test verifies the source repository HEAD is unchanged.
-- [ ] Exact final branch head passes Python 3.11 CI.
-- [ ] Exact final branch head passes Python 3.12 CI.
-- [ ] Independent PR-triggered CI passes on the same frozen head.
-- [ ] Squash merge is pinned to the validated head SHA.
-- [ ] Post-merge main CI and Pages pass.
+- [x] Exact final branch head passes Python 3.11 CI.
+- [x] Exact final branch head passes Python 3.12 CI.
+- [x] Independent PR-triggered CI passes on the same frozen head.
+- [x] Squash merge is pinned to the validated head SHA.
+- [x] Post-merge main CI and Pages pass.
 
 ## Interpretation guardrail
 
