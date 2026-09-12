@@ -179,11 +179,11 @@ arc route T001 --policy quality
 
 The result includes the selected agent, policy score, and human-readable reasons.
 
-### Mock is fallback-only
+### Mock is a deliberate fallback, never a disguise for provider failure
 
-The built-in mock profile remains useful for deterministic smoke tests and CI, but automatic orchestration does not prefer it over an eligible real READY coding agent.
+The built-in mock profile remains useful for deterministic smoke tests and CI. Automatic orchestration uses mock only when **no capable real executor profile is configured for the task**.
 
-If a real Codex/Claude/Antigravity/OpenCode profile satisfies the task, ARC routes to a real profile. Mock is used automatically only when there is no eligible real route.
+If a capable Codex/Claude/Antigravity/OpenCode profile is configured but is signed out, missing, disabled by load, or saturated, ARC defers the task and reports the routing failure instead of silently running mock. This keeps broken provider setup visible. Operators can still explicitly choose `--agent mock` when they intentionally want a smoke test.
 
 ## Concurrency model
 
