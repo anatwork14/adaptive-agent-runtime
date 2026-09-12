@@ -1,6 +1,6 @@
 # ARC — Adaptive Agent Runtime
 
-> **A persistent multi-agent coding supervisor with reliable context, closed-loop review, isolated workers, durable local runtimes, and transactional integration.**
+> **A persistent multi-agent coding supervisor with reliable context, closed-loop review, isolated workers, durable local runtimes, least-privilege execution, and transactional integration.**
 
 [![CI](https://github.com/anatwork14/adaptive-agent-runtime/actions/workflows/ci.yml/badge.svg)](https://github.com/anatwork14/adaptive-agent-runtime/actions/workflows/ci.yml)
 [![Python 3.11+](https://img.shields.io/badge/python-3.11%2B-3776ab.svg)](https://www.python.org/)
@@ -16,6 +16,7 @@
   · <strong><a href="docs/GETTING_STARTED.md">Getting started</a></strong>
   · <strong><a href="docs/INTERACTIVE_WORKSPACE.md">Interactive workspace</a></strong>
   · <strong><a href="docs/PERSISTENT_RUNTIMES.md">Persistent runtimes</a></strong>
+  · <strong><a href="docs/EXECUTION_SECURITY.md">Execution security</a></strong>
   · <strong><a href="docs/CLOSED_LOOP_REVIEWS.md">Closed-loop reviews</a></strong>
   · <strong><a href="docs/ORCHESTRATION.md">Orchestration</a></strong>
 </p>
@@ -26,11 +27,11 @@ The core rule is:
 
 > **Adaptive memory is never authoritative.**
 
-The same rule now extends to external review and live processes. Authoritative project state lives in ARC's append-only event stream plus Git state. Memory, GitHub review state, runtime liveness, preview readiness, and UI projections are rebuildable or externally observable operational context.
+The same rule extends to external review and live processes. Authoritative project state lives in ARC's append-only event stream plus Git state. Memory, GitHub review state, runtime liveness, preview readiness, and UI projections are rebuildable or externally observable operational context.
 
-**ARC 0.8 closes the original interactive-supervision product gaps.** Workers can persist across ARC restarts, publish and repair GitHub PRs in a closed loop, own tmux-backed provider terminals that outlive the invoking ARC process, and launch loopback-only application previews directly from their isolated worktrees. Every path still converges on ARC's exact-candidate IntegrationGate before project state becomes complete.
+**ARC 0.9 hardens the execution boundary built in 0.8.** Worker/provider subprocesses no longer inherit the whole ARC host environment. ARC constructs provider-scoped environments, lets profiles opt in extra variable names without storing values, starts previews without provider credentials, keeps profile command overrides process-local, and uses a private single-use handoff so tmux does not receive secret values in worker argv. Every path still converges on ARC's exact-candidate IntegrationGate before project state becomes complete.
 
-**Status:** experimental / pre-alpha. Persistent workers, orchestration, event replay, GitHub review synchronization, tmux runtime supervision, localhost worker previews, Git isolation, and the transactional gate are implemented and covered by deterministic integration tests. Real provider wrappers remain experimental. Remote multi-user security, provider credential/container isolation, learned planning/routing, semantic retrieval, desktop packaging, and repository-scale evaluation remain active work.
+**Status:** experimental / pre-alpha. Persistent workers, orchestration, event replay, GitHub review synchronization, tmux runtime supervision, localhost worker previews, least-privilege environment propagation, Git isolation, and the transactional gate are implemented and covered by deterministic tests. Real provider wrappers remain experimental. Provider processes are still host-mode and do not yet have full filesystem/network sandboxing. Remote multi-user security, learned planning/routing, semantic retrieval, desktop packaging, and repository-scale evaluation remain active work.
 
 ---
 
@@ -87,6 +88,18 @@ sudo apt update && sudo apt install -y tmux
 # macOS
 brew install tmux
 ```
+
+### Least-privilege worker environment
+
+ARC forwards a small runtime environment plus provider-specific credential variables instead of inheriting every host variable. If a worker needs an additional host variable, opt in its **name**:
+
+```bash
+arc env-policy builder
+arc env-policy builder --allow INTERNAL_REGISTRY_HOST --allow CUSTOM_TOOL_HOME
+arc env-policy builder --clear
+```
+
+ARC reads values from the live host environment when the worker starts. It does not persist or print those values through this policy surface. See [docs/EXECUTION_SECURITY.md](docs/EXECUTION_SECURITY.md).
 
 ---
 
@@ -237,7 +250,7 @@ ARC retains the synchronous provider handoff:
 arc attach S_a1b2c3d4
 ```
 
-ARC 0.8 also supports a persistent PTY owned by tmux:
+Since 0.8 ARC also supports a persistent PTY owned by tmux:
 
 ```bash
 arc terminal S_a1b2c3d4
@@ -266,7 +279,9 @@ tmux session       live PTY/process ownership
 PID                non-authoritative ephemeral state
 ```
 
-See [docs/PERSISTENT_RUNTIMES.md](docs/PERSISTENT_RUNTIMES.md).
+ARC 0.9 additionally scrubs the worker environment through a mode-0600 single-use handoff before the long-lived provider process starts; secret environment values are not embedded in the tmux worker command line.
+
+See [docs/PERSISTENT_RUNTIMES.md](docs/PERSISTENT_RUNTIMES.md) and [docs/EXECUTION_SECURITY.md](docs/EXECUTION_SECURITY.md).
 
 ---
 
@@ -312,7 +327,7 @@ ARC control plane   http://127.0.0.1:8788
 worker preview      http://127.0.0.1:3000
 ```
 
-ARC does not reverse-proxy arbitrary application content through the privileged Workspace origin.
+ARC does not reverse-proxy arbitrary application content through the privileged Workspace origin, and ARC does not inject provider API credentials into preview processes.
 
 ---
 
@@ -516,6 +531,9 @@ Closed-loop GitHub review supervisor.
 ### `arc terminal SESSION`
 Persistent tmux-backed provider terminal for one worker.
 
+### `arc env-policy AGENT`
+Inspect or replace additional environment-variable names explicitly forwarded to a profile.
+
 ### `arc dashboard`
 Task-DAG/fleet terminal Mission Control.
 
@@ -535,7 +553,7 @@ Lower-level task/provider orchestration browser.
 | OpenRouter | `openrouter` | environment gateway | gateway only |
 | Mock | `mock` | none | deterministic tests/smoke |
 
-Provider adapters never silently fabricate a successful patch. ARC measures repository changes and uses Git objects as its integration boundary.
+Provider adapters never silently fabricate a successful patch. ARC measures repository changes and uses Git objects as its integration boundary. ARC 0.9 also prevents one provider from receiving another provider's environment credentials by default.
 
 ---
 
@@ -568,7 +586,7 @@ session.failed
 session.stopped
 ```
 
-Runtime events store sanitized command metadata. Obvious secret-valued arguments are redacted before persistence.
+Runtime events store sanitized command metadata and environment-variable **names**, never values. Obvious secret-valued command arguments are redacted before persistence.
 
 Chat, adaptive memory, review state, terminal output, and preview readiness are operational context. Task/Git/gate facts determine correctness.
 
@@ -582,6 +600,7 @@ arc
 arc ui
 arc supervise
 arc terminal SESSION
+arc env-policy AGENT
 arc shell
 arc attach SESSION
 
@@ -676,6 +695,10 @@ If deleting an index, summary, transcript projection, review cache, or tmux sess
 | Live runtime rediscovery after ARC restart | ✅ v0.8 |
 | Per-worker loopback browser/application preview | ✅ v0.8 |
 | Runtime cleanup before worktree deletion | ✅ v0.8 |
+| Least-privilege worker environment propagation | ✅ v0.9 |
+| Provider-scoped default environment credentials | ✅ v0.9 |
+| Value-free profile environment allowlist | ✅ v0.9 |
+| Private single-use tmux environment handoff | ✅ v0.9 |
 | Conversation-first `arc` shell | ✅ |
 | Session-centric `arc ui` Workspace | ✅ |
 | GitHub PR create/update through existing `gh` auth | ✅ v0.7 |
@@ -694,8 +717,8 @@ If deleting an index, summary, transcript projection, review cache, or tmux sess
 | Versioned adaptive memory + provenance | ✅ |
 | Hard-budget ContextPacket compiler | ✅ |
 | Docker-backed command/test sandbox | ✅ |
+| Provider filesystem/network sandbox | 🚧 future |
 | Remote ARC auth / RBAC / multi-user mode | 🚧 future |
-| Provider CLI credential/container boundary | 🚧 |
 | Learned/LLM planner | 🚧 research |
 | Learned/bandit routing | 🚧 research |
 | Semantic embedding provider | 🚧 research |
@@ -717,7 +740,7 @@ adaptive-agent-runtime/
 ├── webui/          # ARC Workspace + runtime/review APIs + lower-level browser control
 ├── context/        # retrieval, allocation, compiler, staleness
 ├── memory/         # lifecycle, provenance, supersession, consolidation
-├── runtime/        # orchestrator, tmux, gate, leases, recovery, replay, budgets
+├── runtime/        # orchestrator, env policy, tmux, gate, leases, recovery, replay, budgets
 ├── state/          # authoritative event store + deterministic projections
 ├── isolation/      # Git worktrees and candidate boundaries
 ├── verification/   # checks, reviewer, test runner
@@ -774,6 +797,11 @@ CI runs on Python 3.11 and 3.12 and checks:
 - live runtime rediscovery after recreating ARC application state;
 - loopback preview enforcement;
 - runtime cleanup ordering before worktree deletion;
+- provider subprocess environment isolation;
+- provider-to-provider secret separation;
+- preview credential exclusion;
+- private tmux environment handoff and handoff deletion;
+- environment-policy CLI persistence without value persistence;
 - Workspace runtime/review API behavior;
 - FastAPI/WebSocket flows.
 
@@ -792,11 +820,15 @@ ARC executes code produced by AI agents. Treat that as untrusted-code execution.
 
 Provider credentials remain in provider-owned credential stores/keyrings. GitHub credentials remain owned by `gh`. ARC does not copy those tokens into `.arc/`, events, or browser payloads.
 
-The command/test execution path can use Docker isolation with network disabled, dropped capabilities, resource limits, and a read-only root filesystem. Provider coding CLIs remain experimental host-mode because safely brokering vendor authentication into isolated containers requires additional design.
+ARC-managed coding-agent subprocesses now receive explicit least-privilege environments instead of the full host environment. Provider defaults are scoped by provider, profile extensions store names only, preview servers receive no automatic provider credentials, and tmux receives secret values through a private single-use handoff rather than worker argv. Runtime traces record environment names only.
+
+The command/test execution path can use Docker isolation with network disabled, dropped capabilities, resource limits, and a read-only root filesystem. Provider coding CLIs remain experimental host-mode: environment isolation reduces ambient authority but does not prevent a provider process from accessing other files, networks, sockets, or provider-owned credential files available to the launching user.
 
 Persistent tmux runtimes are local developer processes, not a sandbox. Preview servers are restricted to loopback and are not reverse-proxied through ARC. Preview application content therefore remains on a separate browser origin from the Workspace control plane.
 
 `arc ui` and `arc web` are local developer control surfaces, not authenticated multi-user services. Keep their default loopback bindings unless you place an appropriate trusted security boundary in front of them.
+
+See [docs/EXECUTION_SECURITY.md](docs/EXECUTION_SECURITY.md) for the exact 0.9 boundary and non-goals.
 
 ---
 
