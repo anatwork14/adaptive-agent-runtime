@@ -33,6 +33,25 @@ class AgentRouter:
             raise ValueError("routing policy must be balanced, quality, or cost")
         self.policy = policy
 
+    @staticmethod
+    def _semantically_eligible(
+        profile: AgentProfile,
+        *,
+        required: set[str],
+        task_type: str,
+    ) -> bool:
+        if not profile.enabled or profile.provider in {"mock", "openrouter"}:
+            return False
+        caps = {item.lower() for item in profile.capabilities}
+        if required:
+            return required.issubset(caps)
+        role = profile.role.lower()
+        return (
+            task_type in caps
+            or role == task_type
+            or role in {"implementation", "general", "worker"}
+        )
+
     def route(
         self,
         task: TaskState,
@@ -43,9 +62,15 @@ class AgentRouter:
         default_agent: str | None = None,
     ) -> RouteDecision:
         active_counts = active_counts or {}
+        profiles = list(profiles)
         candidates: list[tuple[AgentProfile, RouteDecision]] = []
         required = {item.lower() for item in task.required_capabilities}
         task_type = task.task_type.lower()
+        capable_real_profiles = [
+            profile
+            for profile in profiles
+            if self._semantically_eligible(profile, required=required, task_type=task_type)
+        ]
 
         for profile in profiles:
             readiness = doctor.get(profile.name)
@@ -104,29 +129,46 @@ class AgentRouter:
                 )
             )
 
-        if not candidates:
+        real = [item for item in candidates if item[0].provider != "mock"]
+        if real:
+            return sorted(real, key=lambda item: (-item[1].score, item[1].agent_name))[0][1]
+
+        # If the project has a real agent that is semantically capable but is
+        # signed out, missing, disabled by load, or otherwise unavailable, fail
+        # closed instead of making a fake-looking smoke edit with MockAgent.
+        if capable_real_profiles:
+            states = []
+            for profile in capable_real_profiles:
+                readiness = doctor.get(profile.name)
+                active = int(active_counts.get(profile.name, 0))
+                if active >= profile.max_concurrency:
+                    state = f"SATURATED {active}/{profile.max_concurrency}"
+                else:
+                    state = readiness.status if readiness else "UNKNOWN"
+                states.append(f"{profile.name}={state}")
             raise RuntimeError(
-                f"No READY agent satisfies task {task.task_id} "
-                f"(type={task.task_type}, required={sorted(required)})"
+                f"Real agents are configured for task {task.task_id} but none are currently routable: "
+                + ", ".join(states)
             )
 
-        # Mock is a deterministic smoke-test baseline, not an automatic worker.
-        # Prefer any eligible real coding agent and only fall back to mock when
-        # no real provider can currently satisfy the task.
-        real = [item for item in candidates if item[0].provider != "mock"]
-        pool = real or candidates
-        if not real:
-            pool = [
-                (
-                    profile,
-                    RouteDecision(
-                        task_id=decision.task_id,
-                        agent_name=decision.agent_name,
-                        score=decision.score,
-                        policy=decision.policy,
-                        reasons=decision.reasons + ("mock fallback: no real READY route",),
-                    ),
-                )
-                for profile, decision in pool
-            ]
-        return sorted(pool, key=lambda item: (-item[1].score, item[1].agent_name))[0][1]
+        mock_candidates = [item for item in candidates if item[0].provider == "mock"]
+        if mock_candidates:
+            profile, decision = sorted(
+                mock_candidates,
+                key=lambda item: (-item[1].score, item[1].agent_name),
+            )[0]
+            del profile
+            return RouteDecision(
+                task_id=decision.task_id,
+                agent_name=decision.agent_name,
+                score=decision.score,
+                policy=decision.policy,
+                reasons=decision.reasons + (
+                    "mock fallback: no capable real agent profile is configured",
+                ),
+            )
+
+        raise RuntimeError(
+            f"No READY agent satisfies task {task.task_id} "
+            f"(type={task.task_type}, required={sorted(required)})"
+        )
