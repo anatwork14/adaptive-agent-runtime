@@ -30,6 +30,37 @@ def _manifest(baseline: str, *, budget: int = 8000, commit: str = "abcdef1") -> 
     )
 
 
+def _sequence_manifest(baseline: str, task_order: list[str]) -> BenchmarkManifest:
+    specs = {
+        "T001": EvaluationTaskSpec(
+            task_id="T001",
+            goal="fix parser",
+            files=["src/parser.py"],
+            acceptance=["parser tests pass"],
+            token_budget=8000,
+        ),
+        "T002": EvaluationTaskSpec(
+            task_id="T002",
+            goal="update serializer",
+            files=["src/serializer.py"],
+            acceptance=["serializer tests pass"],
+            token_budget=8000,
+        ),
+    }
+    return BenchmarkManifest(
+        benchmark_id=f"sequence-{baseline}",
+        baseline=baseline,
+        execution_mode="sequence",
+        seed=7,
+        agent_profile="builder",
+        model="model-x",
+        repo_commit="abcdef1",
+        context_token_budget=8000,
+        hard_task_usd=1.0,
+        tasks=[specs[task_id] for task_id in task_order],
+    )
+
+
 def _measurement(baseline: str, task_id: str, resolved: bool, tokens: int) -> TaskMeasurement:
     return TaskMeasurement(
         benchmark_id=f"bench-{baseline}",
@@ -62,6 +93,14 @@ def test_comparable_manifests_reject_budget_or_repo_drift() -> None:
             _manifest("B3"),
             _manifest("B7", commit="fffffff"),
         )
+
+
+def test_comparable_sequence_manifests_reject_reordered_tasks() -> None:
+    left = _sequence_manifest("B3", ["T001", "T002"])
+    right = _sequence_manifest("B7", ["T002", "T001"])
+
+    with pytest.raises(ValueError, match="ordered task IDs"):
+        validate_comparable_manifests(left, right)
 
 
 def test_paired_comparison_uses_task_level_outcomes() -> None:
