@@ -30,7 +30,10 @@ class TraceTelemetry:
 
 
 def collect_trace_telemetry(events: Iterable[Event], gate_result: GateResult) -> TraceTelemetry:
-    """Extract only quantities evidenced by the event slice for one task.
+    """Extract only quantities evidenced by events belonging to one measured task.
+
+    Event ranges may include concurrent activity from other ARC tasks. Research
+    rows therefore filter by the gate result's task identity before aggregation.
 
     Existing ``budget.consumed`` events predate explicit telemetry-availability
     flags. Conservatively, zero values are treated as unobserved rather than
@@ -51,6 +54,8 @@ def collect_trace_telemetry(events: Iterable[Event], gate_result: GateResult) ->
     candidate_commit_sha: str | None = None
 
     for event in events:
+        if event.task_id != gate_result.task_id:
+            continue
         payload = event.payload
         if event.kind == "context.compiled":
             context_id = str(payload.get("context_id") or "") or None
