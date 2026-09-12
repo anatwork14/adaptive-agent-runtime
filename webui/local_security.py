@@ -66,8 +66,9 @@ def require_loopback_bind(host: str, surface: str) -> None:
     if is_loopback_host(host):
         return
     raise ValueError(
-        f"{surface} is an unauthenticated local control plane and may only bind to loopback. "
-        "Remote exposure is disabled until ARC provides an authenticated security boundary."
+        f"{surface} is an unauthenticated localhost-only control plane and may only bind to "
+        "loopback. Remote exposure is disabled until ARC provides an authenticated security "
+        "boundary."
     )
 
 
