@@ -7,9 +7,18 @@ from pathlib import Path
 from typing import Dict, List, Literal, Optional
 
 import yaml
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 ProviderName = Literal["mock", "codex", "claude", "antigravity", "opencode", "openrouter"]
+
+_PROVIDER_DEFAULT_CAPABILITIES: dict[str, list[str]] = {
+    "mock": ["implementation", "test", "docs", "review", "research"],
+    "codex": ["implementation", "test", "debug", "refactor"],
+    "claude": ["implementation", "test", "review", "docs", "architecture"],
+    "antigravity": ["implementation", "test", "docs", "research"],
+    "opencode": ["implementation", "test", "debug", "refactor"],
+    "openrouter": [],
+}
 
 
 class AgentProfile(BaseModel):
@@ -26,6 +35,12 @@ class AgentProfile(BaseModel):
     cost_weight: float = Field(default=1.0, ge=0.0)
     quality_weight: float = Field(default=1.0, ge=0.0)
     metadata: Dict[str, str] = Field(default_factory=dict)
+
+    @model_validator(mode="after")
+    def populate_default_capabilities(self) -> "AgentProfile":
+        if not self.capabilities:
+            self.capabilities = list(_PROVIDER_DEFAULT_CAPABILITIES.get(self.provider, []))
+        return self
 
 
 class ArcConfig(BaseModel):
@@ -46,7 +61,6 @@ class ArcConfig(BaseModel):
             name="mock",
             provider="mock",
             role="implementation",
-            capabilities=["implementation", "test", "docs", "review", "research"],
             max_concurrency=4,
             cost_weight=0.0,
             quality_weight=0.5,
@@ -72,11 +86,7 @@ class ConfigStore:
         if "mock" not in config.agents:
             config.agents["mock"] = ArcConfig.default(config.project_id).agents["mock"]
         else:
-            # Older ARC configs predate capability-aware routing. Keep the
-            # built-in mock useful as the deterministic orchestration baseline.
             mock = config.agents["mock"]
-            if not mock.capabilities:
-                mock.capabilities = ["implementation", "test", "docs", "review", "research"]
             mock.max_concurrency = max(mock.max_concurrency, 4)
         return config
 
