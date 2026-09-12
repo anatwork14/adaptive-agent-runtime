@@ -191,7 +191,7 @@ arc agent tune builder \
   --quality-weight 1.3
 ```
 
-The deterministic mock executor is **fallback-only** for automatic routing when an eligible real READY provider exists.
+The deterministic mock executor is an intentional smoke-test fallback, not a substitute for broken providers. Automatic routing chooses mock only when **no capable real executor profile is configured for the task**. If a capable real provider is configured but unavailable, authentication-required, or saturated, ARC defers and surfaces that state instead of silently running mock. Explicit `--agent mock` remains available for intentional smoke tests.
 
 ### Conflict control
 
