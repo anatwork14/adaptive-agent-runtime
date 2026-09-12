@@ -103,3 +103,35 @@ def test_deterministic_planner_splits_source_docs_and_tests() -> None:
     assert docs.dependencies == [impl.key]
     assert tests.dependencies == [impl.key]
     assert tests.required_capabilities == ["test"]
+
+
+def test_compacted_plan_has_no_dangling_dependencies() -> None:
+    plan = DeterministicPlanner().plan(
+        "large change",
+        files=[
+            "api/a.py",
+            "core/b.py",
+            "runtime/c.py",
+            "web/d.py",
+            "docs/guide.md",
+            "tests/test_all.py",
+        ],
+        max_tasks=3,
+    )
+    assert len(plan.tasks) == 3
+    surviving = {task.key for task in plan.tasks}
+    for task in plan.tasks:
+        assert set(task.dependencies).issubset(surviving)
+        assert task.key not in task.dependencies
+    assert plan.tasks[-1].key == "tail"
+
+
+def test_single_task_compaction_is_dependency_free() -> None:
+    plan = DeterministicPlanner().plan(
+        "large change",
+        files=["api/a.py", "core/b.py", "tests/test_all.py"],
+        max_tasks=1,
+    )
+    assert len(plan.tasks) == 1
+    assert plan.tasks[0].key == "tail"
+    assert plan.tasks[0].dependencies == []
