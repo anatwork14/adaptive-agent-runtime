@@ -20,6 +20,7 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
 from application.session_app import SessionArcApplication
+from application.version import arc_version
 from webui.local_security import (
     LocalOriginGuardMiddleware,
     is_loopback_origin,
@@ -106,7 +107,7 @@ def create_workspace_app(
     static_dir = Path(__file__).parent / "static"
     app = FastAPI(
         title="ARC Workspace",
-        version="0.8.1",
+        version=arc_version(),
         docs_url="/api/docs",
         redoc_url=None,
     )
