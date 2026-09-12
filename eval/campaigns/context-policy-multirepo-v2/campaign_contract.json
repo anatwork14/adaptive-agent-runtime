@@ -171,6 +171,7 @@
         "environment": {"PYTHONPATH": "/workspace/src"},
         "hidden_command": ["python", "-m", "pytest", "-q", "-p", "no:cacheprovider", "/arc-hidden-tests"],
         "hidden_environment": {"PYTHONPATH": "/workspace/src"},
+        "tmpfs_exec": true,
         "python_toolchain": "CPython 3.10.7; requirements.txt editable environment",
         "timeout_seconds": 180,
         "qualification_id": "python-dotenv-docker-python310-requirements-v2"
