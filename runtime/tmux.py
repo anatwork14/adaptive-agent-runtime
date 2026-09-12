@@ -15,6 +15,7 @@ import shutil
 import subprocess
 import sys
 import tempfile
+import time
 from collections.abc import Mapping
 from pathlib import Path
 from typing import Any
@@ -141,6 +142,21 @@ class TmuxController:
                     shell_command,
                 ]
             )
+            if handoff is not None:
+                # A successful tmux RPC is not enough: the helper itself must
+                # have started and consumed the private secret handoff. If that
+                # does not happen promptly (bad Python environment/import/etc.),
+                # kill the runtime and remove the file instead of leaving a
+                # credential-bearing artifact behind.
+                deadline = time.monotonic() + 5.0
+                while handoff.exists() and time.monotonic() < deadline:
+                    time.sleep(0.02)
+                if handoff.exists():
+                    self.stop(name)
+                    handoff.unlink(missing_ok=True)
+                    raise TmuxError(
+                        "tmux runtime bootstrap did not consume its private environment handoff"
+                    )
         except Exception:
             if handoff is not None:
                 handoff.unlink(missing_ok=True)
