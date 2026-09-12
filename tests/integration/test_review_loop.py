@@ -59,6 +59,30 @@ class FakeGitHubClient:
         return type(self).latest
 
 
+def _requested_change_snapshot(*, digest: str, merge_state: str = "BLOCKED") -> GitHubPullRequestSnapshot:
+    return GitHubPullRequestSnapshot(
+        number=17,
+        url="https://github.com/example/demo/pull/17",
+        title="ARC T001",
+        state="OPEN",
+        head_ref="arc/task/T001",
+        base_ref="main",
+        review_decision="CHANGES_REQUESTED",
+        merge_state_status=merge_state,
+        checks=[GitHubCheck(name="tests", status="COMPLETED", conclusion="FAILURE")],
+        feedback=[
+            GitHubFeedback(
+                source="inline_review",
+                author="reviewer",
+                body="Preserve the lease fence while fixing the retry path.",
+                path="runtime/leases.py",
+                line=42,
+            )
+        ],
+        digest=digest,
+    )
+
+
 def test_review_feedback_returns_to_same_worker_and_committed_pr_candidate_submits(
     tmp_path: Path,
     monkeypatch,
@@ -93,33 +117,14 @@ def test_review_feedback_returns_to_same_worker_and_committed_pr_candidate_submi
         assert FakeGitHubClient.publish_calls == 1
         assert not arc.sessions.changed_files(session.session_id)
 
-        FakeGitHubClient.latest = GitHubPullRequestSnapshot(
-            number=17,
-            url="https://github.com/example/demo/pull/17",
-            title="ARC T001",
-            state="OPEN",
-            head_ref="arc/task/T001",
-            base_ref="main",
-            review_decision="CHANGES_REQUESTED",
-            merge_state_status="BLOCKED",
-            checks=[GitHubCheck(name="tests", status="COMPLETED", conclusion="FAILURE")],
-            feedback=[
-                GitHubFeedback(
-                    source="inline_review",
-                    author="reviewer",
-                    body="Preserve the lease fence while fixing the retry path.",
-                    path="runtime/leases.py",
-                    line=42,
-                )
-            ],
-            digest="feedback-v1",
-        )
-
+        FakeGitHubClient.latest = _requested_change_snapshot(digest="feedback-v1")
         synced = asyncio.run(arc.reviews.sync(session.session_id, auto_apply=True))
         assert synced.changed
         assert synced.feedback_applied
         projected = arc.reviews.status(session.session_id)
-        assert projected.applied_feedback_digest == "feedback-v1"
+        assert projected.applied_feedback_digest
+        assert projected.applied_feedback_digest == projected.feedback_digest
+        assert projected.applied_feedback_digest != projected.last_digest
         assert projected.pending_feedback == ""
 
         refreshed = arc.sessions.get(session.session_id)
@@ -131,15 +136,32 @@ def test_review_feedback_returns_to_same_worker_and_committed_pr_candidate_submi
         )
         assert arc.sessions.changed_files(session.session_id)
 
+        # An unrelated external-state transition with identical actionable text
+        # must not route the same reviewer feedback back into the worker again.
+        before_user_messages = len([message for message in refreshed.messages if message.role == "user"])
+        FakeGitHubClient.latest = _requested_change_snapshot(
+            digest="feedback-v2-unrelated-state-change",
+            merge_state="DIRTY",
+        )
+        second = asyncio.run(arc.reviews.sync(session.session_id, auto_apply=True))
+        assert second.changed
+        assert not second.feedback_applied
+        after_second = arc.sessions.get(session.session_id)
+        assert after_second is not None
+        assert len([message for message in after_second.messages if message.role == "user"]) == before_user_messages
+
         # Push the feedback fix. This commits the worker worktree again.
         arc.reviews.publish(session.session_id, base="main")
         assert FakeGitHubClient.update_calls == 1
         assert not arc.sessions.changed_files(session.session_id)
 
-        # A clean worktree with worker-authored commits must still be a valid
-        # exact candidate. A true no-op remains rejected by WorktreeManager.
+        # A multi-commit public review branch is frozen into one immutable squash
+        # candidate without rewriting that branch, then verified by the ARC gate.
         result = asyncio.run(arc.sessions.submit(session.session_id))
-        assert result.status == GateStatus.ACCEPTED
+        assert result.status == GateStatus.ACCEPTED, (
+            result.rejection_stage,
+            result.error_detail,
+        )
         assert arc.get_task(task.task_id).status == TaskStatus.COMPLETED  # type: ignore[union-attr]
 
         kinds = [event.kind for event in arc.task_events(task.task_id)]
@@ -151,7 +173,7 @@ def test_review_feedback_returns_to_same_worker_and_committed_pr_candidate_submi
         assert "gate.accepted" in kinds
 
 
-def test_review_sync_is_digest_deduplicated(tmp_path: Path, monkeypatch) -> None:
+def test_review_sync_is_snapshot_digest_deduplicated(tmp_path: Path, monkeypatch) -> None:
     repo = _git_repo(tmp_path)
     monkeypatch.setattr("application.reviews.GitHubCliClient", FakeGitHubClient)
     FakeGitHubClient.publish_calls = 0
