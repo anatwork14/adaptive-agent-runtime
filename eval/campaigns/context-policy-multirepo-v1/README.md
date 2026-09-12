@@ -31,7 +31,9 @@ The primary study uses one provider/model/profile across all repositories:
 - meta CI mass: 0.95
 - meta random seed: 42
 - verification level: V1
-- visible test command: `python -m pytest -q`
+- visible test command: `python -m pytest -q -m "not network"`
+- grading network: disabled
+- grading Python path: `/workspace/src:/workspace`
 - no injected faults in the primary study
 
 The machine-readable source of truth is `campaign_contract.json`. The canonical Codex command override is intentionally public because it contains no credential. Authentication values are never stored in the campaign contract or runtime lock.
@@ -66,6 +68,23 @@ B5 remains the unchanged naive vector top-k baseline. For example, T003 may rece
 2. Add `dotenv_values_with_metadata(...)` with interpolated values and winning source lines.
 3. Surface the same provenance through `dotenv list --format json-meta` without changing existing formats.
 
+## Grading environment is part of the treatment contract
+
+Click and python-dotenv use `src/` layouts. Running `python -m pytest` from the repository root without controlling imports can therefore test an unrelated package from `site-packages` instead of the candidate commit. The original generic ARC sandbox also contained ARC dependencies rather than the exact dependency surface needed by all three target repositories.
+
+The primary campaign fixes that construct-validity problem explicitly:
+
+- visible and hidden grading both run in Docker;
+- candidate source is forced ahead of site-packages using `PYTHONPATH=/workspace/src:/workspace`;
+- hidden tests remain outside the repository and are mounted read-only only after provider work finishes;
+- the sandbox has network disabled;
+- HTTPX tests explicitly marked `network` are excluded because the grading sandbox intentionally has no network;
+- `Dockerfile.grading` provides the common dependency surface needed by the three pinned repositories;
+- the runtime lock freezes the resulting Docker image ID, not merely a mutable image tag;
+- freeze performs an import-path probe plus the complete visible test command on each untouched pinned base before emitting any preregistration.
+
+A base repository that imports from `/usr/.../site-packages`, lacks a dependency, times out, or fails its visible suite makes the campaign freeze fail. Such a failure is an environment problem, not an agent outcome.
+
 ## Hidden grading
 
 Actual hidden tests MUST remain outside this public repository. Their public behavior contracts are documented in `hidden_test_contracts.md`. The private suites are hashed independently per repository; the expected tree digests are frozen in `campaign_contract.json`.
@@ -80,14 +99,33 @@ Any edit, rename, add, or delete in a private hidden suite after freeze invalida
 - SHA-256 of the effective provider argv, including reasoning configuration;
 - allowed environment-variable names;
 - installed provider CLI version;
+- grading sandbox image tag and immutable Docker image ID;
+- Docker CLI version;
 - ARC repository commit;
 - a clean ARC evaluation-engine worktree at both freeze and execution time.
 
-The raw effective argv is not written to the runtime lock. A dirty ARC checkout fails closed even if `HEAD` still equals the frozen commit, because uncommitted code would change the benchmark engine without changing its SHA.
+The raw effective provider argv is not written to the runtime lock. A dirty ARC checkout fails closed even if `HEAD` still equals the frozen commit, because uncommitted code would change the benchmark engine without changing its SHA. Rebuilding or retagging the grading image after freeze also fails closed if its image ID changes.
+
+## Build the campaign grading image
+
+Build the grading image from the same clean ARC commit that will freeze and execute the study:
+
+```bash
+docker build \
+  -f eval/campaigns/context-policy-multirepo-v1/Dockerfile.grading \
+  -t arc-context-policy-v1:py311 \
+  .
+
+docker image inspect arc-context-policy-v1:py311 --format '{{.Id}}'
+```
+
+Do this **before** `freeze_campaign.py`. You do not need to set `ARC_SANDBOX_IMAGE` manually: the campaign runtime lock resolves the canonical image name from `campaign_contract.json` and exports it into the current process when needed.
+
+Do not rebuild or retag this image between freeze and provider execution. If the image must change, create a new campaign/version and freeze again before observing provider outcomes.
 
 ## One-command freeze before any provider run
 
-Prepare three clean clones at the exact commits above and extract the private hidden-test bundle so the hidden root contains `click/`, `httpx/`, and `python-dotenv/`. Install the intended Codex CLI build, but provider login is not required yet. The ARC repository itself must also be clean and checked out at the version that will execute the study.
+Prepare three clean clones at the exact commits above and extract the private hidden-test bundle so the hidden root contains `click/`, `httpx/`, and `python-dotenv/`. Install the intended Codex CLI build and build the grading image above, but provider login is not required yet. The ARC repository itself must also be clean and checked out at the version that will execute the study.
 
 Then run:
 
@@ -100,7 +138,17 @@ python eval/campaigns/context-policy-multirepo-v1/freeze_campaign.py \
   --output-dir /secure/prereg/context-policy-multirepo-v1
 ```
 
-The command fails closed unless every public repository HEAD and private hidden-tree digest matches the frozen contract. It then deterministically configures the same ARC `builder` profile in all three clones and emits:
+Before emitting any repository plan, the command now performs the following pre-treatment checks:
+
+1. exact public repository HEADs and clean source worktrees;
+2. exact private hidden-tree digests;
+3. provider command and CLI version;
+4. exact Docker grading image ID;
+5. clean ARC engine and exact ARC commit;
+6. detached untouched-base import probes proving `click`, `httpx`, and `dotenv` resolve from `/workspace` candidate source;
+7. the exact visible test command on every untouched pinned base inside the frozen network-disabled image.
+
+It then deterministically configures the same ARC `builder` profile in all three clones and emits:
 
 ```text
 runtime-lock.json
@@ -111,7 +159,7 @@ context-policy-multirepo-v1.json
 freeze-manifest.json
 ```
 
-The three repository plans freeze V1 explicitly. The final meta plan freezes the exact three repository-plan digests before provider execution. `freeze-manifest.json` records the ARC commit, runtime-lock digest, provider CLI version, repository plan digests, meta-plan digest, and `provider_execution_started=false`.
+The three repository plans freeze V1 explicitly. The final meta plan freezes the exact three repository-plan digests before provider execution. `freeze-manifest.json` records the ARC commit, runtime-lock digest, provider CLI version, grading image tag/ID, Docker CLI version, untouched-base health reports, repository plan digests, meta-plan digest, and `provider_execution_started=false`.
 
 Do not edit any generated freeze artifact. If anything in the execution contract must change, create a new campaign/version rather than overwriting this one.
 
@@ -144,6 +192,7 @@ A successful preflight revalidates, immediately before inference:
 
 - all self-digesting repository plans and the meta plan;
 - runtime-lock digest, effective provider argv, CLI version and ARC commit;
+- the exact grading Docker image ID and Docker CLI version;
 - clean ARC and target-repository worktrees;
 - exact pinned target `HEAD`s;
 - private hidden-test tree digests;
@@ -186,7 +235,7 @@ This strict policy prevents an operator from silently replacing a weak or inconv
 
 ## Manual preregistration fallback
 
-If the campaign driver cannot be used, the CLI requires the study's declared verification level to be explicit:
+If the campaign driver cannot be used, the CLI requires the study's declared verification level and test command to be explicit in the configured repository:
 
 ```bash
 arc benchmark preregister \
@@ -203,7 +252,7 @@ arc benchmark preregister \
   --exclude "host failure before the first provider turn"
 ```
 
-The one-command freeze and execution drivers are preferred because they remove operator drift across repositories.
+The one-command freeze and execution drivers are preferred because they remove operator drift across repositories and also freeze the grading image.
 
 ## Interpretation discipline
 
