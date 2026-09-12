@@ -1,0 +1,40 @@
+FROM python:3.11-slim
+
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    PIP_DISABLE_PIP_VERSION_CHECK=1
+
+# The image intentionally contains dependencies only. Candidate project source
+# is always bind-mounted at /workspace and forced ahead of site-packages through
+# PYTHONPATH=/workspace/src:/workspace by ARC's visible and hidden graders.
+#
+# HTTPX's pinned requirements intentionally leave runtime dependencies floating;
+# the campaign runtime lock therefore freezes the resulting Docker image ID, not
+# merely this tag/Dockerfile. The exact built image becomes part of the empirical
+# execution contract.
+RUN python -m pip install --no-cache-dir \
+    "pytest==8.4.1" \
+    "certifi" \
+    "httpcore==1.*" \
+    "anyio" \
+    "idna" \
+    "brotli" \
+    "click==8.*" \
+    "pygments==2.*" \
+    "rich>=10,<15" \
+    "h2>=3,<5" \
+    "socksio==1.*" \
+    "zstandard>=0.18.0" \
+    "chardet==5.2.0" \
+    "cryptography==45.0.7" \
+    "trio==0.31.0" \
+    "trio-typing==0.10.0" \
+    "trustme==1.2.1" \
+    "uvicorn==0.35.0" \
+    "ipython"
+
+RUN useradd --create-home --uid 10001 arc
+USER arc
+WORKDIR /workspace
+
+CMD ["python", "-m", "pytest", "-q", "-m", "not network"]
