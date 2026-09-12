@@ -135,6 +135,7 @@ class IsolatedPairedBenchmarkRunner:
         visible_test_harness: dict[str, Any] | None = None,
         hard_project_usd: float = 500.0,
         hidden_test_dir: str | Path | None = None,
+        hidden_tests_required: bool | None = None,
     ) -> None:
         self.source_repo = Path(source_repo).resolve()
         self.output_root = (
@@ -152,6 +153,11 @@ class IsolatedPairedBenchmarkRunner:
         self.visible_test_harness = dict(visible_test_harness or {})
         self.hard_project_usd = hard_project_usd
         self.hidden_test_dir = Path(hidden_test_dir).resolve() if hidden_test_dir else None
+        self.hidden_tests_required = (
+            bool(hidden_tests_required)
+            if hidden_tests_required is not None
+            else self.hidden_test_dir is not None
+        )
         self.output_root.mkdir(parents=True, exist_ok=True)
         self.workspace_root.mkdir(parents=True, exist_ok=True)
 
@@ -336,7 +342,15 @@ class IsolatedPairedBenchmarkRunner:
                         "agent_factory changed adapter type/name across paired baselines"
                     )
 
-                grader = HiddenTestGrader(self.hidden_test_dir) if self.hidden_test_dir else None
+                grader = (
+                    HiddenTestGrader(
+                        self.hidden_test_dir,
+                        harness=self.visible_test_harness,
+                        hidden_tests_required=self.hidden_tests_required,
+                    )
+                    if self.hidden_test_dir
+                    else None
+                )
                 runner = ExperimentRunner(grader=grader)
                 summary = await runner.run_manifest(
                     orchestrator,

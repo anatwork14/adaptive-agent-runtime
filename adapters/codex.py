@@ -69,6 +69,10 @@ class CodexAgentAdapter(SubprocessCodingAgent):
                 return ["provider.response_started"]
         return []
 
+    def structured_output_mode(self, command: Iterable[str]) -> bool:
+        """Codex's ``--json`` mode requires documented JSONL turn boundaries."""
+        return "--json" in command
+
     def parse_output_metadata(self, stream: str, text: str) -> dict[str, object]:
         if stream != "stdout":
             return {}

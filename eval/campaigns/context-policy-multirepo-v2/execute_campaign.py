@@ -41,6 +41,7 @@ from eval.studies.preregistration import (  # noqa: E402
     tree_digest,
     validate_execution_environment,
 )
+from isolation.container import SandboxRunner, SandboxUnavailable  # noqa: E402
 
 SCHEMA = "arc-campaign-execution-v2"
 REPOSITORY_ORDER = ("click", "httpx", "python-dotenv")
@@ -259,6 +260,28 @@ def _validate_live_repository(
         hidden_test_dir=hidden_dir,
         verification_level=plan.runtime.verification_level,
     )
+    harness = config.visible_test_harness
+    if not harness:
+        raise SystemExit(f"repository-specific Docker harness is missing for {repo}")
+    sandbox = SandboxRunner(
+        repo,
+        network_enabled=bool(harness.get("network_enabled", False)),
+        timeout_seconds=int(harness.get("timeout_seconds", 120)),
+        image=harness.get("image"),
+        image_digest=harness.get("image_digest"),
+        tmpfs_noexec=not bool(harness.get("tmpfs_exec", False)),
+    )
+    try:
+        sandbox_report = sandbox.verify_available()
+    except SandboxUnavailable as exc:
+        sandbox_report = {
+            "backend": harness.get("backend", "docker"),
+            "image": harness.get("image"),
+            "expected_image_digest": harness.get("image_digest"),
+            "actual_image_digest": None,
+            "ready": False,
+            "error": str(exc),
+        }
     return {
         **base_report,
         "hidden_tests_digest": actual_hidden_digest,
@@ -266,6 +289,7 @@ def _validate_live_repository(
         "provider": profile.provider,
         "model": profile.model,
         "visible_test_harness": config.visible_test_harness,
+        "sandbox": sandbox_report,
     }
 
 
@@ -352,7 +376,11 @@ def preflight_campaign(
 
     provider = contract["provider_profile"]["provider"]
     auth = auth_status(provider)
-    ready = bool(auth.installed and auth.authenticated)
+    sandbox_ready = all(
+        repository.get("sandbox", {}).get("ready") is True
+        for repository in repository_report.values()
+    )
+    ready = bool(auth.installed and auth.authenticated and sandbox_ready)
     return {
         "schema_version": "arc-campaign-preflight-v2",
         "checked_at_utc": _now(),
@@ -371,6 +399,7 @@ def preflight_campaign(
             "state": auth.state,
             "detail": auth.detail,
         },
+        "sandbox_identities_verified": sandbox_ready,
         "ready_for_execution": ready,
         "execution_root": str(execution_root),
         "workspace_root": str(execution_workspace),

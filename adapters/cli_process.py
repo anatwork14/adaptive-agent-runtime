@@ -204,6 +204,10 @@ class SubprocessCodingAgent:
         """Return bounded, provider-specific metadata from one output line."""
         return {}
 
+    def structured_output_mode(self, command: Iterable[str]) -> bool:
+        """Whether this invocation promises machine-readable lifecycle events."""
+        return False
+
     async def run_prompt(
         self,
         *,
@@ -224,6 +228,7 @@ class SubprocessCodingAgent:
         """
         command = self.build_command()
         trace_command = redact_command(command)
+        structured_output = self.structured_output_mode(command)
         lifecycle = {
             "process_started": "unknown",
             "prompt_written": "unknown",
@@ -555,6 +560,35 @@ class SubprocessCodingAgent:
                     provider_lifecycle=lifecycle,
                     provider_events=provider_events,
                     token_usage=token_usage,
+                )
+
+            if structured_output and not any(
+                item.get("event") == "provider.completed" for item in provider_events
+            ):
+                record_event("provider.failed")
+                return AgentRunResult(
+                    status="failed",
+                    summary=(
+                        f"{self.name} exited without a documented structured provider "
+                        "completion or failure event"
+                    ),
+                    failure_classification="UNKNOWN_PROVIDER_FAILURE",
+                    provider_returncode=process.returncode,
+                    provider_outcome="incomplete_structured_turn",
+                    stdout_tail=stdout_tail,
+                    stderr_tail=stderr_tail,
+                    memory_references=list(memory_references or []),
+                    tool_trace=[
+                        {
+                            "action": "cli_run",
+                            "command": trace_command,
+                            "environment_keys": trace_env,
+                            "returncode": process.returncode,
+                        }
+                    ],
+                    token_usage=token_usage,
+                    provider_lifecycle=lifecycle,
+                    provider_events=provider_events,
                 )
 
             record_event("provider.completed")

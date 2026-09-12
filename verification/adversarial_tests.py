@@ -4,7 +4,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, List, Optional
 
-from isolation.container import ExecutionResult, SandboxRunner
+from isolation.container import ExecutionResult, SandboxRunner, SandboxUnavailable
 
 
 @dataclass
@@ -23,6 +23,10 @@ class AdversarialTestRunner:
     ) -> None:
         self.workspace_path = Path(workspace_path).resolve()
         self.harness = dict(harness or {})
+        if self.harness and self.harness.get("backend", "docker") != "docker":
+            raise SandboxUnavailable(
+                "ARC benchmark harnesses must use the qualified Docker backend"
+            )
         self.sandbox = SandboxRunner(
             self.workspace_path,
             network_enabled=bool(self.harness.get("network_enabled", False)),
@@ -66,12 +70,36 @@ class AdversarialTestRunner:
         self,
         hidden_test_dir: str | Path,
         hidden_command: Optional[List[str]] = None,
+        selected_files: Optional[List[str]] = None,
     ) -> AdversarialTestResult:
-        """Run hidden tests with the candidate and hidden suite on separate mounts."""
+        """Run selected hidden tests with the hidden suite on a separate mount.
+
+        ``selected_files`` contains basenames identified by the private
+        host-side grader. Only those basenames are passed to pytest; the hidden
+        tree remains a read-only mount and is never copied into the candidate.
+        """
         hidden = Path(hidden_test_dir).resolve()
+        selected = list(selected_files or [])
+        for name in selected:
+            if not name or Path(name).name != name or name in {".", ".."}:
+                raise SandboxUnavailable(f"invalid hidden-test basename: {name!r}")
+
         cmd = hidden_command or list(self.harness.get("hidden_command", []))
         if not cmd:
             cmd = ["python", "-m", "pytest", "-q", "/arc-hidden-tests"]
+        if selected:
+            selected_paths = [f"/arc-hidden-tests/{name}" for name in selected]
+            scoped_cmd: list[str] = []
+            replaced_mount = False
+            for argument in cmd:
+                if argument == "/arc-hidden-tests":
+                    scoped_cmd.extend(selected_paths)
+                    replaced_mount = True
+                else:
+                    scoped_cmd.append(argument)
+            if not replaced_mount:
+                scoped_cmd.extend(selected_paths)
+            cmd = scoped_cmd
         result = self.sandbox.run_command(
             cmd,
             env_vars=dict(self.harness.get("hidden_environment", {})),

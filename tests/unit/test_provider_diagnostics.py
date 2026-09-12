@@ -159,6 +159,32 @@ def test_process_can_exit_after_prompt_before_provider_request_boundary(tmp_path
     assert result.failure_classification == "CLI_NONZERO_EXIT"
 
 
+def test_codex_jsonl_exit_zero_without_lifecycle_completion_fails_closed(tmp_path: Path) -> None:
+    script = tmp_path / "codex-no-turn.py"
+    script.write_text(
+        "import sys; sys.stdin.read(); print('plain output', flush=True)\n",
+        encoding="utf-8",
+    )
+    command = shlex.join([sys.executable, str(script), "--json"])
+    result = asyncio.run(
+        CodexAgentAdapter(command_override=command).run_prompt(
+            prompt="synthetic probe",
+            workspace=tmp_path,
+            budget=AgentBudget(timeout_seconds=5),
+        )
+    )
+
+    assert result.status == "failed"
+    assert result.failure_classification == "UNKNOWN_PROVIDER_FAILURE"
+    assert result.provider_outcome == "incomplete_structured_turn"
+    assert result.provider_returncode == 0
+    assert result.provider_lifecycle["process_started"] == "observed"
+    assert result.provider_lifecycle["prompt_written"] == "observed"
+    assert result.provider_lifecycle["request_started"] == "unknown"
+    assert result.provider_lifecycle["completed"] == "unknown"
+    assert result.provider_lifecycle["failed"] == "observed"
+
+
 def test_codex_jsonl_fixture_maps_only_observable_lifecycle_events() -> None:
     adapter = CodexAgentAdapter()
     assert adapter.parse_output_events("stdout", '{"type":"turn.started"}\n') == [

@@ -57,6 +57,18 @@ class SandboxRunner:
         self.image_digest = image_digest
         self.tmpfs_noexec = tmpfs_noexec
 
+    def _inspect_image(self, docker: str) -> str:
+        inspect = subprocess.run(
+            [docker, "image", "inspect", "--format", "{{.Id}}", self.image],
+            capture_output=True,
+            text=True,
+        )
+        actual_digest = inspect.stdout.strip()
+        if inspect.returncode != 0 or not actual_digest:
+            detail = (inspect.stderr or inspect.stdout or "image inspection failed").strip()
+            raise SandboxUnavailable(f"sandbox image '{self.image}' cannot be inspected: {detail}")
+        return actual_digest
+
     def _docker(self) -> str:
         docker = shutil.which("docker")
         if docker is None:
@@ -65,23 +77,52 @@ class SandboxRunner:
                 "Install Docker or configure a compatible execution backend; "
                 "ARC will not silently fall back to host subprocess execution."
             )
-        inspect = subprocess.run(
-            [docker, "image", "inspect", "--format", "{{.Id}}", self.image],
+        actual_digest = self._inspect_image(docker)
+        if self.image_digest and actual_digest != self.image_digest:
+            raise SandboxUnavailable(
+                f"sandbox image identity mismatch for '{self.image}': "
+                f"expected={self.image_digest}, actual={actual_digest}"
+            )
+        return docker
+
+    def verify_available(self) -> dict[str, object]:
+        """Passively verify Docker and the frozen image identity.
+
+        This method performs only executable/daemon/image inspection. It never
+        starts a container, so callers can use it during a read-only campaign
+        preflight without beginning benchmark execution.
+        """
+        docker = shutil.which("docker")
+        if docker is None:
+            raise SandboxUnavailable(
+                "Docker executable is unavailable; the frozen sandbox cannot be verified"
+            )
+
+        daemon = subprocess.run(
+            [docker, "info", "--format", "{{.ServerVersion}}"],
             capture_output=True,
             text=True,
         )
-        if inspect.returncode != 0:
-            raise SandboxUnavailable(
-                f"sandbox image '{self.image}' is unavailable. Build it with "
-                "`docker build -f Dockerfile.runner -t arc-runner:latest .` or set "
-                "ARC_SANDBOX_IMAGE to a prebuilt benchmark image."
-            )
-        if self.image_digest and inspect.stdout.strip() != self.image_digest:
+        if daemon.returncode != 0:
+            detail = (daemon.stderr or daemon.stdout or "Docker daemon is unavailable").strip()
+            raise SandboxUnavailable(f"Docker daemon is unavailable: {detail}")
+
+        actual_docker = docker
+        actual_digest = self._inspect_image(actual_docker)
+        if self.image_digest and actual_digest != self.image_digest:
             raise SandboxUnavailable(
                 f"sandbox image identity mismatch for '{self.image}': "
-                f"expected={self.image_digest}, actual={inspect.stdout.strip()}"
+                f"expected={self.image_digest}, actual={actual_digest}"
             )
-        return docker
+        return {
+            "backend": "docker",
+            "docker_executable": actual_docker,
+            "daemon_ready": True,
+            "image": self.image,
+            "expected_image_digest": self.image_digest,
+            "actual_image_digest": actual_digest,
+            "ready": True,
+        }
 
     def _container_cwd(self, cwd: Path) -> str:
         resolved = cwd.resolve()

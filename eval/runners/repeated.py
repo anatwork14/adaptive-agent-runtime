@@ -319,6 +319,7 @@ class RepeatedPairedBenchmarkRunner:
         visible_test_harness: dict[str, Any] | None = None,
         hard_project_usd: float = 500.0,
         hidden_test_dir: str | Path | None = None,
+        hidden_tests_required: bool | None = None,
     ) -> None:
         self.source_repo = Path(source_repo).resolve()
         self.output_root = (
@@ -336,6 +337,11 @@ class RepeatedPairedBenchmarkRunner:
         self.visible_test_harness = dict(visible_test_harness or {})
         self.hard_project_usd = hard_project_usd
         self.hidden_test_dir = Path(hidden_test_dir).resolve() if hidden_test_dir else None
+        self.hidden_tests_required = (
+            bool(hidden_tests_required)
+            if hidden_tests_required is not None
+            else self.hidden_test_dir is not None
+        )
         self.output_root.mkdir(parents=True, exist_ok=True)
         self.workspace_root.mkdir(parents=True, exist_ok=True)
 
@@ -438,6 +444,7 @@ class RepeatedPairedBenchmarkRunner:
                     visible_test_harness=self.visible_test_harness or None,
                     hard_project_usd=self.hard_project_usd,
                     hidden_test_dir=self.hidden_test_dir,
+                    hidden_tests_required=self.hidden_tests_required,
                 )
                 repeat_result = await runner.run(
                     repeated_manifests,

@@ -212,6 +212,7 @@ def register_study_commands(benchmark_app: typer.Typer) -> None:
                 profile_role=profile.role,
                 profile_capabilities=profile.capabilities,
                 visible_test_cmd=config.visible_test_cmd,
+                visible_test_harness=config.visible_test_harness,
                 hard_project_usd=config.hard_project_usd,
                 hidden_test_dir=hidden_test_dir,
                 verification_level=plan.runtime.verification_level,
@@ -226,6 +227,7 @@ def register_study_commands(benchmark_app: typer.Typer) -> None:
                 visible_test_harness=config.visible_test_harness or None,
                 hard_project_usd=config.hard_project_usd,
                 hidden_test_dir=hidden_test_dir,
+                hidden_tests_required=plan.runtime.hidden_tests_required,
             )
             executed_study_id = f"{plan.study_id}-{attempt_id}"
             result = asyncio.run(

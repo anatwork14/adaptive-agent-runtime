@@ -174,3 +174,19 @@ def test_harness_is_part_of_plan_digest_and_environment_contract(tmp_path) -> No
         hard_project_usd=10.0,
         hidden_test_dir=None,
     )
+
+    drifted_harness = dict(HARNESS)
+    drifted_harness["timeout_seconds"] = HARNESS["timeout_seconds"] + 1
+    with pytest.raises(ValueError, match="execution environment differs"):
+        validate_execution_environment(
+            plan,
+            repo,
+            provider="mock",
+            model="mock-model",
+            profile_role="builder",
+            profile_capabilities=["implementation"],
+            visible_test_cmd=HARNESS["command"],
+            visible_test_harness=drifted_harness,
+            hard_project_usd=10.0,
+            hidden_test_dir=None,
+        )
