@@ -1,16 +1,42 @@
-"""Final installed ARC product surface for v0.6."""
+"""Installed ARC product surface for interactive supervision and review loops."""
 
 from __future__ import annotations
 
+import asyncio
 import sys
 from pathlib import Path
 from typing import Optional
 
 import typer
+from rich.console import Console
+from rich.panel import Panel
+from rich.table import Table
 
-from cli.launcher import app
+from application.session_app import SessionArcApplication
+from cli.launcher import app, session_app
 from tui.shell import run_shell
 from webui.workspace_server import run_workspace
+
+console = Console()
+
+
+def _open(repo: Path, project_id: Optional[str]) -> SessionArcApplication:
+    return SessionArcApplication(repo, project_id)
+
+
+def _review_panel(status) -> Panel:
+    checks = status.checks
+    failed = len(status.failed_checks)
+    pending = len(status.pending_checks)
+    body = (
+        f"PR: {status.pr_url or '-'}\n"
+        f"state: {status.state or '-'}  review: {status.review_decision or '-'}  "
+        f"merge: {status.merge_state_status or '-'}\n"
+        f"checks: {len(checks)} total · {failed} failed · {pending} pending\n"
+        f"feedback: {'pending' if status.pending_feedback else 'none'}"
+    )
+    border = "green" if status.healthy else "yellow" if status.linked else "dim"
+    return Panel(body, title=f"GitHub review // {status.session_id}", border_style=border)
 
 
 @app.command("ui")
@@ -35,6 +61,124 @@ def workspace_ui(
             allow_remote=allow_remote,
             open_browser=open_browser,
         )
+    except Exception as exc:
+        raise typer.BadParameter(str(exc)) from exc
+
+
+@session_app.command("publish")
+def publish_session_pr(
+    session_id: str = typer.Argument(..., help="Persistent worker session"),
+    base: str = typer.Option("main", help="Pull-request base branch"),
+    remote: str = typer.Option("origin", help="Git remote used for the review branch"),
+    title: Optional[str] = typer.Option(None, help="Optional pull-request title"),
+    repo: Path = typer.Option(Path(".")),
+    project_id: Optional[str] = typer.Option(None),
+) -> None:
+    """Commit the current worker draft, push its branch, and create/update its PR."""
+    try:
+        with _open(repo, project_id) as arc:
+            doctor = arc.reviews.doctor()
+            if doctor["status"] != "READY":
+                raise typer.BadParameter(
+                    f"GitHub integration is {doctor['status']}: {doctor['detail']}"
+                )
+            status = arc.reviews.publish(
+                session_id,
+                base=base,
+                remote=remote,
+                title=title,
+            )
+            console.print(_review_panel(status))
+    except typer.BadParameter:
+        raise
+    except Exception as exc:
+        raise typer.BadParameter(str(exc)) from exc
+
+
+@session_app.command("review")
+def sync_session_review(
+    session_id: str = typer.Argument(..., help="Persistent worker session"),
+    apply: bool = typer.Option(
+        False,
+        "--apply/--no-apply",
+        help="Immediately send new actionable CI/review feedback back to the worker",
+    ),
+    repo: Path = typer.Option(Path(".")),
+    project_id: Optional[str] = typer.Option(None),
+) -> None:
+    """Refresh GitHub checks/reviews and optionally apply new feedback to the worker."""
+    try:
+        with _open(repo, project_id) as arc:
+            result = asyncio.run(arc.reviews.sync(session_id, auto_apply=apply))
+            console.print(_review_panel(result.status))
+            if result.changed:
+                console.print("[cyan]Review state changed and was recorded in ARC events.[/cyan]")
+            else:
+                console.print("[dim]No GitHub review-state change.[/dim]")
+            if result.feedback_applied:
+                console.print("[green]New actionable feedback was routed to the worker.[/green]")
+    except Exception as exc:
+        raise typer.BadParameter(str(exc)) from exc
+
+
+@app.command("supervise")
+def supervise_reviews(
+    repo: Path = typer.Option(Path("."), help="Repository root"),
+    project_id: Optional[str] = typer.Option(None),
+    interval: float = typer.Option(30.0, min=5.0, help="GitHub review polling interval in seconds"),
+    auto_apply: bool = typer.Option(
+        False,
+        "--auto-apply/--no-auto-apply",
+        help="Automatically route new actionable review/CI feedback into linked workers",
+    ),
+    once: bool = typer.Option(False, help="Run one review synchronization pass and exit"),
+) -> None:
+    """Supervise all PR-linked workers and keep external review state synchronized."""
+    try:
+        arc = _open(repo, project_id)
+        try:
+            doctor = arc.reviews.doctor()
+            if doctor["status"] != "READY":
+                raise typer.BadParameter(
+                    f"GitHub integration is {doctor['status']}: {doctor['detail']}"
+                )
+            console.print(
+                Panel(
+                    f"project={arc.project_id}\ninterval={interval:.0f}s\n"
+                    f"auto_apply={auto_apply}\n\n"
+                    "GitHub remains an external review surface; ARC events/tasks remain authoritative.",
+                    title="ARC review supervisor",
+                    border_style="cyan",
+                )
+            )
+            if once:
+                results = asyncio.run(arc.reviews.supervise_once(auto_apply=auto_apply))
+                table = Table("Session", "PR", "Changed", "Feedback", "Error")
+                for item in results:
+                    table.add_row(
+                        item.session_id,
+                        str(item.status.pr_number or "-"),
+                        "yes" if item.changed else "no",
+                        "applied" if item.feedback_applied else (
+                            "pending" if item.status.pending_feedback else "none"
+                        ),
+                        item.error or "",
+                    )
+                console.print(table)
+                return
+            try:
+                asyncio.run(
+                    arc.reviews.supervise(
+                        interval_seconds=interval,
+                        auto_apply=auto_apply,
+                    )
+                )
+            except KeyboardInterrupt:
+                console.print("\n[dim]Review supervisor stopped.[/dim]")
+        finally:
+            arc.close()
+    except typer.BadParameter:
+        raise
     except Exception as exc:
         raise typer.BadParameter(str(exc)) from exc
 
