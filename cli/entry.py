@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 from pathlib import Path
 from typing import Optional
 
@@ -20,12 +21,20 @@ from application.auth import (
     supported_auth_providers,
 )
 from application.config import AgentProfile
-from cli.main import app
+from cli.main import agent_app, app
 from tui.login import choose_login_provider
 
 console = Console()
-auth_app = typer.Typer(help="Sign in, sign out, and inspect vendor-native authentication.", no_args_is_help=True)
+auth_app = typer.Typer(
+    help="Sign in, sign out, and inspect vendor-native authentication.",
+    no_args_is_help=True,
+)
+mission_app = typer.Typer(
+    help="Plan an objective into a task DAG and execute it with the agent fleet.",
+    no_args_is_help=True,
+)
 app.add_typer(auth_app, name="auth")
+app.add_typer(mission_app, name="mission")
 
 
 def _brand() -> None:
@@ -58,6 +67,35 @@ def _register_profile(repo: Path, provider: str, profile_name: Optional[str], ma
         )
     suffix = " [default]" if make_default else ""
     console.print(f"[green]✓[/green] ARC profile [cyan]{name}[/cyan] configured{suffix}")
+
+
+def _print_orchestration_result(result) -> None:
+    color = "green" if result.successful else "yellow"
+    console.print(
+        Panel(
+            f"run=[cyan]{result.run_id}[/cyan]  policy={result.policy}  rounds={result.rounds}\n"
+            f"accepted=[green]{len(result.accepted)}[/green]  "
+            f"rejected=[red]{len(result.rejected)}[/red]  "
+            f"failed=[red]{len(result.failed)}[/red]  "
+            f"deferred={len(set(result.deferred))}",
+            title="ARC Orchestration",
+            border_style=color,
+        )
+    )
+    if result.routed:
+        table = Table(title="Routing decisions", box=box.SIMPLE_HEAVY)
+        table.add_column("Task", style="cyan")
+        table.add_column("Agent", style="green")
+        table.add_column("Score", justify="right")
+        table.add_column("Why", ratio=3)
+        for decision in result.routed:
+            table.add_row(
+                decision.task_id,
+                decision.agent_name,
+                f"{decision.score:.2f}",
+                "; ".join(decision.reasons) or "policy score",
+            )
+        console.print(table)
 
 
 @app.command("login")
@@ -168,6 +206,146 @@ def auth_logout(
 ) -> None:
     """Alias for `arc logout`."""
     logout(provider=provider, repo=repo)
+
+
+@mission_app.command("plan")
+def mission_plan(
+    objective: str = typer.Argument(..., help="High-level objective to decompose"),
+    file: list[str] = typer.Option([], "--file", help="Expected repository surface; repeatable"),
+    accept: list[str] = typer.Option([], "--accept", help="Acceptance criterion; repeatable"),
+    risk: float = typer.Option(0.5, min=0.0, max=1.0),
+    tokens: int = typer.Option(24000, min=1000),
+    max_tasks: int = typer.Option(8, min=1, max=32),
+    run: bool = typer.Option(False, "--run", help="Immediately orchestrate the generated DAG"),
+    policy: Optional[str] = typer.Option(None, help="balanced | quality | cost"),
+    max_parallel: Optional[int] = typer.Option(None, min=1, max=32),
+    repo: Path = typer.Option(Path("."), help="Repository root"),
+    project_id: Optional[str] = typer.Option(None),
+) -> None:
+    """Turn one objective into a replayable task DAG."""
+    try:
+        with ArcApplication(repo, project_id) as arc:
+            plan, tasks = arc.plan_objective(
+                objective,
+                files=file,
+                acceptance=accept,
+                risk=risk,
+                token_budget=tokens,
+                max_tasks=max_tasks,
+            )
+            table = Table(title=f"Mission plan // {plan.planner}", box=box.SIMPLE_HEAVY)
+            table.add_column("Task", style="cyan")
+            table.add_column("Type")
+            table.add_column("Goal", ratio=3)
+            table.add_column("Deps")
+            table.add_column("Capabilities")
+            for task in tasks:
+                table.add_row(
+                    task.task_id,
+                    task.task_type,
+                    task.goal,
+                    ",".join(task.dependencies) or "-",
+                    ",".join(task.required_capabilities) or "-",
+                )
+            console.print(table)
+            if run:
+                result = asyncio.run(
+                    arc.orchestrate(policy=policy, max_parallel=max_parallel)
+                )
+                _print_orchestration_result(result)
+    except Exception as exc:
+        console.print(f"[bold red]ARC mission error:[/bold red] {exc}")
+        raise typer.Exit(1) from exc
+
+
+@app.command("route")
+def route_task(
+    task_id: str = typer.Argument(...),
+    policy: Optional[str] = typer.Option(None, help="balanced | quality | cost"),
+    repo: Path = typer.Option(Path(".")),
+    project_id: Optional[str] = typer.Option(None),
+) -> None:
+    """Explain which READY agent ARC would choose for a task."""
+    try:
+        with ArcApplication(repo, project_id) as arc:
+            decision = arc.route_task(task_id, policy=policy)
+            console.print(
+                Panel(
+                    f"task=[cyan]{task_id}[/cyan]\n"
+                    f"agent=[green]{decision.agent_name}[/green]\n"
+                    f"policy={decision.policy}  score={decision.score:.2f}\n\n"
+                    + "\n".join(f"• {reason}" for reason in decision.reasons),
+                    title="ARC Route Decision",
+                    border_style="cyan",
+                )
+            )
+    except Exception as exc:
+        console.print(f"[bold red]ARC route error:[/bold red] {exc}")
+        raise typer.Exit(1) from exc
+
+
+@app.command("orchestrate")
+def orchestrate(
+    policy: Optional[str] = typer.Option(None, help="balanced | quality | cost"),
+    max_parallel: Optional[int] = typer.Option(None, min=1, max=32),
+    max_rounds: int = typer.Option(100, min=1, max=1000),
+    repo: Path = typer.Option(Path(".")),
+    project_id: Optional[str] = typer.Option(None),
+) -> None:
+    """Route and execute all currently reachable work until the DAG is idle."""
+    try:
+        with ArcApplication(repo, project_id) as arc:
+            result = asyncio.run(
+                arc.orchestrate(
+                    policy=policy,
+                    max_parallel=max_parallel,
+                    max_rounds=max_rounds,
+                )
+            )
+            _print_orchestration_result(result)
+    except Exception as exc:
+        console.print(f"[bold red]ARC orchestration error:[/bold red] {exc}")
+        raise typer.Exit(1) from exc
+
+
+@agent_app.command("tune")
+def tune_agent_routing(
+    name: str = typer.Argument(..., help="Existing agent profile"),
+    capability: list[str] = typer.Option([], "--capability", help="Capability; repeatable"),
+    role: Optional[str] = typer.Option(None),
+    max_concurrency: Optional[int] = typer.Option(None, min=1, max=32),
+    cost_weight: Optional[float] = typer.Option(None, min=0.0),
+    quality_weight: Optional[float] = typer.Option(None, min=0.0),
+    repo: Path = typer.Option(Path(".")),
+    project_id: Optional[str] = typer.Option(None),
+) -> None:
+    """Tune deterministic routing metadata without touching provider credentials."""
+    try:
+        with ArcApplication(repo, project_id) as arc:
+            existing = arc.config.agents.get(name)
+            if not existing:
+                raise ValueError(f"Agent profile {name!r} not found")
+            payload = existing.model_dump()
+            if capability:
+                payload["capabilities"] = capability
+            if role is not None:
+                payload["role"] = role
+            if max_concurrency is not None:
+                payload["max_concurrency"] = max_concurrency
+            if cost_weight is not None:
+                payload["cost_weight"] = cost_weight
+            if quality_weight is not None:
+                payload["quality_weight"] = quality_weight
+            profile = AgentProfile.model_validate(payload)
+            arc.add_agent(profile, make_default=arc.config.default_agent == name)
+            console.print(
+                f"[green]✓[/green] {name}: capabilities={','.join(profile.capabilities) or '-'} "
+                f"max_concurrency={profile.max_concurrency} cost={profile.cost_weight:.2f} "
+                f"quality={profile.quality_weight:.2f}"
+            )
+    except Exception as exc:
+        console.print(f"[bold red]ARC tune error:[/bold red] {exc}")
+        raise typer.Exit(1) from exc
 
 
 @app.command("web")

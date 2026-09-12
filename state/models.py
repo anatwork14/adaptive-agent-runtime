@@ -66,6 +66,7 @@ class TaskState(BaseModel):
     project_id: str
     goal: str
     task_type: str = "code"
+    required_capabilities: List[str] = Field(default_factory=list)
     risk: float = 0.5
     status: TaskStatus = TaskStatus.CREATED
     assigned_agent: Optional[str] = None
@@ -111,9 +112,9 @@ class PatchSubmission(BaseModel):
     """Structured patch submission from an agent.
 
     ``candidate_commit_sha`` is required by the integration gate for a real
-    merge, but defaults to empty so non-gate utilities (for example staleness
-    unit tests) can still construct a lightweight submission. The gate rejects
-    an empty or invalid SHA before integration.
+    merge, but defaults to empty so non-gate utilities can still construct a
+    lightweight submission. The gate rejects an empty or invalid SHA before
+    integration.
     """
 
     patch_id: str

@@ -4,8 +4,8 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "adaptive-agent-runtime"
-version = "0.4.0"
-description = "Reliable context control for long-horizon multi-agent coding"
+version = "0.5.0"
+description = "Reliable multi-agent orchestration and context control for coding agents"
 readme = "README.md"
 requires-python = ">=3.11"
 license = { text = "Apache-2.0" }
@@ -16,6 +16,7 @@ keywords = [
     "ai-agents",
     "coding-agents",
     "multi-agent",
+    "agent-orchestration",
     "agent-memory",
     "context-engineering",
     "event-sourcing",

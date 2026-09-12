@@ -17,7 +17,9 @@
       </div>
       <div class="top-right">
         <span class="live-pill"><i></i><span id="connection">CONNECTING</span><b id="clock">--:--:--</b></span>
-        <button id="createTask" class="primary">+ New task</button>
+        <button id="planObjective">Plan objective</button>
+        <button id="runFleet" class="primary">▶ Run ready</button>
+        <button id="createTask">+ New task</button>
         <button id="refresh">Refresh</button>
       </div>
     </header>
@@ -41,7 +43,7 @@
     </section>
 
     <section class="section">
-      <div class="section-head"><div><span class="eyebrow">EXECUTION LEDGER</span><h2>Live tasks</h2><p>Newest missions first. Select a row to inspect context, gate history and actions.</p></div><span id="taskCount" class="section-key">0 TASKS</span></div>
+      <div class="section-head"><div><span class="eyebrow">EXECUTION LEDGER</span><h2>Live tasks</h2><p>Newest missions first. Select a row to inspect context, routing, gate history and actions.</p></div><span id="taskCount" class="section-key">0 TASKS</span></div>
       <div class="live-table-wrap">
         <div class="live-table head"><span>ID</span><span>Mission</span><span>Agent</span><span>Status</span><span>Attempt</span></div>
         <div id="tasks" class="live-task-list"></div>
@@ -67,7 +69,8 @@
             <div><span>Token ceiling</span><b id="tokenBudget"></b></div>
           </div>
           <div class="facts"><div><span>Files</span><p id="files"></p></div><div><span>Dependencies</span><p id="deps"></p></div><div><span>Acceptance</span><p id="acceptance"></p></div></div>
-          <div class="mission-actions"><button id="runTask" class="primary">Run mission</button><button id="inspectContext">Inspect context</button><button id="retryTask">Retry</button><button id="cancelTask" class="danger">Cancel</button></div>
+          <div class="mission-actions"><button id="runTask" class="primary">Run mission</button><button id="explainRoute">Explain route</button><button id="inspectContext">Inspect context</button><button id="retryTask">Retry</button><button id="cancelTask" class="danger">Cancel</button></div>
+          <pre id="routePreview" class="context-preview" hidden></pre>
           <pre id="contextPreview" class="context-preview" hidden></pre>
         </div>
       </article>
@@ -92,13 +95,26 @@
     </form>
   </dialog>
 
+  <dialog id="missionDialog">
+    <form id="missionForm" method="dialog">
+      <div class="dialog-head"><div><span class="eyebrow">PLANNER</span><b>Plan objective</b></div><button value="cancel" formmethod="dialog">×</button></div>
+      <label>Objective<textarea name="objective" required placeholder="Add authentication with tests and documentation"></textarea></label>
+      <label>Expected files<input name="files" placeholder="src/auth.py, tests/test_auth.py, docs/auth.md"></label>
+      <div class="two"><label>Risk<input name="risk" type="number" min="0" max="1" step="0.05" value="0.5"></label><label>Token ceiling / task<input name="token_budget" type="number" min="1000" value="24000"></label></div>
+      <div class="two"><label>Maximum tasks<input name="max_tasks" type="number" min="1" max="32" value="8"></label><label class="check"><input name="run_after" type="checkbox"> Run fleet after planning</label></div>
+      <label>Acceptance criteria<textarea name="acceptance" placeholder="tests pass; public API remains stable"></textarea></label>
+      <p class="hint">The v0.5 planner is deterministic and replayable. It splits declared source, docs and test surfaces into a dependency DAG; routing is handled separately by the fleet policy.</p>
+      <div class="dialog-actions"><button value="cancel" formmethod="dialog">Cancel</button><button class="primary" value="default">Create plan</button></div>
+    </form>
+  </dialog>
+
   <dialog id="agentDialog">
     <form id="agentForm" method="dialog">
       <div class="dialog-head"><div><span class="eyebrow">TEAM CONFIG</span><b>Add agent profile</b></div><button value="cancel" formmethod="dialog">×</button></div>
       <div class="two"><label>Name<input name="name" required placeholder="builder"></label><label>Provider<select name="provider"><option>codex</option><option>claude</option><option>antigravity</option><option>opencode</option><option>mock</option><option>openrouter</option></select></label></div>
       <div class="two"><label>Model<input name="model" placeholder="optional"></label><label>Role<input name="role" value="implementation"></label></div>
       <label class="check"><input type="checkbox" name="make_default"> Make default execution profile</label>
-      <p class="hint">Authentication is configured separately with <code>arc login</code>. ARC never asks this browser for API keys or OAuth tokens.</p>
+      <p class="hint">Authentication is configured separately with <code>arc login</code>. ARC never asks this browser for API keys or OAuth tokens. Tune routing metadata with <code>arc agent tune</code>.</p>
       <div class="dialog-actions"><button value="cancel" formmethod="dialog">Cancel</button><button class="primary" value="default">Save profile</button></div>
     </form>
   </dialog>
@@ -112,5 +128,6 @@
 
   <div id="toast" class="toast" aria-live="polite"></div>
   <script type="module" src="/static/mission.js"></script>
+  <script type="module" src="/static/orchestration.js"></script>
 </body>
 </html>

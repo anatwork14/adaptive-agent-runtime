@@ -1,6 +1,7 @@
 """Deterministic projections for the Authoritative State Plane."""
 
 from typing import Dict, List, Optional
+
 from state.models import (
     BudgetState,
     Event,
@@ -87,6 +88,7 @@ class TaskDAGProjector:
                 project_id=self.project_id,
                 goal=payload.get("goal", ""),
                 task_type=payload.get("task_type", "code"),
+                required_capabilities=list(payload.get("required_capabilities", [])),
                 risk=float(payload.get("risk", 0.5)),
                 status=TaskStatus.READY if not payload.get("dependencies") else TaskStatus.CREATED,
                 dependencies=list(payload.get("dependencies", [])),
@@ -129,15 +131,15 @@ class TaskDAGProjector:
             elif event.kind == "recovery.retry":
                 task.status = TaskStatus.READY
 
-        # Re-evaluate ready states for tasks whose dependencies just completed
         self._update_dependency_readiness()
 
     def _update_dependency_readiness(self) -> None:
-        completed_ids = {tid for tid, t in self.tasks.items() if t.status == TaskStatus.COMPLETED}
+        completed_ids = {tid for tid, task in self.tasks.items() if task.status == TaskStatus.COMPLETED}
         for task in self.tasks.values():
-            if task.status == TaskStatus.CREATED:
-                if all(dep in completed_ids for dep in task.dependencies):
-                    task.status = TaskStatus.READY
+            if task.status == TaskStatus.CREATED and all(
+                dependency in completed_ids for dependency in task.dependencies
+            ):
+                task.status = TaskStatus.READY
 
 
 class LeaseProjector:
@@ -182,7 +184,12 @@ class LeaseProjector:
 class BudgetProjector:
     """Projects token and financial budget consumption from event stream."""
 
-    def __init__(self, project_id: str, hard_task_usd: float = 5.0, hard_project_usd: float = 500.0) -> None:
+    def __init__(
+        self,
+        project_id: str,
+        hard_task_usd: float = 5.0,
+        hard_project_usd: float = 500.0,
+    ) -> None:
         self.project_id = project_id
         self.state = BudgetState(
             project_id=project_id,
@@ -230,8 +237,10 @@ class DeterministicStateProjection:
         self.version = event.id
 
     @classmethod
-    def replay_from_events(cls, project_id: str, events: List[Event]) -> "DeterministicStateProjection":
+    def replay_from_events(
+        cls, project_id: str, events: List[Event]
+    ) -> "DeterministicStateProjection":
         projection = cls(project_id)
-        for ev in events:
-            projection.apply(ev)
+        for event in events:
+            projection.apply(event)
         return projection

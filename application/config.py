@@ -7,13 +7,22 @@ from pathlib import Path
 from typing import Dict, List, Literal, Optional
 
 import yaml
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 ProviderName = Literal["mock", "codex", "claude", "antigravity", "opencode", "openrouter"]
 
+_PROVIDER_DEFAULT_CAPABILITIES: dict[str, list[str]] = {
+    "mock": ["implementation", "test", "docs", "review", "research"],
+    "codex": ["implementation", "test", "debug", "refactor"],
+    "claude": ["implementation", "test", "review", "docs", "architecture"],
+    "antigravity": ["implementation", "test", "docs", "research"],
+    "opencode": ["implementation", "test", "debug", "refactor"],
+    "openrouter": [],
+}
+
 
 class AgentProfile(BaseModel):
-    """Named execution profile used consistently by CLI and TUI."""
+    """Named execution profile used consistently by CLI, TUI, and router."""
 
     name: str
     provider: ProviderName
@@ -21,7 +30,17 @@ class AgentProfile(BaseModel):
     role: str = "implementation"
     enabled: bool = True
     command_override: Optional[str] = None
+    capabilities: List[str] = Field(default_factory=list)
+    max_concurrency: int = Field(default=1, ge=1, le=32)
+    cost_weight: float = Field(default=1.0, ge=0.0)
+    quality_weight: float = Field(default=1.0, ge=0.0)
     metadata: Dict[str, str] = Field(default_factory=dict)
+
+    @model_validator(mode="after")
+    def populate_default_capabilities(self) -> "AgentProfile":
+        if not self.capabilities:
+            self.capabilities = list(_PROVIDER_DEFAULT_CAPABILITIES.get(self.provider, []))
+        return self
 
 
 class ArcConfig(BaseModel):
@@ -32,11 +51,20 @@ class ArcConfig(BaseModel):
     hard_task_usd: float = 5.0
     hard_project_usd: float = 500.0
     visible_test_cmd: List[str] = Field(default_factory=list)
+    orchestration_max_parallel: int = Field(default=3, ge=1, le=32)
+    routing_policy: Literal["balanced", "quality", "cost"] = "balanced"
     agents: Dict[str, AgentProfile] = Field(default_factory=dict)
 
     @classmethod
     def default(cls, project_id: str = "default") -> "ArcConfig":
-        mock = AgentProfile(name="mock", provider="mock", role="smoke-test")
+        mock = AgentProfile(
+            name="mock",
+            provider="mock",
+            role="implementation",
+            max_concurrency=4,
+            cost_weight=0.0,
+            quality_weight=0.5,
+        )
         return cls(project_id=project_id, default_agent="mock", agents={"mock": mock})
 
 
@@ -56,9 +84,10 @@ class ConfigStore:
         if project_id:
             config.project_id = project_id
         if "mock" not in config.agents:
-            config.agents["mock"] = AgentProfile(
-                name="mock", provider="mock", role="smoke-test"
-            )
+            config.agents["mock"] = ArcConfig.default(config.project_id).agents["mock"]
+        else:
+            mock = config.agents["mock"]
+            mock.max_concurrency = max(mock.max_concurrency, 4)
         return config
 
     def _ensure_runtime_ignored(self) -> None:
