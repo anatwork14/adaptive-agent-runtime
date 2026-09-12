@@ -105,8 +105,9 @@ async def test_provider_turn_can_be_cancelled_without_waiting_for_timeout(tmp_pa
 async def test_provider_cancellation_terminates_descendant_processes(tmp_path: Path) -> None:
     marker = tmp_path / "orphan-survived.txt"
     child_code = (
-        "import pathlib,time; "
-        "time.sleep(1.0); "
+        "import pathlib,signal,time; "
+        "signal.signal(signal.SIGTERM, signal.SIG_IGN); "
+        "time.sleep(3.0); "
         f"pathlib.Path({str(marker)!r}).write_text('alive', encoding='utf-8')"
     )
     provider_code = (
@@ -140,12 +141,13 @@ async def test_provider_cancellation_terminates_descendant_processes(tmp_path: P
     )
     await asyncio.wait_for(child_started.wait(), timeout=2)
     cancel.set()
-    result = await asyncio.wait_for(task, timeout=4)
+    result = await asyncio.wait_for(task, timeout=5)
     assert result.status == "cancelled"
 
-    # If ARC killed only the provider parent, the inherited child would still
-    # write this marker after cancellation. The whole supervised process group
-    # must be gone before the turn lock can be released.
+    # The child intentionally ignores SIGTERM. ARC must wait through the grace
+    # window, escalate the whole provider process group, and only then report
+    # cancellation complete. Otherwise this marker appears after the lock is
+    # released and proves an orphan continued running.
     await asyncio.sleep(1.2)
     assert not marker.exists()
 
