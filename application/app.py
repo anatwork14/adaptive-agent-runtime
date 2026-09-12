@@ -1,4 +1,4 @@
-"""High-level ARC application service shared by CLI, TUI, and future APIs."""
+"""High-level ARC application service shared by CLI, TUI, and APIs."""
 
 from __future__ import annotations
 
@@ -10,6 +10,9 @@ from typing import Iterable, Optional
 from application.agents import AgentDoctorResult, build_agent, doctor_profile
 from application.config import AgentProfile, ArcConfig, ConfigStore
 from application.events import EventStream
+from application.orchestration import OrchestrationEngine, OrchestrationResult
+from application.planner import DeterministicPlanner, MissionPlan
+from application.routing import AgentRouter, RouteDecision
 from context.request import ContextRequest
 from memory.lifecycle import MemoryLifecycle
 from runtime.orchestrator import Orchestrator
@@ -19,12 +22,7 @@ from state.projection import DeterministicStateProjection
 
 
 class ArcApplication:
-    """Application boundary around ARC's authoritative runtime.
-
-    The orchestrator remains the only execution writer. This class centralizes
-    lifecycle, configuration, inspection, and adapter resolution so the CLI and
-    TUI do not duplicate business logic.
-    """
+    """Application boundary around ARC's authoritative runtime."""
 
     def __init__(self, repo: str | Path = ".", project_id: str | None = None) -> None:
         self.repo = Path(repo).resolve()
@@ -97,6 +95,10 @@ class ArcApplication:
             "budget": projection.budgets.state,
             "leases": active_leases,
             "agents": list(self.config.agents.values()),
+            "orchestration": {
+                "max_parallel": self.config.orchestration_max_parallel,
+                "routing_policy": self.config.routing_policy,
+            },
         }
 
     # ------------------------------------------------------------------
@@ -116,6 +118,8 @@ class ArcApplication:
         goal: str,
         *,
         task_id: str | None = None,
+        task_type: str = "code",
+        required_capabilities: Optional[list[str]] = None,
         dependencies: Optional[list[str]] = None,
         files: Optional[list[str]] = None,
         symbols: Optional[list[str]] = None,
@@ -137,6 +141,8 @@ class ArcApplication:
         self.orchestrator.create_task(
             task_id=task_id,
             goal=goal,
+            task_type=task_type,
+            required_capabilities=required_capabilities or [],
             dependencies=dependencies,
             files_declared=files or [],
             symbols=symbols or [],
@@ -209,6 +215,96 @@ class ArcApplication:
             raise ValueError(f"Agent profile {name!r} not found")
         adapter = build_agent(profile)
         return await self.orchestrator.execute_task(task_id, adapter, name)
+
+    # ------------------------------------------------------------------
+    # Planning, routing, and orchestration
+    # ------------------------------------------------------------------
+    def plan_objective(
+        self,
+        objective: str,
+        *,
+        files: Optional[list[str]] = None,
+        acceptance: Optional[list[str]] = None,
+        risk: float = 0.5,
+        token_budget: int = 24000,
+        max_tasks: int = 8,
+    ) -> tuple[MissionPlan, list[TaskState]]:
+        """Create a deterministic mission plan and materialize its task DAG."""
+        self.require_initialized()
+        plan = DeterministicPlanner().plan(
+            objective,
+            files=files,
+            acceptance=acceptance,
+            risk=risk,
+            token_budget=token_budget,
+            max_tasks=max_tasks,
+        )
+        key_to_task_id: dict[str, str] = {}
+        created: list[TaskState] = []
+        for item in plan.tasks:
+            dependencies = [key_to_task_id[key] for key in item.dependencies]
+            task = self.create_task(
+                item.goal,
+                task_type=item.task_type,
+                required_capabilities=item.required_capabilities,
+                dependencies=dependencies,
+                files=item.files,
+                acceptance=item.acceptance,
+                risk=item.risk,
+                token_budget=item.token_budget,
+            )
+            key_to_task_id[item.key] = task.task_id
+            created.append(task)
+
+        self.event_store.append(
+            actor="planner",
+            kind="orchestration.plan_created",
+            project_id=self.project_id,
+            payload={
+                "objective": objective,
+                "planner": plan.planner,
+                "tasks": [
+                    {
+                        "key": item.key,
+                        "task_id": key_to_task_id[item.key],
+                        "task_type": item.task_type,
+                        "dependencies": [key_to_task_id[key] for key in item.dependencies],
+                        "files": item.files,
+                        "required_capabilities": item.required_capabilities,
+                    }
+                    for item in plan.tasks
+                ],
+            },
+        )
+        return plan, created
+
+    def route_task(self, task_id: str, *, policy: str | None = None) -> RouteDecision:
+        self.require_initialized()
+        task = self.get_task(task_id)
+        if not task:
+            raise ValueError(f"Task {task_id} not found")
+        doctors = {item.name: item for item in self.doctor_agents()}
+        router = AgentRouter(policy or self.config.routing_policy)
+        return router.route(
+            task,
+            self.list_agents(),
+            doctors,
+            default_agent=self.config.default_agent,
+        )
+
+    async def orchestrate(
+        self,
+        *,
+        policy: str | None = None,
+        max_parallel: int | None = None,
+        max_rounds: int = 100,
+    ) -> OrchestrationResult:
+        engine = OrchestrationEngine(
+            self,
+            policy=policy or self.config.routing_policy,
+            max_parallel=max_parallel or self.config.orchestration_max_parallel,
+        )
+        return await engine.run_until_idle(max_rounds=max_rounds)
 
     # ------------------------------------------------------------------
     # Agents and configuration
