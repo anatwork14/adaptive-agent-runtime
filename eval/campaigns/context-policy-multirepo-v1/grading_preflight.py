@@ -8,6 +8,7 @@ mounted worktree instead of an unrelated site-packages installation.
 
 from __future__ import annotations
 
+import hashlib
 import json
 import shutil
 import subprocess
@@ -97,6 +98,7 @@ def validate_base_grading_environment(
                 f"environment (exit={tests.exit_code}, timed_out={tests.timed_out}):\n{output}"
             )
 
+        test_output = tests.stdout + "\n" + tests.stderr
         return {
             "repo_commit": commit,
             "import_module": import_module,
@@ -105,8 +107,8 @@ def validate_base_grading_environment(
             "visible_test_cmd": command,
             "visible_tests_passed": True,
             "visible_test_duration_ms": tests.duration_ms,
-            "visible_test_output_sha256": __import__("hashlib").sha256(
-                (tests.stdout + "\n" + tests.stderr).encode("utf-8")
+            "visible_test_output_sha256": hashlib.sha256(
+                test_output.encode("utf-8")
             ).hexdigest(),
         }
     finally:
