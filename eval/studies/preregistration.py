@@ -8,13 +8,12 @@ import json
 import subprocess
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Sequence
+from typing import Any, Literal, Sequence
 
 from pydantic import BaseModel, Field, model_validator
 
 from eval.comparison import validate_comparable_manifests
 from eval.models import BenchmarkManifest
-
 
 PRIMARY_METRICS = (
     "resolved_rate",
@@ -36,6 +35,23 @@ class StudyDesign(BaseModel):
     exclusions: list[str] = Field(default_factory=list)
 
 
+class ExecutionHarness(BaseModel):
+    """Immutable identity for the repository test backend."""
+
+    command: list[str] = Field(min_length=1)
+    backend: Literal["docker"] = "docker"
+    image: str = Field(min_length=1)
+    image_digest: str = Field(min_length=71, max_length=71, pattern=r"^sha256:[0-9a-f]{64}$")
+    network_enabled: bool = False
+    environment: dict[str, str] = Field(default_factory=dict)
+    hidden_command: list[str] = Field(default_factory=list)
+    hidden_environment: dict[str, str] = Field(default_factory=dict)
+    tmpfs_exec: bool = False
+    python_toolchain: str = Field(min_length=1)
+    timeout_seconds: int = Field(default=120, ge=1)
+    qualification_id: str = Field(min_length=1)
+
+
 class StudyRuntimeContract(BaseModel):
     agent_profile: str = Field(min_length=1)
     provider: str = Field(min_length=1)
@@ -43,6 +59,7 @@ class StudyRuntimeContract(BaseModel):
     profile_role: str = ""
     profile_capabilities: list[str] = Field(default_factory=list)
     visible_test_cmd: list[str] = Field(default_factory=list)
+    visible_test_harness: ExecutionHarness | None = None
     hard_project_usd: float = Field(ge=0.0)
     verification_level: str = "V0"
     hidden_tests_required: bool = False
@@ -62,9 +79,7 @@ class PreregisteredStudy(BaseModel):
     study_id: str = Field(min_length=1)
     benchmark_id: str = Field(min_length=1)
     created_at_utc: str
-    canonical_repo_commit: str = Field(
-        min_length=40, max_length=40, pattern=r"^[0-9a-fA-F]{40}$"
-    )
+    canonical_repo_commit: str = Field(min_length=40, max_length=40, pattern=r"^[0-9a-fA-F]{40}$")
     manifests: list[BenchmarkManifest] = Field(min_length=2)
     design: StudyDesign
     runtime: StudyRuntimeContract
@@ -85,8 +100,7 @@ class PreregisteredStudy(BaseModel):
         for other in self.manifests[1:]:
             validate_comparable_manifests(first, other)
         expected_pairs = {
-            f"{left}-{right}"
-            for left, right in itertools.combinations(sorted(baselines), 2)
+            f"{left}-{right}" for left, right in itertools.combinations(sorted(baselines), 2)
         }
         if set(self.planned_comparisons) != expected_pairs:
             raise ValueError("planned_comparisons must enumerate every baseline pair exactly once")
@@ -155,6 +169,7 @@ def create_preregistration(
     profile_role: str = "",
     profile_capabilities: Sequence[str] = (),
     visible_test_cmd: Sequence[str] = (),
+    visible_test_harness: ExecutionHarness | dict[str, Any] | None = None,
     hard_project_usd: float,
     hidden_test_dir: str | Path | None = None,
     verification_level: str = "V0",
@@ -207,6 +222,11 @@ def create_preregistration(
             profile_role=profile_role,
             profile_capabilities=sorted(set(profile_capabilities)),
             visible_test_cmd=list(visible_test_cmd),
+            visible_test_harness=(
+                ExecutionHarness.model_validate(visible_test_harness)
+                if visible_test_harness
+                else None
+            ),
             hard_project_usd=float(hard_project_usd),
             verification_level=verification_level,
             hidden_tests_required=hidden_digest is not None,
@@ -250,6 +270,7 @@ def validate_execution_environment(
     profile_role: str,
     profile_capabilities: Sequence[str],
     visible_test_cmd: Sequence[str],
+    visible_test_harness: ExecutionHarness | dict[str, Any] | None = None,
     hard_project_usd: float,
     hidden_test_dir: str | Path | None,
     verification_level: str = "V0",
@@ -274,6 +295,11 @@ def validate_execution_environment(
         "profile_role": profile_role,
         "profile_capabilities": sorted(set(profile_capabilities)),
         "visible_test_cmd": list(visible_test_cmd),
+        "visible_test_harness": (
+            ExecutionHarness.model_validate(visible_test_harness).model_dump(mode="json")
+            if visible_test_harness
+            else None
+        ),
         "hard_project_usd": float(hard_project_usd),
         "verification_level": verification_level,
         "hidden_tests_required": live_hidden is not None,
@@ -281,13 +307,9 @@ def validate_execution_environment(
     }
     expected = plan.runtime.model_dump(mode="json")
     expected.pop("agent_profile", None)
-    mismatches = [
-        key for key in sorted(expected)
-        if expected[key] != actual.get(key)
-    ]
+    mismatches = [key for key in sorted(expected) if expected[key] != actual.get(key)]
     if mismatches:
         details = ", ".join(
-            f"{key}: planned={expected[key]!r}, actual={actual.get(key)!r}"
-            for key in mismatches
+            f"{key}: planned={expected[key]!r}, actual={actual.get(key)!r}" for key in mismatches
         )
         raise ValueError("execution environment differs from preregistration: " + details)

@@ -44,6 +44,8 @@ class SandboxRunner:
         cpus: float = 2.0,
         memory: str = "4g",
         pids_limit: int = 256,
+        image_digest: Optional[str] = None,
+        tmpfs_noexec: bool = True,
     ) -> None:
         self.workspace_path = Path(workspace_path).resolve()
         self.network_enabled = network_enabled
@@ -52,6 +54,8 @@ class SandboxRunner:
         self.cpus = cpus
         self.memory = memory
         self.pids_limit = pids_limit
+        self.image_digest = image_digest
+        self.tmpfs_noexec = tmpfs_noexec
 
     def _docker(self) -> str:
         docker = shutil.which("docker")
@@ -62,7 +66,7 @@ class SandboxRunner:
                 "ARC will not silently fall back to host subprocess execution."
             )
         inspect = subprocess.run(
-            [docker, "image", "inspect", self.image],
+            [docker, "image", "inspect", "--format", "{{.Id}}", self.image],
             capture_output=True,
             text=True,
         )
@@ -71,6 +75,11 @@ class SandboxRunner:
                 f"sandbox image '{self.image}' is unavailable. Build it with "
                 "`docker build -f Dockerfile.runner -t arc-runner:latest .` or set "
                 "ARC_SANDBOX_IMAGE to a prebuilt benchmark image."
+            )
+        if self.image_digest and inspect.stdout.strip() != self.image_digest:
+            raise SandboxUnavailable(
+                f"sandbox image identity mismatch for '{self.image}': "
+                f"expected={self.image_digest}, actual={inspect.stdout.strip()}"
             )
         return docker
 
@@ -90,6 +99,7 @@ class SandboxRunner:
         cwd: Optional[Path] = None,
         env_vars: Optional[Dict[str, str]] = None,
         timeout: Optional[int] = None,
+        read_only_mounts: Optional[Dict[str, str | Path]] = None,
     ) -> ExecutionResult:
         """Execute ``command`` in a least-privilege Docker container."""
         if not command:
@@ -98,6 +108,9 @@ class SandboxRunner:
         exec_cwd = (cwd or self.workspace_path).resolve()
         container_cwd = self._container_cwd(exec_cwd)
 
+        tmpfs_options = "rw,exec,nosuid,size=256m"
+        if self.tmpfs_noexec:
+            tmpfs_options = "rw,noexec,nosuid,size=256m"
         docker_cmd: List[str] = [
             docker,
             "run",
@@ -119,12 +132,25 @@ class SandboxRunner:
             self.memory,
             "--read-only",
             "--tmpfs",
-            "/tmp:rw,noexec,nosuid,size=256m",
+            f"/tmp:{tmpfs_options}",
         ]
         if os.name == "posix" and hasattr(os, "getuid") and hasattr(os, "getgid"):
             docker_cmd.extend(["--user", f"{os.getuid()}:{os.getgid()}"])
         if not self.network_enabled:
             docker_cmd.extend(["--network", "none"])
+
+        for target, source in sorted((read_only_mounts or {}).items()):
+            source_path = Path(source).resolve()
+            if not source_path.is_dir():
+                raise SandboxUnavailable(f"read-only mount source does not exist: {source_path}")
+            if not target.startswith("/") or target == "/workspace":
+                raise SandboxUnavailable(f"invalid read-only mount target: {target}")
+            docker_cmd.extend(
+                [
+                    "--mount",
+                    f"type=bind,src={source_path},dst={target},readonly",
+                ]
+            )
 
         # Never inherit the host environment. Only explicit non-secret values
         # supplied by the caller are forwarded.

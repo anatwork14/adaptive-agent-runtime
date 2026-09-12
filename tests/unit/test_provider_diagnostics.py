@@ -77,9 +77,7 @@ def test_failure_classifier_preserves_unknown_cases(kwargs: dict, expected: str)
 
 
 @pytest.mark.parametrize("returncode", [1, 2])
-def test_cli_nonzero_exit_persists_returncode_and_stderr(
-    returncode: int, tmp_path: Path
-) -> None:
+def test_cli_nonzero_exit_persists_returncode_and_stderr(returncode: int, tmp_path: Path) -> None:
     code = (
         "import sys; sys.stdin.read(); "
         "print('synthetic provider failure', file=sys.stderr, flush=True); "
@@ -94,7 +92,8 @@ def test_cli_nonzero_exit_persists_returncode_and_stderr(
     assert "synthetic provider failure" in result.stderr_tail
     assert result.tool_trace[-1]["returncode"] == returncode
     assert result.provider_lifecycle["process_started"] == "observed"
-    assert result.provider_lifecycle["request_started"] == "observed"
+    assert result.provider_lifecycle["request_started"] == "unknown"
+    assert result.provider_lifecycle["prompt_written"] == "observed"
     assert result.provider_lifecycle["failed"] == "observed"
     assert len(result.stdout_tail) <= 8000
     assert len(result.stderr_tail) <= 4000
@@ -149,6 +148,17 @@ def test_timeout_and_empty_output_are_distinguishable(tmp_path: Path) -> None:
     assert empty_result.provider_lifecycle["completed"] == "observed"
 
 
+def test_process_can_exit_after_prompt_before_provider_request_boundary(tmp_path: Path) -> None:
+    result = _run("import sys; sys.stdin.read(); raise SystemExit(17)", tmp_path)
+
+    assert result.provider_lifecycle["process_started"] == "observed"
+    assert result.provider_lifecycle["prompt_written"] == "observed"
+    assert result.provider_lifecycle["request_started"] == "unknown"
+    assert result.provider_lifecycle["response_started"] == "unknown"
+    assert result.provider_lifecycle["failed"] == "observed"
+    assert result.failure_classification == "CLI_NONZERO_EXIT"
+
+
 def test_codex_jsonl_fixture_maps_only_observable_lifecycle_events() -> None:
     adapter = CodexAgentAdapter()
     assert adapter.parse_output_events("stdout", '{"type":"turn.started"}\n') == [
@@ -163,10 +173,53 @@ def test_codex_jsonl_fixture_maps_only_observable_lifecycle_events() -> None:
     assert adapter.parse_output_events("stdout", '{"type":"turn.completed"}\n') == [
         "provider.completed"
     ]
-    assert adapter.parse_output_events("stdout", '{"type":"error"}\n') == [
-        "provider.failed"
-    ]
+    assert adapter.parse_output_events("stdout", '{"type":"error"}\n') == ["provider.failed"]
     assert adapter.parse_output_events("stdout", "not-json\n") == []
+
+
+def test_codex_jsonl_usage_maps_without_double_counting() -> None:
+    adapter = CodexAgentAdapter()
+    usage = adapter.parse_output_metadata(
+        "stdout",
+        '{"type":"turn.completed","usage":{"input_tokens":11,"output_tokens":7,"cached_input_tokens":3,"reasoning_output_tokens":2}}\n',
+    )
+
+    assert usage == {
+        "token_usage": {
+            "prompt_tokens": 11,
+            "completion_tokens": 7,
+            "cached_prompt_tokens": 3,
+            "reasoning_tokens": 2,
+        }
+    }
+
+
+@pytest.mark.parametrize(
+    ("payload", "expected"),
+    [
+        ('{"type":"error"}', "UNKNOWN_PROVIDER_FAILURE"),
+        ('{"type":"error","message":"HTTP 503 service unavailable"}', "PROVIDER_SERVICE_ERROR"),
+    ],
+)
+def test_codex_structured_error_classification_is_conservative(
+    tmp_path: Path, payload: str, expected: str
+) -> None:
+    script = tmp_path / "codex-error.py"
+    event = json.loads(payload)
+    script.write_text(
+        f"import json, sys; sys.stdin.read(); print(json.dumps({event!r}), flush=True)\n",
+        encoding="utf-8",
+    )
+    result = asyncio.run(
+        CodexAgentAdapter(command_override=shlex.join([sys.executable, str(script)])).run_prompt(
+            prompt="synthetic probe",
+            workspace=tmp_path,
+            budget=AgentBudget(timeout_seconds=5),
+        )
+    )
+
+    assert result.status == "failed"
+    assert result.failure_classification == expected
 
 
 def _git_repo(tmp_path: Path) -> Path:
@@ -201,7 +254,9 @@ class _FailingAdapter:
 
 
 @pytest.mark.asyncio
-async def test_orchestrator_persists_v1_failure_diagnostics_and_redacts_secrets(tmp_path: Path) -> None:
+async def test_orchestrator_persists_v1_failure_diagnostics_and_redacts_secrets(
+    tmp_path: Path,
+) -> None:
     repo = _git_repo(tmp_path)
     store = EventStore(tmp_path / "state.db")
     memory = MemoryLifecycle(sqlite3_connect(tmp_path / "memory.db"))

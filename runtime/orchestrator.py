@@ -46,6 +46,7 @@ class Orchestrator:
         hard_task_usd: float = 5.0,
         hard_project_usd: float = 500.0,
         visible_test_cmd: Optional[List[str]] = None,
+        visible_test_harness: Optional[Dict[str, Any]] = None,
     ) -> None:
         self.event_store = event_store
         self.memory_lifecycle = memory_lifecycle
@@ -54,11 +55,18 @@ class Orchestrator:
         self.project_id = project_id
         self.hard_task_usd = hard_task_usd
         self.visible_test_cmd = visible_test_cmd
+        self.visible_test_harness = dict(visible_test_harness or {})
 
         self.scheduler = TaskScheduler(event_store, project_id)
         self.budgets = BudgetAccountant(event_store, project_id, hard_task_usd, hard_project_usd)
         self.leases = LeaseManager(event_store, project_id)
-        self.gate = IntegrationGate(event_store, project_id, self.repo_path, verification_level)
+        self.gate = IntegrationGate(
+            event_store,
+            project_id,
+            self.repo_path,
+            verification_level,
+            visible_test_harness=self.visible_test_harness,
+        )
         self.recovery = RecoveryEngine(event_store, project_id)
         self.worktree_mgr = WorktreeManager(self.repo_path)
 
@@ -113,7 +121,9 @@ class Orchestrator:
         events = self.event_store.read_all(project_id=self.project_id)
         return DeterministicStateProjection.replay_from_events(self.project_id, events)
 
-    def _acquire_task_leases(self, task_id: str, agent_id: str, resources: List[str]) -> List[Lease]:
+    def _acquire_task_leases(
+        self, task_id: str, agent_id: str, resources: List[str]
+    ) -> List[Lease]:
         acquired: List[Lease] = []
         for resource in sorted(set(resources)):
             lease = self.leases.request_lease(resource=resource, holder=agent_id, task_id=task_id)
@@ -139,7 +149,9 @@ class Orchestrator:
 
         for item in result.provider_events:
             event_name = item.get("event")
-            if not isinstance(event_name, str) or not event_name.startswith("provider."):
+            if not isinstance(event_name, str) or not (
+                event_name.startswith("provider.") or event_name == "cli.prompt_written"
+            ):
                 continue
             if event_name == "provider.failed":
                 # The failure event below carries the complete sanitized
@@ -166,6 +178,10 @@ class Orchestrator:
                 "provider_lifecycle": result.provider_lifecycle,
                 "provider_outcome": result.provider_outcome,
                 "provider_returncode": result.provider_returncode,
+                "token_usage": result.token_usage,
+                "provider_tokens": result.token_usage.get("prompt_tokens", 0)
+                + result.token_usage.get("completion_tokens", 0),
+                "token_usage_observed": bool(result.token_usage),
             },
         )
 
@@ -258,7 +274,9 @@ class Orchestrator:
                     status="failed",
                     summary=detail,
                     failure_classification=classification,
-                    provider_outcome="not_found" if classification == "CLI_NOT_FOUND" else "launch_error",
+                    provider_outcome="not_found"
+                    if classification == "CLI_NOT_FOUND"
+                    else "launch_error",
                     stderr_tail=detail[-4000:],
                 )
 
@@ -350,6 +368,7 @@ class Orchestrator:
                     submission=submission,
                     staleness_score=staleness.staleness_score,
                     visible_test_cmd=self.visible_test_cmd,
+                    visible_test_harness=self.visible_test_harness,
                 )
 
                 if gate_result.status == GateStatus.ACCEPTED:

@@ -95,3 +95,7 @@ exclude = ["final_adaptive_memory_context_runtime.md"]
 [tool.ruff.lint]
 select = ["E", "F", "I", "B"]
 ignore = ["E501"]
+
+[tool.ruff.lint.per-file-ignores]
+"cli/benchmark.py" = ["B008"]
+"cli/study_commands.py" = ["B008"]

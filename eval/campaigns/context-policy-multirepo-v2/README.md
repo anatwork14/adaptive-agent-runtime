@@ -18,13 +18,17 @@ bounded-tail persistence, conservative failure classification, lifecycle
 telemetry, deterministic fake-provider tests, and passive/active provider
 qualification.
 
-The target-environment qualification selected repository-specific visible-test
-harnesses. Click uses its locked `uv`/`tox` test environment; HTTPX uses its
-declared requirements in Python 3.11 with the fixed macOS Trio teardown-warning
-filter; and python-dotenv uses its declared requirements in Python 3.10 with
-the candidate venv and GNU `printenv` first on `PATH`. The exact identifiers,
-commands, import-path proofs, and platform caveats are recorded in
-`V2_TARGET_ENVIRONMENT_QUALIFICATION.md` and in the contract.
+The target-environment qualification uses repository-specific Docker harnesses
+with local image IDs recorded as immutable `sha256:` identities. Click uses its
+locked `uv` environment on CPython 3.10; HTTPX uses its declared requirements
+on CPython 3.11 and excludes only tests marked `network` because the sandbox
+has no network; and python-dotenv uses its declared requirements on CPython
+3.10. The exact commands, image identities, non-secret environment, import
+proofs, and qualification IDs are recorded in the contract and review packet.
+
+The gate consumes the harness directly after candidate cherry-pick. The
+candidate is mounted read-write, the hidden suite is mounted separately
+read-only, and no provider process receives the hidden mount.
 
 ## Freeze prerequisites
 

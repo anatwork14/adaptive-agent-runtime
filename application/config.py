@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import subprocess
 from pathlib import Path
-from typing import Dict, List, Literal, Optional
+from typing import Any, Dict, List, Literal, Optional
 
 import yaml
 from pydantic import BaseModel, Field, field_validator, model_validator
@@ -68,6 +68,7 @@ class ArcConfig(BaseModel):
     hard_task_usd: float = 5.0
     hard_project_usd: float = 500.0
     visible_test_cmd: List[str] = Field(default_factory=list)
+    visible_test_harness: Dict[str, Any] = Field(default_factory=dict)
     orchestration_max_parallel: int = Field(default=3, ge=1, le=32)
     routing_policy: Literal["balanced", "quality", "cost"] = "balanced"
     agents: Dict[str, AgentProfile] = Field(default_factory=dict)

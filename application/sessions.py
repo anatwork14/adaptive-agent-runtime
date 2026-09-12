@@ -137,7 +137,9 @@ class WorkerSessionManager:
                 "session.resumed",
             }:
                 session.status = SessionStatus.OPEN
-                session.changed_files = list(event.payload.get("changed_files", session.changed_files))
+                session.changed_files = list(
+                    event.payload.get("changed_files", session.changed_files)
+                )
             elif event.kind == "session.needs_input":
                 session.status = SessionStatus.NEEDS_INPUT
             elif event.kind == "session.submitted":
@@ -193,7 +195,9 @@ class WorkerSessionManager:
         if not task:
             raise ValueError(f"Task {task_id} not found")
         if task.status != TaskStatus.READY:
-            raise ValueError(f"Task {task_id} is {task.status.value}; worker sessions require READY tasks")
+            raise ValueError(
+                f"Task {task_id} is {task.status.value}; worker sessions require READY tasks"
+            )
         existing = self.for_task(task_id)
         if existing and existing.status in self.ACTIVE:
             return existing
@@ -320,7 +324,9 @@ class WorkerSessionManager:
     ) -> WorkerSession:
         session = self._require(session_id)
         if session.status not in self.ACTIVE:
-            raise ValueError(f"Session {session_id} is {session.status.value}; it is not interactive")
+            raise ValueError(
+                f"Session {session_id} is {session.status.value}; it is not interactive"
+            )
         if not instruction.strip():
             raise ValueError("Instruction cannot be empty")
         workspace = Path(session.worktree_path)
@@ -473,7 +479,9 @@ class WorkerSessionManager:
                     correlation_id=session_id,
                     payload=diagnostics,
                 )
-                raise RuntimeError(f"agent turn ended with status={result.status}: {result.summary}")
+                raise RuntimeError(
+                    f"agent turn ended with status={result.status}: {result.summary}"
+                )
 
             summary = result.summary or f"{session.agent_name} completed the instruction"
             self.app.event_store.append(
@@ -531,7 +539,12 @@ class WorkerSessionManager:
                 project_id=self.app.project_id,
                 task_id=session.task_id,
                 correlation_id=session_id,
-                payload={"session_id": session_id, "turn_id": turn_id, "error": str(exc), **diagnostics},
+                payload={
+                    "session_id": session_id,
+                    "turn_id": turn_id,
+                    "error": str(exc),
+                    **diagnostics,
+                },
             )
             raise
         return self._require(session_id)
@@ -613,6 +626,7 @@ class WorkerSessionManager:
                     submission=submission,
                     staleness_score=staleness.staleness_score,
                     visible_test_cmd=self.app.config.visible_test_cmd or None,
+                    visible_test_harness=self.app.config.visible_test_harness or None,
                 )
                 if result.status == GateStatus.ACCEPTED:
                     for event in self.app.event_store.read_after(

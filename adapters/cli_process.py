@@ -38,8 +38,7 @@ def render_context_prompt(context: ContextPacket) -> str:
         "Do not commit changes; ARC will create the immutable candidate commit after you exit.\n"
         "Respect the supplied project decisions, constraints, and acceptance criteria.\n"
         "If context is insufficient, inspect the repository using your normal tools.\n\n"
-        "ARC_CONTEXT_JSON:\n"
-        + json.dumps(payload, indent=2, sort_keys=True)
+        "ARC_CONTEXT_JSON:\n" + json.dumps(payload, indent=2, sort_keys=True)
     )
 
 
@@ -201,6 +200,10 @@ class SubprocessCodingAgent:
         """
         return []
 
+    def parse_output_metadata(self, stream: str, text: str) -> dict[str, object]:
+        """Return bounded, provider-specific metadata from one output line."""
+        return {}
+
     async def run_prompt(
         self,
         *,
@@ -223,6 +226,7 @@ class SubprocessCodingAgent:
         trace_command = redact_command(command)
         lifecycle = {
             "process_started": "unknown",
+            "prompt_written": "unknown",
             "request_started": "unknown",
             "response_started": "unknown",
             "completed": "unknown",
@@ -234,7 +238,10 @@ class SubprocessCodingAgent:
             if any(item.get("event") == name for item in provider_events):
                 return
             provider_events.append({"event": name, "observed": True})
-            lifecycle[name.removeprefix("provider.")] = "observed"
+            if name == "cli.prompt_written":
+                lifecycle["prompt_written"] = "observed"
+            elif name.startswith("provider."):
+                lifecycle[name.removeprefix("provider.")] = "observed"
 
         try:
             self.ensure_available(command)
@@ -339,6 +346,9 @@ class SubprocessCodingAgent:
         record_event("provider.process_started")
         stdout_tail = ""
         stderr_tail = ""
+        token_usage: dict[str, int] = {}
+        structured_error_observed = False
+        structured_error_diagnostic = False
 
         async def pump(
             reader: asyncio.StreamReader | None,
@@ -346,7 +356,11 @@ class SubprocessCodingAgent:
             *,
             tail_limit: int,
         ) -> None:
-            nonlocal stdout_tail, stderr_tail
+            nonlocal \
+                stdout_tail, \
+                stderr_tail, \
+                structured_error_observed, \
+                structured_error_diagnostic
             if reader is None:
                 return
             # Provider CLIs are predominantly line-oriented. Buffering one full
@@ -365,21 +379,34 @@ class SubprocessCodingAgent:
                     stderr_tail = (stderr_tail + safe_text)[-tail_limit:]
                 for event_name in self.parse_output_events(stream, safe_text):
                     record_event(event_name)
+                metadata = self.parse_output_metadata(stream, safe_text)
+                usage = metadata.get("token_usage")
+                if not token_usage and isinstance(usage, dict):
+                    token_usage.update(
+                        {
+                            str(key): int(value)
+                            for key, value in usage.items()
+                            if isinstance(value, int)
+                        }
+                    )
+                if metadata.get("structured_error_observed"):
+                    structured_error_observed = True
+                    structured_error_diagnostic = structured_error_diagnostic or bool(
+                        metadata.get("structured_error_diagnostic")
+                    )
                 await _emit_stream(output_callback, stream, safe_text)
 
         stdout_task = asyncio.create_task(pump(process.stdout, "stdout", tail_limit=8000))
         stderr_task = asyncio.create_task(pump(process.stderr, "stderr", tail_limit=4000))
         wait_task = asyncio.create_task(process.wait())
-        cancel_task = (
-            asyncio.create_task(cancel_event.wait()) if cancel_event is not None else None
-        )
+        cancel_task = asyncio.create_task(cancel_event.wait()) if cancel_event is not None else None
 
         try:
             if process.stdin is not None:
                 try:
                     process.stdin.write(prompt.encode("utf-8"))
                     await process.stdin.drain()
-                    record_event("provider.request_started")
+                    record_event("cli.prompt_written")
                 except (BrokenPipeError, ConnectionResetError):
                     # A provider may reject its invocation or exit before ARC
                     # finishes writing the prompt. Classification still comes
@@ -435,6 +462,7 @@ class SubprocessCodingAgent:
                     ],
                     provider_lifecycle=lifecycle,
                     provider_events=provider_events,
+                    token_usage=token_usage,
                 )
             if outcome == "timeout":
                 record_event("provider.failed")
@@ -457,18 +485,22 @@ class SubprocessCodingAgent:
                     ],
                     provider_lifecycle=lifecycle,
                     provider_events=provider_events,
+                    token_usage=token_usage,
                 )
 
             if process.returncode != 0:
                 record_event("provider.failed")
-                classification = classify_provider_failure(
-                    status="failed",
-                    outcome="failed",
-                    returncode=process.returncode,
-                    summary=stderr_tail[-4000:],
-                    stdout_tail=stdout_tail,
-                    stderr_tail=stderr_tail,
-                )
+                if structured_error_observed and not structured_error_diagnostic:
+                    classification = "UNKNOWN_PROVIDER_FAILURE"
+                else:
+                    classification = classify_provider_failure(
+                        status="failed",
+                        outcome="failed",
+                        returncode=process.returncode,
+                        summary=stderr_tail[-4000:],
+                        stdout_tail=stdout_tail,
+                        stderr_tail=stderr_tail,
+                    )
                 return AgentRunResult(
                     status="failed",
                     summary=f"{self.name} exited with code {process.returncode}: {stderr_tail[-4000:]}",
@@ -488,13 +520,25 @@ class SubprocessCodingAgent:
                     ],
                     provider_lifecycle=lifecycle,
                     provider_events=provider_events,
+                    token_usage=token_usage,
                 )
 
             if any(item.get("event") == "provider.failed" for item in provider_events):
+                classification = (
+                    "UNKNOWN_PROVIDER_FAILURE"
+                    if structured_error_observed and not structured_error_diagnostic
+                    else classify_provider_failure(
+                        status="failed",
+                        outcome="failed",
+                        returncode=None,
+                        summary=stdout_tail,
+                        stderr_tail=stderr_tail,
+                    )
+                )
                 return AgentRunResult(
                     status="failed",
                     summary=f"{self.name} emitted a provider error event",
-                    failure_classification="PROVIDER_SERVICE_ERROR",
+                    failure_classification=classification,
                     provider_returncode=process.returncode,
                     provider_outcome="failed",
                     stdout_tail=stdout_tail,
@@ -510,6 +554,7 @@ class SubprocessCodingAgent:
                     ],
                     provider_lifecycle=lifecycle,
                     provider_events=provider_events,
+                    token_usage=token_usage,
                 )
 
             record_event("provider.completed")
@@ -527,7 +572,7 @@ class SubprocessCodingAgent:
                         "returncode": process.returncode,
                     }
                 ],
-                token_usage={},
+                token_usage=token_usage,
                 cost_usd=0.0,
                 provider_returncode=process.returncode,
                 provider_outcome="completed",

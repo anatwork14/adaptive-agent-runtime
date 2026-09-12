@@ -76,7 +76,6 @@
     "context_token_budget": 12000,
     "hard_task_usd": 2.0,
     "hard_project_usd": 350.0,
-    "visible_test_cmd": null,
     "visible_test_harness_policy": "repository_specific_harnesses_are_frozen_under_repositories",
     "verification_level": "V1",
     "repeats": 6,
@@ -117,8 +116,21 @@
       "repo": "pallets/click",
       "commit": "6aabf099bfdd4c1e75fe8d0e0d4241372b988ab1",
       "hidden_tree_sha256": "4e9241310067b13e36f9ecce3913dbf0bd936bab6486a42300d032575141a3ef",
-      "environment_qualification_id": "click-macos-py310-uv-locked-tox-v1",
-      "visible_test_harness": ["uv", "run", "--locked", "--no-default-groups", "--group", "dev", "tox", "run", "-e", "py3.10"]
+      "environment_qualification_id": "click-docker-python310-uv-locked-v2",
+      "visible_test_harness": {
+        "command": ["python", "-m", "pytest", "-q"],
+        "backend": "docker",
+        "image": "arc-v2-click:qualified",
+        "image_digest": "sha256:7fae74105025e759c4244de903b1385271df9ac4f8e4bfb3d1589094d2ec92a4",
+        "network_enabled": false,
+        "environment": {"PYTHONPATH": "/workspace/src"},
+        "hidden_command": ["python", "-m", "pytest", "-q", "-p", "no:cacheprovider", "/arc-hidden-tests"],
+        "hidden_environment": {"PYTHONPATH": "/workspace/src"},
+        "tmpfs_exec": true,
+        "python_toolchain": "CPython 3.10.7; uv-locked dev/tests environment",
+        "timeout_seconds": 180,
+        "qualification_id": "click-docker-python310-uv-locked-v2"
+      }
     },
     "httpx": {
       "study_id": "httpx-context-policy-v2",
@@ -126,9 +138,21 @@
       "repo": "encode/httpx",
       "commit": "b5addb64f0161ff6bfe94c124ef76f6a1fba5254",
       "hidden_tree_sha256": "771e5afa152bcc41676fe173aad7809485eb5cccdcaf312865b2f6dd2a798334",
-      "environment_qualification_id": "httpx-macos-py311-requirements-resourcewarning-filter-v1",
-      "visible_test_harness": ["python", "-m", "pytest", "-q", "-W", "ignore::ResourceWarning"],
-      "visible_test_harness_note": "requirements.txt is installed in a disposable editable environment; the fixed macOS harness ignores the known Trio async-generator teardown ResourceWarning that otherwise fails pytest unraisable-warning capture"
+      "environment_qualification_id": "httpx-docker-python311-requirements-resourcewarning-filter-v2",
+      "visible_test_harness": {
+        "command": ["python", "-m", "pytest", "-q", "-W", "ignore::ResourceWarning", "-m", "not network"],
+        "backend": "docker",
+        "image": "arc-v2-httpx:qualified",
+        "image_digest": "sha256:1f8b4320b6d1b4ab22121442732f3f684e1fe77162de563beb841b0dc340d8cf",
+        "network_enabled": false,
+        "environment": {"PYTHONPATH": "/workspace"},
+        "hidden_command": ["python", "-m", "pytest", "-q", "-p", "no:cacheprovider", "/arc-hidden-tests"],
+        "hidden_environment": {"PYTHONPATH": "/workspace"},
+        "python_toolchain": "CPython 3.11.16; requirements.txt editable environment",
+        "timeout_seconds": 180,
+        "qualification_id": "httpx-docker-python311-requirements-resourcewarning-filter-v2"
+      },
+      "visible_test_harness_note": "requirements.txt is installed in a disposable editable environment; the fixed harness ignores the known Trio async-generator teardown ResourceWarning that otherwise fails pytest unraisable-warning capture"
     },
     "python-dotenv": {
       "study_id": "python-dotenv-context-policy-v2",
@@ -136,12 +160,19 @@
       "repo": "theskumar/python-dotenv",
       "commit": "a00cb2eed0704cd6d2071b2004c37e95ccc86ee5",
       "hidden_tree_sha256": "950297bdebad5f5e2560ec8406e6f80ca289e6cc6672a3e9648a814a55284bb7",
-      "environment_qualification_id": "python-dotenv-macos-py310-gnu-printenv-v1",
-      "visible_test_harness": ["python", "-m", "pytest", "-q"],
-      "visible_test_harness_environment": {
-        "path_prefix": ["candidate_venv/bin", "/opt/homebrew/opt/coreutils/libexec/gnubin"],
-        "requirements": "requirements.txt",
-        "editable_install": true
+      "environment_qualification_id": "python-dotenv-docker-python310-requirements-v2",
+      "visible_test_harness": {
+        "command": ["python", "-m", "pytest", "-q"],
+        "backend": "docker",
+        "image": "arc-v2-python-dotenv:qualified",
+        "image_digest": "sha256:d7e1c1d915ad92a48fe0d915b9f951bd70af3bab5737d03f83d31281d84dc32b",
+        "network_enabled": false,
+        "environment": {"PYTHONPATH": "/workspace/src"},
+        "hidden_command": ["python", "-m", "pytest", "-q", "-p", "no:cacheprovider", "/arc-hidden-tests"],
+        "hidden_environment": {"PYTHONPATH": "/workspace/src"},
+        "python_toolchain": "CPython 3.10.7; requirements.txt editable environment",
+        "timeout_seconds": 180,
+        "qualification_id": "python-dotenv-docker-python310-requirements-v2"
       }
     }
   },

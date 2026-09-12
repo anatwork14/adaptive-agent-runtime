@@ -62,6 +62,52 @@ class CodexAgentAdapter(SubprocessCodingAgent):
             return ["provider.failed"]
         if event_type in {"item.started", "item.completed"}:
             item = event.get("item")
-            if isinstance(item, dict) and item.get("type") in {"agent_message", "assistant_message"}:
+            if isinstance(item, dict) and item.get("type") in {
+                "agent_message",
+                "assistant_message",
+            }:
                 return ["provider.response_started"]
         return []
+
+    def parse_output_metadata(self, stream: str, text: str) -> dict[str, object]:
+        if stream != "stdout":
+            return {}
+        try:
+            event = json.loads(text)
+        except json.JSONDecodeError:
+            return {}
+        if not isinstance(event, dict):
+            return {}
+
+        event_type = event.get("type")
+        if event_type == "turn.completed":
+            usage = event.get("usage")
+            if isinstance(usage, dict):
+                mapped: dict[str, int] = {}
+                for source, target in (
+                    ("input_tokens", "prompt_tokens"),
+                    ("output_tokens", "completion_tokens"),
+                    ("cached_input_tokens", "cached_prompt_tokens"),
+                    ("reasoning_output_tokens", "reasoning_tokens"),
+                ):
+                    value = usage.get(source)
+                    if isinstance(value, (int, float)) and value >= 0:
+                        mapped[target] = int(value)
+                return {"token_usage": mapped} if mapped else {}
+        if event_type in {"error", "turn.failed"}:
+            diagnostic = False
+            for key in ("message", "detail", "code", "error"):
+                value = event.get(key)
+                if isinstance(value, str) and value.strip():
+                    diagnostic = True
+                elif isinstance(value, dict) and any(
+                    isinstance(value.get(nested), (str, int, float))
+                    and str(value.get(nested)).strip()
+                    for nested in ("message", "detail", "code")
+                ):
+                    diagnostic = True
+            return {
+                "structured_error_observed": True,
+                "structured_error_diagnostic": diagnostic,
+            }
+        return {}

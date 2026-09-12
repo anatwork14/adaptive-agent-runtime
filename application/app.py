@@ -46,6 +46,7 @@ class ArcApplication:
             hard_task_usd=self.config.hard_task_usd,
             hard_project_usd=self.config.hard_project_usd,
             visible_test_cmd=self.config.visible_test_cmd or None,
+            visible_test_harness=self.config.visible_test_harness or None,
         )
         self.events = EventStream(self.event_store, self.project_id)
 
@@ -168,7 +169,9 @@ class ArcApplication:
         if not task:
             raise ValueError(f"Task {task_id} not found")
         if task.status not in {TaskStatus.FAILED, TaskStatus.BLOCKED}:
-            raise ValueError(f"Task {task_id} is {task.status.value}; only failed/blocked tasks can retry")
+            raise ValueError(
+                f"Task {task_id} is {task.status.value}; only failed/blocked tasks can retry"
+            )
         self.event_store.append(
             actor="operator",
             kind="recovery.retry",

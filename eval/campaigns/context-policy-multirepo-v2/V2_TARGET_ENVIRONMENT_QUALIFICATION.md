@@ -2,97 +2,62 @@
 
 Status: qualified for proposed V2 review; this document does not freeze V2.
 
-Qualification copies were created outside the canonical benchmark clones at:
+All qualification work used disposable copies outside the canonical benchmark
+clones. The canonical clones under `/Users/teobun/arc-study/repos/` remained
+clean and at their frozen commits. No provider inference or benchmark task was
+run.
 
-```text
-/Users/teobun/arc-study/qualification-v2-20260912/{click,httpx,python-dotenv}
-```
+## Source identities
 
-The canonical clones under `/Users/teobun/arc-study/repos/` stayed unchanged,
-clean, and at the frozen commits throughout this work. No benchmark task,
-hidden test, or provider inference was used for target-environment
-qualification.
-
-## Frozen source identities
-
-| Repository | Commit |
+| Repository | Frozen commit |
 | --- | --- |
 | Click | `6aabf099bfdd4c1e75fe8d0e0d4241372b988ab1` |
 | HTTPX | `b5addb64f0161ff6bfe94c124ef76f6a1fba5254` |
 | python-dotenv | `a00cb2eed0704cd6d2071b2004c37e95ccc86ee5` |
 
-## Qualified harnesses
+## Actual qualified gate harnesses
 
-### Click — `click-macos-py310-uv-locked-tox-v1`
+The `IntegrationGate.evaluate_submission()` path was exercised for each
+repository. Each qualification created a candidate commit from the frozen
+base, allowed the gate to create its temporary worktree and cherry-pick that
+commit, then observed `G1_static`, `G2_visible_tests`, and final integration.
+The candidate commit also contained a qualification-only import test under the
+repository's normal test tree; the test asserted that the imported module's
+`__file__` was below the gate worktree.
 
-Source inspection found `pyproject.toml`, `uv.lock`, and CI's locked
-`uv`/`tox` invocation. The disposable environment used CPython 3.10.7:
+| Repository | Backend / image identity | Python/toolchain | Command | Result |
+| --- | --- | --- | --- | --- |
+| Click | Docker `arc-v2-click:qualified@sha256:7fae74105025e759c4244de903b1385271df9ac4f8e4bfb3d1589094d2ec92a4` | CPython 3.10.7; uv-locked dev/tests environment | `python -m pytest -q` | 2059 passed, 24 skipped, 31000 deselected, 1 xfailed |
+| HTTPX | Docker `arc-v2-httpx:qualified@sha256:1f8b4320b6d1b4ab22121442732f3f684e1fe77162de563beb841b0dc340d8cf` | CPython 3.11.16; declared requirements editable environment | `python -m pytest -q -W ignore::ResourceWarning -m "not network"` | 1413 passed, 1 skipped, 5 deselected |
+| python-dotenv | Docker `arc-v2-python-dotenv:qualified@sha256:d7e1c1d915ad92a48fe0d915b9f951bd70af3bab5737d03f83d31281d84dc32b` | CPython 3.10.7; declared requirements editable environment | `python -m pytest -q` | 255 passed, 31 warnings |
 
-```text
-uv venv --python /Library/Frameworks/Python.framework/Versions/3.10/bin/python3 .venv
-uv sync --locked --no-default-groups --group dev
-TOX_ENV=py3.10 uv run --locked --no-default-groups --group dev tox run -e py3.10
-```
+The HTTPX `network` marker is excluded because the sandbox uses `--network
+none`; the exclusion is explicit in the frozen command. Click's harness
+explicitly permits executable files in its `/tmp` tmpfs because its test suite
+tests shell-script pager fixtures. The backend remains read-only at the root,
+drops all capabilities, disables privilege escalation, limits CPU/memory/PIDs,
+and forwards only the recorded non-secret environment.
 
-Result: `2058 passed, 25 skipped, 31000 deselected, 1 xfailed`.
+## Hidden grader boundary
 
-### HTTPX — `httpx-macos-py311-requirements-resourcewarning-filter-v1`
+The same Docker runner supports a separate hidden-test invocation. The
+candidate workspace is mounted at `/workspace`; the hidden repository-specific
+directory is mounted at `/arc-hidden-tests` read-only; the provider process is
+never involved in this invocation and never receives that mount. Hidden pytest
+cache creation is disabled because the hidden mount is read-only.
 
-Source inspection found `requirements.txt` and the repository scripts. The
-declared requirements were installed in a disposable CPython 3.11.16
-environment, including editable installation of HTTPX. The unfiltered macOS
-run reproducibly failed one `tests/test_timeouts.py::test_write_timeout[trio]`
-case because Trio's async-generator teardown `ResourceWarning` is converted
-to a pytest unraisable-warning failure (`1417 passed, 1 failed`). The fixed
-macOS harness records that platform behavior explicitly and uses:
+A synthetic external fixture was run through this exact backend: the passing
+candidate passed and the intentionally failing candidate failed. The hidden
+fixture remained external to both candidates, its candidate module was
+imported from `/workspace`, and no hidden mount mutation was possible. The
+canonical freezer remains the only code that validates the three campaign
+hidden-tree digests.
 
-```text
-venv311/bin/python -m pytest -q -W ignore::ResourceWarning
-```
+## Contract consequence
 
-Result: `1418 passed, 1 skipped`.
-
-This warning filter is a harness-level platform accommodation, not a source
-change and not a hidden-test exemption. A Linux CI/container qualification
-would be preferable for a future environment refresh; Docker was unavailable
-on this host during this qualification.
-
-### python-dotenv — `python-dotenv-macos-py310-gnu-printenv-v1`
-
-Source inspection found `requirements.txt`, `tox.ini`, and the CI workflow.
-The disposable environment used CPython 3.10.7, installed the declared
-requirements, and installed the candidate editable. The repository's CLI
-tests invoke `dotenv` and expect GNU `printenv --version`; macOS's BSD
-`/usr/bin/printenv` is incompatible, so Homebrew GNU coreutils was installed
-and the harness places both the candidate venv and GNU `gnubin` first on
-`PATH`:
-
-```text
-PATH="$PWD/venv/bin:/opt/homebrew/opt/coreutils/libexec/gnubin:$PATH" \
-  venv/bin/python -m pytest -q
-```
-
-Result: `255 passed, 28 warnings`.
-
-## Candidate-worktree import proof
-
-Each disposable clone received only an untracked marker module and a
-qualification-only pytest file. The marker was imported by the test process
-and its resolved `__file__` was asserted to be below the candidate clone:
-
-```text
-click:          1 passed
-httpx:          1 passed
-python-dotenv:  1 passed
-```
-
-This proves the environment installs/imports the candidate worktree rather
-than the canonical frozen clone. The marker and qualification files are not
-part of any benchmark repository or V2 commit.
-
-## V2 contract consequence
-
-The original shared `python -m pytest -q` command is not retained as a
-cross-repository assumption. V2 records the three fixed repository-specific
-harnesses in `campaign_contract.json`; treatment, task sequence, budgets,
-repetitions, repositories, and hidden benchmark digests remain unchanged.
+V2 stores each command, Docker image name and immutable local image ID, backend,
+non-secret environment, hidden command/environment, Python/toolchain identity,
+timeout, and qualification ID in the self-digesting repository runtime
+contract. The preflight compares the live configuration with that exact
+harness. B3, B5, and B7 use the same repository harness without treatment
+specific variation.

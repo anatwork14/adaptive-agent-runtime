@@ -92,7 +92,6 @@ def classify_provider_failure(
             "internal server error",
             "bad gateway",
             "gateway timeout",
-            "provider error",
             "server error",
             "http 5",
             "http status 5",
@@ -215,5 +214,4 @@ class AgentAdapter(Protocol):
         context: ContextPacket,
         workspace: Path,
         budget: AgentBudget,
-    ) -> AgentRunResult:
-        ...
+    ) -> AgentRunResult: ...

@@ -30,11 +30,18 @@ host attribution.
 ## Lifecycle boundaries
 
 The subprocess adapter records `provider.process_started` after successful
-process creation and `provider.request_started` after the prompt is accepted by
-stdin. Plain text output does not prove a model response, so
-`response_started` remains `unknown` unless a provider adapter can observe it
-from a documented structured event. Completion, failure, timeout, and
-cancellation are recorded from the subprocess outcome.
+process creation and `cli.prompt_written` after stdin accepts the prompt.
+Writing stdin is not evidence that the provider received or began a request;
+`provider.request_started` remains `unknown` unless a provider adapter observes
+the documented `turn.started` event. Plain text output does not prove a model
+response, so `response_started` remains `unknown` unless a provider adapter can
+observe it from a documented structured event. Completion, failure, timeout,
+and cancellation are recorded from the subprocess outcome.
+
+For Codex JSONL, `turn.completed.usage.input_tokens` and
+`output_tokens` are mapped once to `prompt_tokens` and `completion_tokens`.
+Cached and reasoning counts are retained as annotations and are not added a
+second time to the provider-token total. Missing usage remains unobserved.
 
 Codex V2 may use the CLI-documented `codex exec --json` JSONL mode. ARC parses
 only known lifecycle event types and ignores unknown/malformed lines. It stores

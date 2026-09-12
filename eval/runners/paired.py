@@ -11,7 +11,7 @@ import subprocess
 import uuid
 from dataclasses import asdict, dataclass
 from pathlib import Path
-from typing import Callable, Sequence
+from typing import Any, Callable, Sequence
 
 from adapters.base import AgentAdapter, AgentBudget, AgentRunResult
 from context.compiler import ContextPacket
@@ -23,7 +23,7 @@ from eval.comparison import (
 from eval.grading.hidden_tests import HiddenTestGrader
 from eval.io import write_measurements_jsonl, write_summary_json
 from eval.models import BenchmarkManifest, EvaluationSummary, TaskMeasurement
-from eval.runners.experiment import ExperimentRunner, NORMALIZED_BASELINES
+from eval.runners.experiment import NORMALIZED_BASELINES, ExperimentRunner
 from memory.lifecycle import MemoryLifecycle
 from runtime.orchestrator import Orchestrator
 from state.events import EventStore
@@ -132,18 +132,24 @@ class IsolatedPairedBenchmarkRunner:
         workspace_root: str | Path | None = None,
         verification_level: str = "V0",
         visible_test_cmd: list[str] | None = None,
+        visible_test_harness: dict[str, Any] | None = None,
         hard_project_usd: float = 500.0,
         hidden_test_dir: str | Path | None = None,
     ) -> None:
         self.source_repo = Path(source_repo).resolve()
-        self.output_root = Path(output_root).resolve() if output_root else (
-            self.source_repo.parent / ".arc-benchmark-results" / self.source_repo.name
+        self.output_root = (
+            Path(output_root).resolve()
+            if output_root
+            else (self.source_repo.parent / ".arc-benchmark-results" / self.source_repo.name)
         )
-        self.workspace_root = Path(workspace_root).resolve() if workspace_root else (
-            self.source_repo.parent / ".arc-benchmark-runtime" / self.source_repo.name
+        self.workspace_root = (
+            Path(workspace_root).resolve()
+            if workspace_root
+            else (self.source_repo.parent / ".arc-benchmark-runtime" / self.source_repo.name)
         )
         self.verification_level = verification_level
         self.visible_test_cmd = list(visible_test_cmd or [])
+        self.visible_test_harness = dict(visible_test_harness or {})
         self.hard_project_usd = hard_project_usd
         self.hidden_test_dir = Path(hidden_test_dir).resolve() if hidden_test_dir else None
         self.output_root.mkdir(parents=True, exist_ok=True)
@@ -312,12 +318,15 @@ class IsolatedPairedBenchmarkRunner:
                     hard_task_usd=float(manifest.hard_task_usd),
                     hard_project_usd=self.hard_project_usd,
                     visible_test_cmd=self.visible_test_cmd or None,
+                    visible_test_harness=self.visible_test_harness or None,
                 )
                 self._materialize_manifest(orchestrator, manifest)
 
                 agent = agent_factory()
                 if any(agent is previous for previous in used_agents):
-                    raise ValueError("agent_factory must return a fresh adapter instance per baseline")
+                    raise ValueError(
+                        "agent_factory must return a fresh adapter instance per baseline"
+                    )
                 used_agents.append(agent)
                 fingerprint = (type(agent), getattr(agent, "name", None))
                 if agent_fingerprint is None:

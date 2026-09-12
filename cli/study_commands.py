@@ -22,7 +22,6 @@ from eval.studies.preregistration import (
     validate_execution_environment,
 )
 
-
 console = Console()
 VALID_VERIFICATION_LEVELS = {"V0", "V1", "V2", "V3"}
 
@@ -139,6 +138,7 @@ def register_study_commands(benchmark_app: typer.Typer) -> None:
                 profile_role=profile.role,
                 profile_capabilities=profile.capabilities,
                 visible_test_cmd=config.visible_test_cmd,
+                visible_test_harness=config.visible_test_harness,
                 hard_project_usd=config.hard_project_usd,
                 hidden_test_dir=hidden_test_dir,
                 verification_level=verification_level,
@@ -190,9 +190,7 @@ def register_study_commands(benchmark_app: typer.Typer) -> None:
         """Execute exactly the frozen preregistered repeated-study contract."""
         try:
             if not attempt_id or any(ch.isspace() for ch in attempt_id):
-                raise typer.BadParameter(
-                    "attempt_id must be a non-empty token without whitespace"
-                )
+                raise typer.BadParameter("attempt_id must be a non-empty token without whitespace")
             plan = load_preregistration(plan_file)
             config = ConfigStore(repo).load(project_id)
             profile = config.agents.get(plan.runtime.agent_profile)
@@ -225,6 +223,7 @@ def register_study_commands(benchmark_app: typer.Typer) -> None:
                 workspace_root=workspace_root,
                 verification_level=plan.runtime.verification_level,
                 visible_test_cmd=config.visible_test_cmd or None,
+                visible_test_harness=config.visible_test_harness or None,
                 hard_project_usd=config.hard_project_usd,
                 hidden_test_dir=hidden_test_dir,
             )

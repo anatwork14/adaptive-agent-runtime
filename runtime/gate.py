@@ -4,7 +4,7 @@ import shutil
 import subprocess
 import uuid
 from pathlib import Path
-from typing import List, Optional
+from typing import Any, List, Optional
 
 from state.events import EventStore
 from state.models import GateResult, GateStatus, PatchSubmission
@@ -32,16 +32,15 @@ class IntegrationGate:
         project_id: str,
         workspace_path: str | Path,
         verification_level: str = "V0",
+        visible_test_harness: Optional[dict[str, Any]] = None,
     ) -> None:
         self.event_store = event_store
         self.project_id = project_id
         self.workspace_path = Path(workspace_path).resolve()
         self.verification_level = verification_level
+        self.visible_test_harness = dict(visible_test_harness or {})
         self.gate_root = (
-            self.workspace_path.parent
-            / ".arc-runtime"
-            / self.workspace_path.name
-            / "gates"
+            self.workspace_path.parent / ".arc-runtime" / self.workspace_path.name / "gates"
         )
         self.gate_root.mkdir(parents=True, exist_ok=True)
         self.reviewer = CodeReviewer()
@@ -135,6 +134,7 @@ class IntegrationGate:
         submission: PatchSubmission,
         staleness_score: float = 0.0,
         visible_test_cmd: Optional[List[str]] = None,
+        visible_test_harness: Optional[dict[str, Any]] = None,
     ) -> GateResult:
         """Verify and, on success, integrate the exact submitted candidate commit."""
         gate_run_id = f"gate_{uuid.uuid4().hex[:8]}"
@@ -217,7 +217,9 @@ class IntegrationGate:
                     submission=submission,
                     stages_passed=stages_passed,
                     stage="G0_INTEGRATION_CONFLICT",
-                    error=(apply_res.stderr or apply_res.stdout or "candidate cannot be applied").strip(),
+                    error=(
+                        apply_res.stderr or apply_res.stdout or "candidate cannot be applied"
+                    ).strip(),
                     gate_state_version=gate_state_version,
                     staleness_score=staleness_score,
                 )
@@ -236,7 +238,21 @@ class IntegrationGate:
                 )
             stages_passed.append("G1_static")
 
-            if visible_test_cmd:
+            harness = dict(visible_test_harness or self.visible_test_harness)
+            if harness:
+                test_res = AdversarialTestRunner(gate_path, harness=harness).run_tests()
+                if not test_res.passed:
+                    return self._reject(
+                        gate_run_id=gate_run_id,
+                        submission=submission,
+                        stages_passed=stages_passed,
+                        stage="G2_TESTS",
+                        error=test_res.output[-8000:],
+                        gate_state_version=gate_state_version,
+                        staleness_score=staleness_score,
+                    )
+                stages_passed.append("G2_visible_tests")
+            elif visible_test_cmd:
                 test_res = AdversarialTestRunner(gate_path).run_tests(visible_test_cmd)
                 if not test_res.passed:
                     return self._reject(
@@ -284,7 +300,9 @@ class IntegrationGate:
                     submission=submission,
                     stages_passed=stages_passed,
                     stage="G4_FINAL_INTEGRATION",
-                    error=(merge_res.stderr or merge_res.stdout or "final cherry-pick failed").strip(),
+                    error=(
+                        merge_res.stderr or merge_res.stdout or "final cherry-pick failed"
+                    ).strip(),
                     gate_state_version=gate_state_version,
                     staleness_score=staleness_score,
                 )

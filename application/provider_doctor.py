@@ -186,11 +186,16 @@ def _git_probe_workspace(path: Path) -> None:
 
 def _active_payload(result: AgentRunResult, *, marker_seen: bool) -> dict[str, Any]:
     diagnostics = sanitize_failure_diagnostics(result)
+    provider_tokens = result.token_usage.get("prompt_tokens", 0) + result.token_usage.get(
+        "completion_tokens", 0
+    )
     diagnostics.update(
         {
             "success": result.status == "completed" and marker_seen,
             "marker_seen": marker_seen,
             "status": result.status,
+            "provider_tokens": provider_tokens if provider_tokens > 0 else None,
+            "token_usage_observed": provider_tokens > 0,
         }
     )
     return diagnostics
@@ -227,9 +232,7 @@ def run_provider_probe(
                         budget=AgentBudget(max_usd=0.25, max_tokens=1000, timeout_seconds=45),
                     )
                 )
-                marker_seen = "ARC_PROVIDER_SMOKE_OK" in (
-                    result.stdout_tail + result.summary
-                )
+                marker_seen = "ARC_PROVIDER_SMOKE_OK" in (result.stdout_tail + result.summary)
                 active = _active_payload(result, marker_seen=marker_seen)
                 active["workspace_disposable"] = True
         except Exception as exc:
@@ -260,5 +263,7 @@ def run_provider_probe(
             raise FileExistsError(f"refusing to overwrite existing provider probe: {output_path}")
         report["output_path"] = str(output_path)
         output_path.parent.mkdir(parents=True, exist_ok=True)
-        output_path.write_text(json.dumps(report, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+        output_path.write_text(
+            json.dumps(report, indent=2, sort_keys=True) + "\n", encoding="utf-8"
+        )
     return report

@@ -5,16 +5,33 @@ import pytest
 
 from eval.models import BenchmarkManifest, EvaluationTaskSpec
 from eval.studies.preregistration import (
+    ExecutionHarness,
     create_preregistration,
     load_preregistration,
     save_preregistration,
     validate_execution_environment,
 )
 
+HARNESS = {
+    "command": ["python", "-m", "pytest", "-q"],
+    "backend": "docker",
+    "image": "arc-v2-test:qualified",
+    "image_digest": "sha256:" + "a" * 64,
+    "environment": {"PYTHONPATH": "/workspace"},
+    "hidden_command": ["python", "-m", "pytest", "-q", "-p", "no:cacheprovider"],
+    "hidden_environment": {"PYTHONPATH": "/workspace"},
+    "python_toolchain": "CPython 3.11.16",
+    "timeout_seconds": 60,
+    "qualification_id": "synthetic-v2-harness",
+}
+
 
 def _git(repo, *args):
+    command = ["git", *args]
+    if args and args[0] == "commit":
+        command[1:1] = ["-c", "commit.gpgsign=false"]
     proc = subprocess.run(
-        ["git", *args],
+        command,
         cwd=repo,
         capture_output=True,
         text=True,
@@ -41,10 +58,7 @@ def _manifests(commit: str) -> list[BenchmarkManifest]:
         hard_task_usd=1.0,
         tasks=[task],
     )
-    return [
-        BenchmarkManifest(baseline=baseline, **common)
-        for baseline in ("B3", "B5", "B7")
-    ]
+    return [BenchmarkManifest(baseline=baseline, **common) for baseline in ("B3", "B5", "B7")]
 
 
 def test_preregistration_digest_and_environment_fail_closed(tmp_path) -> None:
@@ -70,6 +84,7 @@ def test_preregistration_digest_and_environment_fail_closed(tmp_path) -> None:
         profile_role="builder",
         profile_capabilities=["implementation", "test"],
         visible_test_cmd=["python", "-m", "pytest", "-q"],
+        visible_test_harness=HARNESS,
         hard_project_usd=10.0,
         hidden_test_dir=hidden,
         repeats=6,
@@ -92,6 +107,7 @@ def test_preregistration_digest_and_environment_fail_closed(tmp_path) -> None:
         profile_role="builder",
         profile_capabilities=["test", "implementation"],
         visible_test_cmd=["python", "-m", "pytest", "-q"],
+        visible_test_harness=HARNESS,
         hard_project_usd=10.0,
         hidden_test_dir=hidden,
     )
@@ -106,6 +122,7 @@ def test_preregistration_digest_and_environment_fail_closed(tmp_path) -> None:
             profile_role="builder",
             profile_capabilities=["implementation", "test"],
             visible_test_cmd=["python", "-m", "pytest", "-q"],
+            visible_test_harness=HARNESS,
             hard_project_usd=10.0,
             hidden_test_dir=hidden,
         )
@@ -115,3 +132,45 @@ def test_preregistration_digest_and_environment_fail_closed(tmp_path) -> None:
     path.write_text(json.dumps(payload), encoding="utf-8")
     with pytest.raises(ValueError, match="digest mismatch"):
         load_preregistration(path)
+
+
+def test_harness_is_part_of_plan_digest_and_environment_contract(tmp_path) -> None:
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    _git(repo, "init")
+    _git(repo, "config", "user.email", "arc@example.test")
+    _git(repo, "config", "user.name", "ARC Test")
+    (repo / "app.py").write_text("VALUE = 1\n", encoding="utf-8")
+    _git(repo, "add", "app.py")
+    _git(repo, "commit", "-m", "base")
+    commit = _git(repo, "rev-parse", "HEAD")
+    plan = create_preregistration(
+        _manifests(commit),
+        repo,
+        study_id="study-harness",
+        provider="mock",
+        profile_role="builder",
+        profile_capabilities=["implementation"],
+        visible_test_cmd=HARNESS["command"],
+        visible_test_harness=HARNESS,
+        hard_project_usd=10.0,
+    )
+    path = save_preregistration(tmp_path / "harness-plan.json", plan)
+    payload = json.loads(path.read_text(encoding="utf-8"))
+    payload["runtime"]["visible_test_harness"]["image_digest"] = "sha256:" + "b" * 64
+    path.write_text(json.dumps(payload), encoding="utf-8")
+    with pytest.raises(ValueError, match="digest mismatch"):
+        load_preregistration(path)
+
+    validate_execution_environment(
+        plan,
+        repo,
+        provider="mock",
+        model="mock-model",
+        profile_role="builder",
+        profile_capabilities=["implementation"],
+        visible_test_cmd=HARNESS["command"],
+        visible_test_harness=ExecutionHarness.model_validate(HARNESS),
+        hard_project_usd=10.0,
+        hidden_test_dir=None,
+    )

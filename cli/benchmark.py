@@ -106,6 +106,7 @@ def paired_benchmark(
             output_root=output_root,
             workspace_root=workspace_root,
             visible_test_cmd=config.visible_test_cmd or None,
+            visible_test_harness=config.visible_test_harness or None,
             hard_project_usd=config.hard_project_usd,
             hidden_test_dir=hidden_test_dir,
         )
@@ -197,6 +198,7 @@ def repeated_benchmark(
             output_root=output_root,
             workspace_root=workspace_root,
             visible_test_cmd=config.visible_test_cmd or None,
+            visible_test_harness=config.visible_test_harness or None,
             hard_project_usd=config.hard_project_usd,
             hidden_test_dir=hidden_test_dir,
         )
@@ -234,8 +236,7 @@ def repeated_benchmark(
             )
         console.print(table)
         console.print(
-            "orders="
-            + " | ".join("->".join(item.execution_order) for item in result.repeats)
+            "orders=" + " | ".join("->".join(item.execution_order) for item in result.repeats)
         )
         console.print("seeds=" + ",".join(str(seed) for seed in result.repeat_seeds))
         console.print(f"artifacts={result.artifact_dir}")

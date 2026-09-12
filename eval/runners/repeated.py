@@ -95,8 +95,7 @@ def balanced_execution_orders(
     while len(orders) < repeats:
         orientation = list(base) if block % 2 == 0 else list(reversed(base))
         rows = [
-            tuple(orientation[index:] + orientation[:index])
-            for index in range(len(orientation))
+            tuple(orientation[index:] + orientation[:index]) for index in range(len(orientation))
         ]
         rng.shuffle(rows)
         for row in rows:
@@ -135,9 +134,7 @@ def _balanced_seed_schedule(
                 selected.append(candidate)
                 break
         else:
-            raise RuntimeError(
-                f"unable to find deterministic seed for execution order {target}"
-            )
+            raise RuntimeError(f"unable to find deterministic seed for execution order {target}")
     return tuple(selected)
 
 
@@ -230,9 +227,7 @@ def aggregate_repeated_results(
         for right_index in range(left_index + 1, len(baselines)):
             baseline_a = baselines[left_index]
             baseline_b = baselines[right_index]
-            resolved_deltas = _paired_summary_deltas(
-                runs, baseline_a, baseline_b, "resolved_rate"
-            )
+            resolved_deltas = _paired_summary_deltas(runs, baseline_a, baseline_b, "resolved_rate")
             wins_a = sum(1 for value in resolved_deltas if value > 0.0)
             wins_b = sum(1 for value in resolved_deltas if value < 0.0)
             ties = len(resolved_deltas) - wins_a - wins_b
@@ -264,9 +259,7 @@ def aggregate_repeated_results(
                     mean_context_tokens_delta=metrics["mean_context_tokens"],
                     mean_provider_tokens_delta=metrics["mean_provider_tokens"],
                     mean_cost_usd_delta=metrics["mean_cost_usd"],
-                    p95_end_to_end_latency_ms_delta=metrics[
-                        "p95_end_to_end_latency_ms"
-                    ],
+                    p95_end_to_end_latency_ms_delta=metrics["p95_end_to_end_latency_ms"],
                     stale_delivery_rate_delta=metrics["stale_delivery_rate"],
                 )
             )
@@ -323,18 +316,24 @@ class RepeatedPairedBenchmarkRunner:
         workspace_root: str | Path | None = None,
         verification_level: str = "V0",
         visible_test_cmd: list[str] | None = None,
+        visible_test_harness: dict[str, Any] | None = None,
         hard_project_usd: float = 500.0,
         hidden_test_dir: str | Path | None = None,
     ) -> None:
         self.source_repo = Path(source_repo).resolve()
-        self.output_root = Path(output_root).resolve() if output_root else (
-            self.source_repo.parent / ".arc-benchmark-results" / self.source_repo.name
+        self.output_root = (
+            Path(output_root).resolve()
+            if output_root
+            else (self.source_repo.parent / ".arc-benchmark-results" / self.source_repo.name)
         )
-        self.workspace_root = Path(workspace_root).resolve() if workspace_root else (
-            self.source_repo.parent / ".arc-benchmark-runtime" / self.source_repo.name
+        self.workspace_root = (
+            Path(workspace_root).resolve()
+            if workspace_root
+            else (self.source_repo.parent / ".arc-benchmark-runtime" / self.source_repo.name)
         )
         self.verification_level = verification_level
         self.visible_test_cmd = list(visible_test_cmd or [])
+        self.visible_test_harness = dict(visible_test_harness or {})
         self.hard_project_usd = hard_project_usd
         self.hidden_test_dir = Path(hidden_test_dir).resolve() if hidden_test_dir else None
         self.output_root.mkdir(parents=True, exist_ok=True)
@@ -423,7 +422,7 @@ class RepeatedPairedBenchmarkRunner:
         inner_output_root = artifact_root / "repeats"
         try:
             for index, (seed, planned_order) in enumerate(
-                zip(repeat_seeds, planned_orders),
+                zip(repeat_seeds, planned_orders, strict=True),
                 start=1,
             ):
                 repeated_manifests = [
@@ -436,6 +435,7 @@ class RepeatedPairedBenchmarkRunner:
                     workspace_root=study_workspace_root,
                     verification_level=self.verification_level,
                     visible_test_cmd=self.visible_test_cmd or None,
+                    visible_test_harness=self.visible_test_harness or None,
                     hard_project_usd=self.hard_project_usd,
                     hidden_test_dir=self.hidden_test_dir,
                 )
@@ -523,9 +523,7 @@ class RepeatedPairedBenchmarkRunner:
                     }
                     for item in repeated_results
                 ],
-                "aggregate_pairs": [
-                    f"{item.baseline_a}-{item.baseline_b}" for item in aggregates
-                ],
+                "aggregate_pairs": [f"{item.baseline_a}-{item.baseline_b}" for item in aggregates],
             }
             (artifact_root / "study.json").write_text(
                 json.dumps(study_payload, indent=2, sort_keys=True) + "\n",
