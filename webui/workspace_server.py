@@ -102,7 +102,7 @@ def create_workspace_app(
     static_dir = Path(__file__).parent / "static"
     app = FastAPI(
         title="ARC Workspace",
-        version="0.7.0",
+        version="0.9.0",
         docs_url="/api/docs",
         redoc_url=None,
     )
