@@ -6,13 +6,14 @@ boundary these surfaces are intentionally loopback-only.
 
 The HTTP origin guard also protects localhost APIs from cross-site browser
 requests. Non-browser clients may omit Origin; browsers that send an Origin
-must identify a loopback host.
+must identify a literal loopback address or an explicit localhost name. ARC
+does not trust arbitrary DNS aliases merely because they currently resolve to
+loopback.
 """
 
 from __future__ import annotations
 
 import ipaddress
-import socket
 from urllib.parse import urlsplit
 
 from starlette.middleware.base import BaseHTTPMiddleware
@@ -24,7 +25,7 @@ _LOCAL_NAMES = {"localhost", "localhost.localdomain"}
 
 
 def is_loopback_host(host: str) -> bool:
-    """Return True only when *all* resolved addresses are loopback addresses."""
+    """Accept only explicit localhost names or literal loopback IP addresses."""
     value = (host or "").strip().lower()
     if value.startswith("[") and value.endswith("]"):
         value = value[1:-1]
@@ -33,23 +34,11 @@ def is_loopback_host(host: str) -> bool:
     try:
         return ipaddress.ip_address(value).is_loopback
     except ValueError:
-        pass
-
-    try:
-        infos = socket.getaddrinfo(value, None, type=socket.SOCK_STREAM)
-    except OSError:
-        return False
-    addresses = {item[4][0] for item in infos if item[4]}
-    if not addresses:
-        return False
-    try:
-        return all(ipaddress.ip_address(address).is_loopback for address in addresses)
-    except ValueError:
         return False
 
 
 def is_loopback_origin(origin: str | None) -> bool:
-    """Validate a browser Origin value against ARC's local-only boundary."""
+    """Validate a browser Origin value against ARC's strict local-only boundary."""
     if not origin:
         return True
     try:
