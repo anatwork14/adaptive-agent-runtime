@@ -13,7 +13,7 @@ ProviderName = Literal["mock", "codex", "claude", "antigravity", "opencode", "op
 
 
 class AgentProfile(BaseModel):
-    """Named execution profile used consistently by CLI and TUI."""
+    """Named execution profile used consistently by CLI, TUI, and router."""
 
     name: str
     provider: ProviderName
@@ -21,6 +21,10 @@ class AgentProfile(BaseModel):
     role: str = "implementation"
     enabled: bool = True
     command_override: Optional[str] = None
+    capabilities: List[str] = Field(default_factory=list)
+    max_concurrency: int = Field(default=1, ge=1, le=32)
+    cost_weight: float = Field(default=1.0, ge=0.0)
+    quality_weight: float = Field(default=1.0, ge=0.0)
     metadata: Dict[str, str] = Field(default_factory=dict)
 
 
@@ -32,11 +36,21 @@ class ArcConfig(BaseModel):
     hard_task_usd: float = 5.0
     hard_project_usd: float = 500.0
     visible_test_cmd: List[str] = Field(default_factory=list)
+    orchestration_max_parallel: int = Field(default=3, ge=1, le=32)
+    routing_policy: Literal["balanced", "quality", "cost"] = "balanced"
     agents: Dict[str, AgentProfile] = Field(default_factory=dict)
 
     @classmethod
     def default(cls, project_id: str = "default") -> "ArcConfig":
-        mock = AgentProfile(name="mock", provider="mock", role="smoke-test")
+        mock = AgentProfile(
+            name="mock",
+            provider="mock",
+            role="implementation",
+            capabilities=["implementation", "test", "docs", "review", "research"],
+            max_concurrency=4,
+            cost_weight=0.0,
+            quality_weight=0.5,
+        )
         return cls(project_id=project_id, default_agent="mock", agents={"mock": mock})
 
 
@@ -56,9 +70,14 @@ class ConfigStore:
         if project_id:
             config.project_id = project_id
         if "mock" not in config.agents:
-            config.agents["mock"] = AgentProfile(
-                name="mock", provider="mock", role="smoke-test"
-            )
+            config.agents["mock"] = ArcConfig.default(config.project_id).agents["mock"]
+        else:
+            # Older ARC configs predate capability-aware routing. Keep the
+            # built-in mock useful as the deterministic orchestration baseline.
+            mock = config.agents["mock"]
+            if not mock.capabilities:
+                mock.capabilities = ["implementation", "test", "docs", "review", "research"]
+            mock.max_concurrency = max(mock.max_concurrency, 4)
         return config
 
     def _ensure_runtime_ignored(self) -> None:
