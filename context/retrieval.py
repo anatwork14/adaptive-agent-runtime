@@ -33,6 +33,25 @@ class MemoryRetriever:
         self.lifecycle = memory_lifecycle
         self.ranker = ranker or CandidateRanker()
 
+    @staticmethod
+    def _eligible_for_generic_retrieval(mem: Memory, request: ContextRequest) -> bool:
+        """Keep episodic history dependency-scoped when provenance is available.
+
+        TASK_SUMMARY/EPISODE memories are the dominant successful-run memory
+        produced by subprocess coding agents. If a task declares dependencies,
+        those summaries should enter through the dependency-linked route rather
+        than being re-expanded indiscriminately by lexical/vector fallback.
+
+        This preserves generic semantic retrieval for root tasks while making the
+        runtime policy genuinely provenance-aware on progressive task sequences.
+        Non-episodic memory classes keep their existing fallback behavior.
+        """
+        if mem.type not in (MemoryType.TASK_SUMMARY, MemoryType.EPISODE):
+            return True
+        if not request.dependencies:
+            return True
+        return any(dep in mem.tags for dep in request.dependencies)
+
     def retrieve(self, request: ContextRequest) -> RetrievalResult:
         """Execute ordered retrieval router and return scored, filtered candidates."""
         strategies_used: List[str] = []
@@ -86,7 +105,7 @@ class MemoryRetriever:
         for mem_id, rank in fts_hits:
             if mem_id not in candidates_by_id:
                 mem = self.lifecycle.get_memory(mem_id)
-                if mem:
+                if mem and self._eligible_for_generic_retrieval(mem, request):
                     score = self.ranker.score_candidate(mem, request, semantic_relevance=0.6)
                     if score > 0:
                         candidates_by_id[mem.memory_id] = ScoredCandidate(
@@ -102,7 +121,7 @@ class MemoryRetriever:
         for mem_id, sim in vector_hits:
             if mem_id not in candidates_by_id:
                 mem = self.lifecycle.get_memory(mem_id)
-                if mem:
+                if mem and self._eligible_for_generic_retrieval(mem, request):
                     score = self.ranker.score_candidate(mem, request, semantic_relevance=float(sim))
                     if score > 0:
                         candidates_by_id[mem.memory_id] = ScoredCandidate(
