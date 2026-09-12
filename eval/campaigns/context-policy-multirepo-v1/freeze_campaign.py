@@ -2,9 +2,10 @@
 
 This command performs no provider inference. It configures the canonical ARC
 profile in three pinned repository clones, verifies the private hidden-test tree
-digests, freezes one shared runtime and grading-sandbox lock, writes three
-self-digesting repository preregistrations, and finally freezes the
-cross-repository meta-study plan.
+digests, freezes one shared runtime and grading-sandbox lock, proves each
+untouched base passes in that exact sandbox, writes three self-digesting
+repository preregistrations, and finally freezes the cross-repository meta-study
+plan.
 
 Run it only after building the campaign grading image and installing the intended
 Codex CLI build. Authentication is not required for freezing; authenticated
@@ -41,6 +42,7 @@ from eval.studies.preregistration import (  # noqa: E402
     save_preregistration,
     tree_digest,
 )
+from grading_preflight import validate_base_grading_environment  # noqa: E402
 from isolation.container import WORKSPACE_PYTHONPATH  # noqa: E402
 from runtime_lock import freeze as freeze_runtime_lock  # noqa: E402
 from runtime_lock import verify as verify_runtime_lock  # noqa: E402
@@ -179,6 +181,24 @@ def freeze_campaign(
             runtime_lock,
             ARC_REPO_ROOT,
         )
+
+        # Prove the untouched base actually imports from the mounted candidate
+        # tree and passes the exact visible suite in the just-frozen image. This
+        # happens before any provider execution or repository plan is emitted.
+        base_health: dict[str, dict[str, Any]] = {}
+        for slug in REPOSITORY_ORDER:
+            repo_contract = repository_contracts[slug]
+            config, _ = configured[slug]
+            base_health[slug] = validate_base_grading_environment(
+                repos[slug].resolve(),
+                commit=repo_contract["commit"],
+                visible_test_cmd=config.visible_test_cmd,
+                import_module=repo_contract["import_module"],
+                expected_import_prefix=repo_contract["expected_import_prefix"],
+            )
+
+        # Revalidate after the potentially long base-health checks so an image,
+        # provider CLI, or ARC-engine change during validation fails closed.
         for slug in REPOSITORY_ORDER:
             verify_runtime_lock(
                 repos[slug].resolve(),
@@ -239,6 +259,7 @@ def freeze_campaign(
             "sandbox_image": lock_payload["sandbox_image"],
             "sandbox_image_id": lock_payload["sandbox_image_id"],
             "docker_cli_version": lock_payload["docker_cli_version"],
+            "grading_base_health": base_health,
             "repository_plans": {
                 slug: {
                     "path": plan_paths[slug],
