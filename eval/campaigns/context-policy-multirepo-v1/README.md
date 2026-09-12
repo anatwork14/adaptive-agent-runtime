@@ -80,13 +80,14 @@ Any edit, rename, add, or delete in a private hidden suite after freeze invalida
 - SHA-256 of the effective provider argv, including reasoning configuration;
 - allowed environment-variable names;
 - installed provider CLI version;
-- ARC repository commit.
+- ARC repository commit;
+- a clean ARC evaluation-engine worktree at both freeze and execution time.
 
-The raw effective argv is not written to the runtime lock.
+The raw effective argv is not written to the runtime lock. A dirty ARC checkout fails closed even if `HEAD` still equals the frozen commit, because uncommitted code would change the benchmark engine without changing its SHA.
 
 ## One-command freeze before any provider run
 
-Prepare three clean clones at the exact commits above and extract the private hidden-test bundle so the hidden root contains `click/`, `httpx/`, and `python-dotenv/`. Install the intended Codex CLI build, but provider login is not required yet.
+Prepare three clean clones at the exact commits above and extract the private hidden-test bundle so the hidden root contains `click/`, `httpx/`, and `python-dotenv/`. Install the intended Codex CLI build, but provider login is not required yet. The ARC repository itself must also be clean and checked out at the version that will execute the study.
 
 Then run:
 
@@ -114,22 +115,78 @@ The three repository plans freeze V1 explicitly. The final meta plan freezes the
 
 Do not edit any generated freeze artifact. If anything in the execution contract must change, create a new campaign/version rather than overwriting this one.
 
-## Authenticated execution
+## Authenticated execution gate
 
-Only after the complete freeze directory exists should provider authentication and expensive execution begin. Before each repository run, verify the runtime lock again:
+Only after the complete freeze directory exists should provider authentication and expensive execution begin. Authenticate through the vendor CLI and confirm it independently:
 
 ```bash
-python eval/campaigns/context-policy-multirepo-v1/runtime_lock.py verify \
-  --repo /study/repos/click \
-  --profile builder \
-  --lock /secure/prereg/context-policy-multirepo-v1/runtime-lock.json
+codex login
+codex login status
 ```
 
-Then execute its frozen plan with the matching private hidden directory. Use a new explicit attempt ID for every retry and retain all failed attempt trees.
+The campaign does **not** rely on generic ARC `doctor_profile()` readiness here. The `builder` profile intentionally uses a command override to pin reasoning effort, and generic override readiness does not prove that the Codex account is signed in. `execute_campaign.py` calls the vendor authentication probe directly.
+
+Keep benchmark results and disposable workspaces outside ARC and all three target repositories. First run the read-only preflight:
+
+```bash
+python eval/campaigns/context-policy-multirepo-v1/execute_campaign.py \
+  --click-repo /study/repos/click \
+  --httpx-repo /study/repos/httpx \
+  --python-dotenv-repo /study/repos/python-dotenv \
+  --hidden-root /secure/hidden/context-policy-multirepo-v1-hidden \
+  --freeze-dir /secure/prereg/context-policy-multirepo-v1 \
+  --results-root /study/results \
+  --workspace-root /study/runtime \
+  --attempt-id a001
+```
+
+A successful preflight revalidates, immediately before inference:
+
+- all self-digesting repository plans and the meta plan;
+- runtime-lock digest, effective provider argv, CLI version and ARC commit;
+- clean ARC and target-repository worktrees;
+- exact pinned target `HEAD`s;
+- private hidden-test tree digests;
+- live ARC profile/test/budget/verification settings against every preregistration;
+- direct Codex authentication status;
+- fresh result/workspace destinations outside every source repository.
+
+The command is read-only without `--execute`. If authentication is missing it still reports the structural checks but exits non-zero with `ready_for_execution=false`.
+
+After reviewing that output, start the primary provider attempt by adding exactly one flag:
+
+```bash
+python eval/campaigns/context-policy-multirepo-v1/execute_campaign.py \
+  --click-repo /study/repos/click \
+  --httpx-repo /study/repos/httpx \
+  --python-dotenv-repo /study/repos/python-dotenv \
+  --hidden-root /secure/hidden/context-policy-multirepo-v1-hidden \
+  --freeze-dir /secure/prereg/context-policy-multirepo-v1 \
+  --results-root /study/results \
+  --workspace-root /study/runtime \
+  --attempt-id a001 \
+  --execute
+```
+
+The execution driver runs repositories in the frozen campaign order `click -> httpx -> python-dotenv`. For every repository it invokes the public `arc benchmark run-plan` path, writes a persistent command log, verifies the emitted provenance plan digest, and runs the deterministic tidy export. Only after all three repository studies succeed does it invoke the frozen hierarchical meta-analysis.
+
+The campaign attempt writes an atomic `execution-manifest.json` containing the freeze digest, runtime-lock digest, ARC commit, provider CLI version, repository plan digests, exact study/export locations, timestamps, per-repository states, meta-analysis state, and whether provider execution started.
+
+## Failure and retry discipline
+
+There is deliberately no automatic retry, resume, overwrite, or "pick the best attempt" behavior.
+
+- A failed campaign attempt remains on disk with `status=FAILED`.
+- A new provider attempt requires a new explicit attempt ID.
+- The current preregistered exclusions are only `provider outage before the first provider turn` and `host failure before the first provider turn`. A later failure is **not** automatically eligible for exclusion/replacement.
+- If provider execution itself completed but only the offline export or meta-analysis failed, do **not** rerun the provider. Repair or rerun the offline operation against the already-persisted study artifacts.
+- Retain every failed attempt tree and execution log for the thesis audit trail.
+
+This strict policy prevents an operator from silently replacing a weak or inconvenient stochastic result.
 
 ## Manual preregistration fallback
 
-If the campaign driver cannot be used, the CLI now requires the study's declared verification level to be explicit:
+If the campaign driver cannot be used, the CLI requires the study's declared verification level to be explicit:
 
 ```bash
 arc benchmark preregister \
@@ -146,7 +203,7 @@ arc benchmark preregister \
   --exclude "host failure before the first provider turn"
 ```
 
-The one-command driver is preferred because it removes operator drift across repositories.
+The one-command freeze and execution drivers are preferred because they remove operator drift across repositories.
 
 ## Interpretation discipline
 

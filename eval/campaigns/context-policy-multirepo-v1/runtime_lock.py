@@ -20,7 +20,7 @@ from typing import Any
 from application.agents import build_agent
 from application.config import ConfigStore
 
-SCHEMA = "arc-empirical-runtime-lock-v3"
+SCHEMA = "arc-empirical-runtime-lock-v4"
 DEFAULT_ARC_REPO = Path(__file__).resolve().parents[3]
 
 
@@ -82,6 +82,25 @@ def _git_head(path: Path) -> str:
     return proc.stdout.strip()
 
 
+def _require_clean_git(path: Path, *, label: str) -> None:
+    proc = subprocess.run(
+        ["git", "status", "--porcelain"],
+        cwd=path,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    if proc.returncode != 0:
+        detail = (proc.stderr or proc.stdout or "git status failed").strip()
+        raise SystemExit(f"cannot inspect {label} worktree in {path}: {detail}")
+    status = proc.stdout.strip()
+    if status:
+        preview = "; ".join(status.splitlines()[:10])
+        raise SystemExit(
+            f"{label} worktree must be clean for a reproducible campaign: {preview}"
+        )
+
+
 def _arc_repo(path: Path | None) -> Path:
     return (path or DEFAULT_ARC_REPO).resolve()
 
@@ -114,11 +133,14 @@ def lock_digest(payload: dict[str, Any]) -> str:
 def freeze(repo: Path, profile: str, output: Path, arc_repo: Path | None) -> None:
     if output.exists():
         raise SystemExit(f"refusing to overwrite existing lock: {output}")
+    arc_path = _arc_repo(arc_repo)
+    _require_clean_git(arc_path, label="ARC engine")
     payload = runtime_payload(repo, profile)
     payload.update(
         {
             "created_at_utc": datetime.now(timezone.utc).isoformat(),
-            "arc_commit": _git_head(_arc_repo(arc_repo)),
+            "arc_commit": _git_head(arc_path),
+            "arc_worktree_clean": True,
             "lock_digest": "",
         }
     )
@@ -131,6 +153,7 @@ def freeze(repo: Path, profile: str, output: Path, arc_repo: Path | None) -> Non
     print(f"runtime_lock={output.resolve()}")
     print(f"lock_digest={payload['lock_digest']}")
     print(f"arc_commit={payload['arc_commit']}")
+    print("arc_worktree_clean=true")
     print(f"effective_argv_sha256={payload['effective_argv_sha256']}")
     print(f"provider_cli_version={payload['provider_cli_version']}")
 
@@ -146,8 +169,11 @@ def verify(
         raise SystemExit("unsupported runtime-lock schema")
     if frozen.get("lock_digest") != lock_digest(frozen):
         raise SystemExit("runtime-lock digest mismatch: lock was modified")
+    arc_path = _arc_repo(arc_repo)
+    _require_clean_git(arc_path, label="ARC engine")
     live = runtime_payload(repo, profile)
-    live["arc_commit"] = _git_head(_arc_repo(arc_repo))
+    live["arc_commit"] = _git_head(arc_path)
+    live["arc_worktree_clean"] = True
     keys = (
         "profile",
         "provider",
@@ -158,6 +184,7 @@ def verify(
         "provider_cli_version",
         "env_allow",
         "arc_commit",
+        "arc_worktree_clean",
     )
     mismatches = [key for key in keys if frozen.get(key) != live.get(key)]
     if mismatches:

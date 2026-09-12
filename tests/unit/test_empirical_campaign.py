@@ -73,7 +73,7 @@ def test_campaign_freeze_contract_matches_manifests() -> None:
         int(hidden_digest, 16)
 
 
-def test_campaign_freeze_scripts_compile() -> None:
-    for name in ("runtime_lock.py", "freeze_campaign.py"):
+def test_campaign_freeze_and_execution_scripts_compile() -> None:
+    for name in ("runtime_lock.py", "freeze_campaign.py", "execute_campaign.py"):
         source = (CAMPAIGN / name).read_text(encoding="utf-8")
         compile(source, str(CAMPAIGN / name), "exec")
