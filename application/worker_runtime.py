@@ -15,6 +15,11 @@ from typing import TYPE_CHECKING, Any, Literal
 
 from pydantic import BaseModel, Field
 
+from runtime.environment import (
+    build_execution_environment,
+    environment_key_manifest,
+    redact_command,
+)
 from runtime.tmux import TmuxController
 
 if TYPE_CHECKING:  # pragma: no cover
@@ -30,6 +35,7 @@ class WorkerRuntimeState(BaseModel):
     backend: str = "tmux"
     runtime_name: str = ""
     command: list[str] = Field(default_factory=list)
+    environment_keys: list[str] = Field(default_factory=list)
     workspace: str = ""
     running: bool = False
     started_event: int | None = None
@@ -82,27 +88,19 @@ class WorkerRuntimeManager:
             result.append(event)
         return result
 
+    def _terminal_environment(self, session_id: str) -> dict[str, str]:
+        session, _ = self._session(session_id)
+        profile = self.app.config.agents.get(session.agent_name)
+        provider = profile.provider if profile else session.provider
+        extra_names = profile.env_allow if profile else []
+        return build_execution_environment(provider=provider, extra_names=extra_names)
+
     @staticmethod
-    def _redact_command(command: list[str]) -> list[str]:
-        """Redact obvious secret-valued argv before writing an event."""
-        secret_markers = ("token", "secret", "password", "passwd", "api-key", "apikey")
-        output: list[str] = []
-        redact_next = False
-        for arg in command:
-            lower = arg.lower()
-            if redact_next:
-                output.append("<redacted>")
-                redact_next = False
-                continue
-            if any(marker in lower for marker in secret_markers):
-                if "=" in arg:
-                    output.append(arg.split("=", 1)[0] + "=<redacted>")
-                else:
-                    output.append(arg)
-                    redact_next = True
-                continue
-            output.append(arg)
-        return output
+    def _preview_environment() -> dict[str, str]:
+        # Application previews get process/runtime plumbing only. Frameworks can
+        # still load repository-local .env files themselves, but ARC does not
+        # inject unrelated host credentials into arbitrary project dev servers.
+        return build_execution_environment()
 
     def status(self, session_id: str, kind: RuntimeKind) -> WorkerRuntimeState:
         # Status remains inspectable after an accepted/stopped session has had
@@ -121,6 +119,9 @@ class WorkerRuntimeManager:
                 state.backend = str(payload.get("backend") or "tmux")
                 state.runtime_name = str(payload.get("runtime_name") or state.runtime_name)
                 state.command = [str(item) for item in payload.get("command", [])]
+                state.environment_keys = [
+                    str(item) for item in payload.get("environment_keys", [])
+                ]
                 state.workspace = str(payload.get("workspace") or workspace)
                 state.host = str(payload.get("host") or "")
                 state.port = int(payload["port"]) if payload.get("port") is not None else None
@@ -149,6 +150,7 @@ class WorkerRuntimeManager:
         kind: RuntimeKind,
         runtime_name: str,
         command: list[str],
+        environment_keys: list[str],
         workspace: Path,
         host: str = "",
         port: int | None = None,
@@ -168,7 +170,8 @@ class WorkerRuntimeManager:
                 "runtime_kind": kind,
                 "backend": "tmux",
                 "runtime_name": runtime_name,
-                "command": self._redact_command(command),
+                "command": redact_command(command),
+                "environment_keys": environment_keys,
                 "workspace": str(workspace),
                 "host": host,
                 "port": port,
@@ -200,13 +203,20 @@ class WorkerRuntimeManager:
         if current.running:
             return current
         command = self.app.sessions.native_command(session_id)
+        environment = self._terminal_environment(session_id)
         name = TmuxController.safe_name("terminal", session_id)
-        self.tmux.start(name=name, cwd=workspace, command=command)
+        self.tmux.start(
+            name=name,
+            cwd=workspace,
+            command=command,
+            environment=environment,
+        )
         self._emit_started(
             session_id=session_id,
             kind="terminal",
             runtime_name=name,
             command=command,
+            environment_keys=environment_key_manifest(environment),
             workspace=workspace,
         )
         return self.status(session_id, "terminal")
@@ -287,8 +297,14 @@ class WorkerRuntimeManager:
         command = shlex.split(rendered)
         if not command:
             raise ValueError("Preview command did not produce an executable argv")
+        environment = self._preview_environment()
         name = TmuxController.safe_name("preview", session_id)
-        self.tmux.start(name=name, cwd=workspace, command=command)
+        self.tmux.start(
+            name=name,
+            cwd=workspace,
+            command=command,
+            environment=environment,
+        )
         if host == "localhost":
             url_host = "127.0.0.1"
         elif host == "::1":
@@ -301,6 +317,7 @@ class WorkerRuntimeManager:
             kind="preview",
             runtime_name=name,
             command=command,
+            environment_keys=environment_key_manifest(environment),
             workspace=workspace,
             host=host,
             port=port,
