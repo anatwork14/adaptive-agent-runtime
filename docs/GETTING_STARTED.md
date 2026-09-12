@@ -1,6 +1,6 @@
 # ARC Getting Started
 
-ARC exposes one runtime through the CLI, terminal Mission Control, and localhost browser Agent Orchestration Control. You do not need to write Python to configure providers or run tasks.
+ARC exposes one event-sourced runtime through the CLI, terminal Mission Control, and localhost browser Agent Orchestration Control. ARC v0.5 can also turn one objective into a task DAG, route READY tasks across coding-agent profiles, and execute independent agent work concurrently while keeping final Git integration serialized.
 
 ## 1. Install
 
@@ -26,7 +26,7 @@ arc status
 
 ARC writes local runtime state under `.arc/` and automatically adds `.arc/` to the repository-local Git exclude file (`.git/info/exclude`). It does not force a committed `.gitignore` change.
 
-## 3. Connect a coding-agent account
+## 3. Connect coding-agent accounts
 
 Run:
 
@@ -34,21 +34,7 @@ Run:
 arc login
 ```
 
-ARC opens an arrow-key login picker:
-
-```text
-ARC  ·  CONNECT PROVIDER
-
-Select login method
-
-> OpenAI Codex    · ChatGPT / OpenAI OAuth
-  Claude Code     · Anthropic OAuth
-  Antigravity     · Google OAuth
-
-↑/↓ Navigate   Enter Confirm   Esc Cancel
-```
-
-After you choose a provider, ARC exits the picker and invokes the **provider's own native authentication flow** in the foreground. ARC does not receive, copy, or persist OAuth tokens.
+ARC opens an arrow-key provider picker and then invokes the selected provider's native authentication flow. ARC does not receive, copy, or persist OAuth tokens.
 
 You can skip the picker:
 
@@ -58,31 +44,16 @@ arc login claude --profile reviewer
 arc login antigravity --profile researcher
 ```
 
-When the current repository is already initialized, `--profile` registers the authenticated provider as an ARC agent profile after login. Credentials remain in the provider CLI's own credential/keyring store.
+Credentials remain in each provider CLI's own credential/keyring store.
 
-Inspect account state at any time:
+Inspect account and execution readiness:
 
 ```bash
 arc auth status
-arc auth status codex
-```
-
-Typical states are:
-
-```text
-AUTHENTICATED
-SIGNED_OUT
-MISSING
-UNKNOWN
-```
-
-ARC's agent doctor also distinguishes installation from authentication:
-
-```bash
 arc agent doctor
 ```
 
-Typical execution states are:
+ARC distinguishes provider installation from provider authentication. Execution states include:
 
 ```text
 READY
@@ -92,17 +63,40 @@ GATEWAY_ONLY
 DISABLED
 ```
 
-### Supported native login flows
+`opencode` remains available as a CLI execution provider. `openrouter` remains gateway-only until ARC owns a filesystem tool loop for it.
 
-| Provider | ARC profile provider | Native auth |
-|---|---|---|
-| OpenAI Codex | `codex` | ChatGPT / OpenAI OAuth |
-| Claude Code | `claude` | Anthropic OAuth |
-| Google Antigravity | `antigravity` | Google OAuth / secure keyring |
+## 4. Tune the fleet for routing
 
-`opencode` remains available as a CLI execution provider, and `openrouter` remains gateway-only until ARC owns a filesystem tool loop for it.
+ARC v0.5 agent profiles carry routing metadata in addition to provider/model/role.
 
-## 4. Create a task
+Provider profiles receive sensible default capabilities, which you can override:
+
+```bash
+arc agent tune builder \
+  --capability implementation \
+  --capability test \
+  --max-concurrency 2 \
+  --quality-weight 1.3 \
+  --cost-weight 1.0
+
+arc agent tune reviewer \
+  --capability review \
+  --capability docs \
+  --quality-weight 1.4
+```
+
+Project defaults live in `.arc/config.yaml`:
+
+```yaml
+orchestration_max_parallel: 3
+routing_policy: balanced
+```
+
+Available routing policies are `balanced`, `quality`, and `cost`.
+
+The built-in mock remains available for deterministic smoke tests, but automatic routing treats it as fallback-only when an eligible real READY coding agent exists.
+
+## 5. Create one task manually
 
 ```bash
 arc task create "Create a traceable ARC demo artifact" \
@@ -118,62 +112,114 @@ arc task list
 arc task show T001
 ```
 
-## 5. Run a zero-credential smoke task
-
-Every project still starts with the deterministic `mock` profile so ARC itself can be validated without provider cost:
+Run it explicitly with a named profile:
 
 ```bash
-arc run T001 --agent mock
-```
-
-This is not a fake gate result. `MockAgentAdapter` makes a deterministic repository edit, then ARC uses the normal execution path:
-
-```text
-ContextPacket
-    ↓
-Git worktree
-    ↓
-candidate commit
-    ↓
-fresh verification worktree
-    ↓
-static checks / configured tests
-    ↓
-transactional integration gate
-    ↓
-integration branch
-```
-
-## 6. Run with a connected provider
-
-If you used:
-
-```bash
-arc login codex --profile builder --default
-```
-
-then:
-
-```bash
-arc agent doctor builder
 arc run T001 --agent builder
 ```
 
-For Claude or Antigravity, use the profile name you registered.
+Or ask ARC to explain the route it would choose:
 
-ARC does not fabricate provider success. Missing executables, missing authentication, provider failures, or empty repository edits surface as failures instead of silently falling back to the mock adapter.
+```bash
+arc route T001
+```
 
-## 7. Watch a mission live
+The route output includes the selected agent, policy score, and reasons.
 
-In another terminal:
+## 6. Plan a multi-agent mission
+
+For a higher-level objective, declare the expected repository surfaces:
+
+```bash
+arc mission plan "Add authentication with tests and documentation" \
+  --file src/auth.py \
+  --file tests/test_auth.py \
+  --file docs/auth.md \
+  --accept "tests pass"
+```
+
+The v0.5 planner is deliberately deterministic and replayable. For this example it materializes source implementation first, then test/docs tasks that depend on the implementation task.
+
+The generated plan is not hidden chat state. It becomes the normal authoritative task DAG plus an `orchestration.plan_created` event.
+
+## 7. Run the READY fleet
+
+Execute all currently reachable work:
+
+```bash
+arc orchestrate
+```
+
+Or combine planning and execution:
+
+```bash
+arc mission plan "Add authentication with tests and documentation" \
+  --file src/auth.py \
+  --file tests/test_auth.py \
+  --file docs/auth.md \
+  --accept "tests pass" \
+  --run
+```
+
+ARC may execute independent agent work concurrently, but candidate verification/final integration remains a single-writer critical section.
+
+Conceptually:
+
+```text
+READY frontier
+     │
+     ▼
+ capability/cost/load routing
+     │
+ ┌───┼───────────┐
+ ▼   ▼           ▼
+A1   A2          A3      parallel isolated agent work
+ │    │           │
+ └────┼───────────┘
+      ▼
+ candidate commits
+      ▼
+ serialized integration gate
+      ▼
+ integration branch
+```
+
+Tasks that declare overlapping file surfaces are not dispatched in the same batch. ARC defers the conflicting task to a later round and also acquires exclusive leases before dispatch.
+
+See [`ORCHESTRATION.md`](ORCHESTRATION.md) for the full scheduling/routing contract.
+
+## 8. Run a zero-credential orchestration smoke test
+
+Every project starts with the deterministic `mock` profile so ARC itself can be validated without provider cost.
+
+You can create tasks and run:
+
+```bash
+arc orchestrate
+```
+
+When no real READY provider can satisfy a task, mock is a valid fallback route. It still writes a real repository change that must survive the normal worktree, candidate commit, verification, and integration path.
+
+## 9. Watch missions live
+
+For one task:
 
 ```bash
 arc watch T001
 ```
 
-`arc watch` reads the same append-only authoritative event stream used by replay and both Mission Control interfaces.
+For the full fleet, use the TUI or browser UI. All surfaces read the same append-only event stream, including:
 
-## 8. Open terminal Mission Control
+```text
+orchestration.run_started
+orchestration.routed
+orchestration.deferred
+orchestration.batch_started
+orchestration.task_finished
+orchestration.run_finished
+```
+
+## 10. Open terminal Mission Control
 
 ```bash
 arc dashboard
@@ -182,14 +228,17 @@ arc dashboard
 Keyboard controls:
 
 ```text
-r  refresh
-g  run selected READY task
+a  route and run the READY fleet
+g  route and run selected READY task
 y  retry selected failed/blocked task
 x  cancel selected task
+r  refresh
 q  quit
 ```
 
-## 9. Open browser Agent Orchestration Control
+The system panel shows routing policy and maximum parallelism. READY task detail shows ARC's current route recommendation.
+
+## 11. Open browser Agent Orchestration Control
 
 ```bash
 arc web --open
@@ -201,18 +250,19 @@ Then open:
 http://127.0.0.1:8787
 ```
 
-The redesigned UI is orchestration-first rather than a generic admin dashboard. It provides:
+The browser includes:
 
-- ARC Root + Codex + Claude + Antigravity orchestrator cards;
+- ARC Root + provider orchestrator cards;
 - real provider/profile readiness and authentication states;
 - live task execution ledger;
-- agent teams grouped by provider, with running vs idle workers;
-- real ARC state/budget/memory metrics;
-- mission inspector and context inspection;
-- authoritative WebSocket event stream;
-- copyable `arc login ...` commands when a provider needs connection.
+- provider-grouped agent teams;
+- **Plan objective** to materialize a task DAG;
+- **Run ready** to orchestrate the reachable fleet;
+- **Explain route** to inspect agent choice/score/reasons;
+- mission/context inspection;
+- authoritative WebSocket event trace.
 
-The activity rings represent **ARC local workload share**, not fabricated provider quota or rate-limit data.
+The browser does not simulate orchestration. Its activity is driven by actual runtime events.
 
 The browser never accepts provider API keys or OAuth tokens. Native interactive login remains a terminal/provider responsibility.
 
@@ -220,12 +270,12 @@ The web control plane is intentionally localhost-only by default. ARC refuses a 
 
 See [`WEB_MISSION_CONTROL.md`](WEB_MISSION_CONTROL.md) for API and security details.
 
-## 10. Inspect what ARC used
+## 12. Inspect and replay what ARC did
 
 ```bash
 arc events
 arc replay
-arc context inspect T001 --agent mock
+arc context inspect T001 --agent builder
 arc gate inspect T001
 arc memory list
 ```
@@ -235,5 +285,7 @@ For a specific memory:
 ```bash
 arc memory why M_44
 ```
+
+Routing/planning decisions are deliberately event-visible so later learned policies can be evaluated against the deterministic v0.5 baseline.
 
 For the full operator command reference and configuration format, see [`OPERATOR_GUIDE.md`](OPERATOR_GUIDE.md).
