@@ -116,14 +116,17 @@ def test_repeated_triplets_preserve_isolation_and_emit_aggregate_provenance(
     )
 
     assert result.repeat_count == 3
-    assert result.repeat_seeds == (17, 18, 19)
+    assert result.repeat_seeds == (17, 23, 28)
     assert len(result.repeats) == 3
     assert len(created_agents) == 9
-    assert {tuple(item.execution_order) for item in result.repeats} == {
+    execution_orders = [tuple(item.execution_order) for item in result.repeats]
+    assert execution_orders == [
         ("B3", "B5", "B7"),
+        ("B7", "B3", "B5"),
         ("B5", "B7", "B3"),
-        ("B5", "B3", "B7"),
-    }
+    ]
+    for position in range(3):
+        assert {order[position] for order in execution_orders} == {"B3", "B5", "B7"}
     assert all(item.base_commit == base_sha for item in result.repeats)
 
     assert len(result.aggregates) == 3
@@ -135,7 +138,8 @@ def test_repeated_triplets_preserve_isolation_and_emit_aggregate_provenance(
         assert aggregate.resolved_rate_delta.ci_upper == 0.0
 
     assert result.provenance["base_commit"] == base_sha
-    assert result.provenance["repeat_seeds"] == [17, 18, 19]
+    assert result.provenance["repeat_seeds"] == [17, 23, 28]
+    assert result.provenance["order_schedule"] == "balanced_crossover_v1"
     assert result.provenance["agent_fingerprint"]["adapter_type"].endswith(
         ".MockAgentAdapter"
     )

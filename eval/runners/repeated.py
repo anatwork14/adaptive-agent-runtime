@@ -5,6 +5,7 @@ from __future__ import annotations
 import hashlib
 import json
 import platform
+import random
 import shutil
 import subprocess
 import uuid
@@ -65,6 +66,79 @@ class RepeatedPairedBenchmarkResult:
 
 
 AgentFactory = Callable[[], AgentAdapter]
+
+
+def balanced_execution_orders(
+    baselines: Sequence[str],
+    repeats: int,
+    *,
+    random_seed: int,
+) -> tuple[tuple[str, ...], ...]:
+    """Create deterministic crossover blocks that balance treatment positions.
+
+    A complete block contains one cyclic rotation per baseline, so every
+    treatment appears exactly once in every ordinal position. Alternate blocks
+    reverse the orientation, reducing simple carryover/order effects. Row order
+    inside each block is seed-shuffled.
+    """
+    labels = sorted(set(baselines))
+    if len(labels) < 2:
+        raise ValueError("balanced execution schedule requires at least two baselines")
+    if repeats < 1:
+        raise ValueError("repeats must be >= 1")
+
+    rng = random.Random(random_seed)
+    base = list(labels)
+    rng.shuffle(base)
+    orders: list[tuple[str, ...]] = []
+    block = 0
+    while len(orders) < repeats:
+        orientation = list(base) if block % 2 == 0 else list(reversed(base))
+        rows = [
+            tuple(orientation[index:] + orientation[:index])
+            for index in range(len(orientation))
+        ]
+        rng.shuffle(rows)
+        for row in rows:
+            if len(orders) >= repeats:
+                break
+            orders.append(row)
+        block += 1
+        if block % 2 == 0:
+            rng.shuffle(base)
+    return tuple(orders)
+
+
+def _shuffled_order(seed: int, baselines: Sequence[str]) -> tuple[str, ...]:
+    labels = sorted(set(baselines))
+    random.Random(seed).shuffle(labels)
+    return tuple(labels)
+
+
+def _balanced_seed_schedule(
+    baselines: Sequence[str],
+    orders: Sequence[tuple[str, ...]],
+    *,
+    base_seed: int,
+) -> tuple[int, ...]:
+    """Find unique manifest seeds that reproduce the planned v0.13 shuffle orders."""
+    labels = sorted(set(baselines))
+    cursor = base_seed
+    selected: list[int] = []
+    for target in orders:
+        for _ in range(100000):
+            candidate = cursor
+            cursor += 1
+            if candidate in selected:
+                continue
+            if _shuffled_order(candidate, labels) == tuple(target):
+                selected.append(candidate)
+                break
+        else:
+            raise RuntimeError(
+                f"unable to find deterministic seed for execution order {target}"
+            )
+    return tuple(selected)
 
 
 def _bootstrap_metric(
@@ -292,7 +366,6 @@ class RepeatedPairedBenchmarkRunner:
         *,
         repeats: int = 5,
         study_id: str | None = None,
-        seed_stride: int = 1,
         n_bootstraps: int = 2000,
         ci: float = 0.95,
         provenance_extra: dict[str, Any] | None = None,
@@ -301,8 +374,6 @@ class RepeatedPairedBenchmarkRunner:
         manifest_list = self._validate_base_manifests(manifests)
         if repeats < 2:
             raise ValueError("repeated paired benchmark requires repeats >= 2")
-        if seed_stride == 0:
-            raise ValueError("seed_stride must be non-zero")
         if n_bootstraps < 1:
             raise ValueError("n_bootstraps must be >= 1")
         if not 0.0 < ci < 1.0:
@@ -316,7 +387,16 @@ class RepeatedPairedBenchmarkRunner:
             raise ValueError(f"study artifact directory already exists: {artifact_root}")
         artifact_root.mkdir(parents=True, exist_ok=False)
 
-        repeat_seeds = tuple(base_seed + index * seed_stride for index in range(repeats))
+        planned_orders = balanced_execution_orders(
+            [manifest.baseline for manifest in manifest_list],
+            repeats,
+            random_seed=base_seed,
+        )
+        repeat_seeds = _balanced_seed_schedule(
+            [manifest.baseline for manifest in manifest_list],
+            planned_orders,
+            base_seed=base_seed,
+        )
         seen_agents: list[AgentAdapter] = []
         expected_agent_fingerprint: dict[str, Any] | None = None
 
@@ -342,7 +422,10 @@ class RepeatedPairedBenchmarkRunner:
         study_workspace_root = self.workspace_root / study_id
         inner_output_root = artifact_root / "repeats"
         try:
-            for index, seed in enumerate(repeat_seeds, start=1):
+            for index, (seed, planned_order) in enumerate(
+                zip(repeat_seeds, planned_orders),
+                start=1,
+            ):
                 repeated_manifests = [
                     manifest.model_copy(update={"seed": seed}, deep=True)
                     for manifest in manifest_list
@@ -361,6 +444,11 @@ class RepeatedPairedBenchmarkRunner:
                     fresh_factory,
                     run_id=f"{study_id}-r{index:03d}-s{seed}",
                 )
+                if repeat_result.execution_order != planned_order:
+                    raise RuntimeError(
+                        "paired runner execution order diverged from balanced schedule: "
+                        f"planned={planned_order}, actual={repeat_result.execution_order}"
+                    )
                 repeated_results.append(repeat_result)
 
             aggregates = aggregate_repeated_results(
@@ -390,7 +478,8 @@ class RepeatedPairedBenchmarkRunner:
                 "benchmark_id": benchmark_id,
                 "base_commit": base_commit,
                 "base_seed": base_seed,
-                "seed_stride": seed_stride,
+                "order_schedule": "balanced_crossover_v1",
+                "planned_execution_orders": [list(order) for order in planned_orders],
                 "repeat_seeds": list(repeat_seeds),
                 "repeat_count": repeats,
                 "n_bootstraps": n_bootstraps,
@@ -425,6 +514,7 @@ class RepeatedPairedBenchmarkRunner:
                 "base_commit": base_commit,
                 "repeat_count": repeats,
                 "repeat_seeds": list(repeat_seeds),
+                "order_schedule": "balanced_crossover_v1",
                 "repetitions": [
                     {
                         "run_id": item.run_id,
