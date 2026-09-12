@@ -13,7 +13,7 @@ notes: Fixed vector-top-k treatment for the python-dotenv progressive maintenanc
 tasks:
   - task_id: T001
     goal: Expose immutable source provenance for valid dotenv bindings as public entries containing key raw value and 1-based source line while preserving all existing parsing semantics.
-    files: [src/dotenv/parser.py, src/dotenv/main.py, src/dotenv/__init__.py, tests]
+    files: [src/dotenv/parser.py, src/dotenv/main.py, src/dotenv/__init__.py, tests/test_parser.py, tests/test_main.py]
     symbols: [Binding, Original, DotEnv]
     acceptance: [Public immutable entries expose key raw value and 1-based source line., Comments blank lines and error-only bindings do not appear as keyed entries., Existing dotenv parsing behavior is unchanged., Existing visible tests pass.]
     risk: 0.45
@@ -23,7 +23,7 @@ tasks:
   - task_id: T002
     dependencies: [T001]
     goal: Add a top-level metadata-returning dotenv API that applies the same interpolation and override semantics as dotenv_values while retaining the winning source line for each resolved key.
-    files: [src/dotenv/main.py, src/dotenv/__init__.py, src/dotenv/variables.py, tests]
+    files: [src/dotenv/main.py, src/dotenv/__init__.py, src/dotenv/variables.py, tests/test_main.py, tests/test_variables.py]
     symbols: [DotEnv, dotenv_values, resolve_variables]
     acceptance: [Resolved values match dotenv_values under equivalent arguments., Duplicate keys retain the winning binding source line., Keys with no value remain distinct from empty strings., T001 behavior and existing visible tests remain compatible.]
     risk: 0.60
@@ -33,7 +33,7 @@ tasks:
   - task_id: T003
     dependencies: [T002]
     goal: Extend dotenv list with a deterministic JSON metadata format that exposes each key value and source line by reusing the T002 API while leaving every existing list format unchanged.
-    files: [src/dotenv/cli.py, src/dotenv/main.py, src/dotenv/__init__.py, tests]
+    files: [src/dotenv/cli.py, src/dotenv/main.py, src/dotenv/__init__.py, tests/test_cli.py, tests/test_main.py]
     symbols: [list_values, dotenv_values]
     acceptance: [The new metadata format emits valid deterministic sorted JSON with value and line for each key., The CLI reuses the metadata API rather than reparsing independently., simple json shell and export formats keep their previous behavior., T001 and T002 behavior plus existing visible tests remain compatible.]
     risk: 0.50
