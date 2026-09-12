@@ -8,9 +8,15 @@ without pretending an OS PID is durable project state.
 
 from __future__ import annotations
 
+import json
+import os
 import shlex
 import shutil
 import subprocess
+import sys
+import tempfile
+import time
+from collections.abc import Mapping
 from pathlib import Path
 from typing import Any
 
@@ -70,12 +76,33 @@ class TmuxController:
     def has_session(self, name: str) -> bool:
         return self._run(["has-session", "-t", name], check=False).returncode == 0
 
+    @staticmethod
+    def _environment_handoff(environment: Mapping[str, str]) -> Path:
+        """Write a mode-0600, single-use environment handoff outside the repo."""
+        fd, raw_path = tempfile.mkstemp(prefix="arc-runtime-env-", suffix=".json")
+        path = Path(raw_path)
+        try:
+            os.fchmod(fd, 0o600)
+            with os.fdopen(fd, "w", encoding="utf-8") as handle:
+                json.dump({str(k): str(v) for k, v in environment.items()}, handle)
+                handle.flush()
+                os.fsync(handle.fileno())
+        except Exception:
+            try:
+                os.close(fd)
+            except OSError:
+                pass
+            path.unlink(missing_ok=True)
+            raise
+        return path
+
     def start(
         self,
         *,
         name: str,
         cwd: str | Path,
         command: list[str],
+        environment: Mapping[str, str] | None = None,
     ) -> None:
         if not command:
             raise ValueError("Persistent runtime command cannot be empty")
@@ -84,20 +111,56 @@ class TmuxController:
         workspace = Path(cwd).resolve()
         if not workspace.exists():
             raise TmuxError(f"runtime working directory does not exist: {workspace}")
-        # tmux accepts one shell-command string. shlex.join safely quotes the
-        # argv provided by ARC; ARC never concatenates untrusted shell fragments.
-        shell_command = shlex.join(command)
-        self._run(
-            [
-                "new-session",
-                "-d",
-                "-s",
-                name,
-                "-c",
-                str(workspace),
-                shell_command,
+
+        runtime_command = list(command)
+        handoff: Path | None = None
+        if environment is not None:
+            # Do not embed KEY=value pairs in the tmux command line. They could
+            # otherwise be visible in process arguments or tmux metadata. A
+            # tiny ARC helper consumes and unlinks the mode-0600 handoff before
+            # execve() replaces it with the real worker process.
+            handoff = self._environment_handoff(environment)
+            runtime_command = [
+                sys.executable,
+                "-m",
+                "runtime.tmux_bootstrap",
+                str(handoff),
+                "--",
+                *runtime_command,
             ]
-        )
+
+        shell_command = shlex.join(runtime_command)
+        try:
+            self._run(
+                [
+                    "new-session",
+                    "-d",
+                    "-s",
+                    name,
+                    "-c",
+                    str(workspace),
+                    shell_command,
+                ]
+            )
+            if handoff is not None:
+                # A successful tmux RPC is not enough: the helper itself must
+                # have started and consumed the private secret handoff. If that
+                # does not happen promptly (bad Python environment/import/etc.),
+                # kill the runtime and remove the file instead of leaving a
+                # credential-bearing artifact behind.
+                deadline = time.monotonic() + 5.0
+                while handoff.exists() and time.monotonic() < deadline:
+                    time.sleep(0.02)
+                if handoff.exists():
+                    self.stop(name)
+                    handoff.unlink(missing_ok=True)
+                    raise TmuxError(
+                        "tmux runtime bootstrap did not consume its private environment handoff"
+                    )
+        except Exception:
+            if handoff is not None:
+                handoff.unlink(missing_ok=True)
+            raise
 
     def attach(self, name: str) -> int:
         if not self.has_session(name):

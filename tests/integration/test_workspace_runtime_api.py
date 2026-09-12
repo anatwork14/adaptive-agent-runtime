@@ -29,10 +29,18 @@ class FakeTmux:
     def has_session(self, name: str) -> bool:
         return name in type(self).sessions
 
-    def start(self, *, name: str, cwd: str | Path, command: list[str]) -> None:
+    def start(
+        self,
+        *,
+        name: str,
+        cwd: str | Path,
+        command: list[str],
+        environment: dict[str, str] | None = None,
+    ) -> None:
         type(self).sessions[name] = {
             "cwd": str(Path(cwd).resolve()),
             "command": list(command),
+            "environment": dict(environment or {}),
             "log": "fake runtime output",
         }
 

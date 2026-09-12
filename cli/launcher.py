@@ -18,6 +18,7 @@ from rich.table import Table
 # Importing cli.entry registers the complete v0.5 command surface on this Typer app.
 from cli.entry import app
 from application.session_app import SessionArcApplication
+from runtime.environment import build_execution_environment, environment_key_manifest
 from tui.shell import run_shell
 
 console = Console()
@@ -285,12 +286,22 @@ def attach_native_terminal(
             workspace = Path(session.worktree_path)
             if not workspace.exists():
                 _fail(f"Worker workspace is missing: {workspace}")
+            profile = arc.config.agents.get(session.agent_name)
+            environment = build_execution_environment(
+                provider=profile.provider if profile else session.provider,
+                extra_names=profile.env_allow if profile else [],
+            )
             arc.sessions.mark_terminal(session_id, live=True)
             console.print(
                 f"[dim]ARC → native {session.provider} terminal · {session.task_id} · {workspace}[/dim]"
             )
             try:
-                code = subprocess.run(command, cwd=str(workspace), check=False).returncode
+                code = subprocess.run(
+                    command,
+                    cwd=str(workspace),
+                    env=environment,
+                    check=False,
+                ).returncode
             finally:
                 arc.sessions.mark_terminal(session_id, live=False)
                 changed = arc.sessions.changed_files(session_id)
@@ -304,6 +315,7 @@ def attach_native_terminal(
                         "session_id": session_id,
                         "changed_files": changed,
                         "native_terminal": True,
+                        "environment_keys": environment_key_manifest(environment),
                     },
                 )
             if code != 0:

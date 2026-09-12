@@ -12,6 +12,11 @@ from typing import Iterable, List, Optional
 
 from adapters.base import AgentBudget, AgentRunResult
 from context.compiler import ContextPacket
+from runtime.environment import (
+    build_execution_environment,
+    environment_key_manifest,
+    redact_command,
+)
 
 
 class AgentAdapterUnavailable(RuntimeError):
@@ -39,6 +44,10 @@ class SubprocessCodingAgent:
     stdin and performs repository edits in its current working directory.
     Provider wrappers may override ``build_command`` when their CLI expects the
     prompt as an argument instead.
+
+    ARC passes an explicit least-privilege environment to the child process.
+    Provider-specific auth variables and operator-approved extra variable names
+    are copied at execution time; unrelated host secrets are not inherited.
     """
 
     def __init__(
@@ -48,13 +57,21 @@ class SubprocessCodingAgent:
         executable: str,
         command: Optional[List[str]] = None,
         env_command_var: Optional[str] = None,
+        provider: str | None = None,
+        command_override: str | None = None,
+        env_allow: Optional[Iterable[str]] = None,
     ) -> None:
         self.name = name
         self.executable = executable
         self._command = command
         self.env_command_var = env_command_var
+        self.provider = provider
+        self.command_override = command_override
+        self.env_allow = list(env_allow or [])
 
     def build_command(self) -> List[str]:
+        if self.command_override:
+            return shlex.split(self.command_override)
         if self.env_command_var:
             override = os.environ.get(self.env_command_var)
             if override:
@@ -62,6 +79,12 @@ class SubprocessCodingAgent:
         if self._command:
             return list(self._command)
         return [self.executable]
+
+    def execution_environment(self) -> dict[str, str]:
+        return build_execution_environment(
+            provider=self.provider,
+            extra_names=self.env_allow,
+        )
 
     def ensure_available(self, command: Iterable[str]) -> None:
         command = list(command)
@@ -90,12 +113,16 @@ class SubprocessCodingAgent:
         """
         command = self.build_command()
         self.ensure_available(command)
+        environment = self.execution_environment()
+        trace_command = redact_command(command)
+        trace_env = environment_key_manifest(environment)
         process = await asyncio.create_subprocess_exec(
             *command,
             cwd=str(workspace),
             stdin=asyncio.subprocess.PIPE,
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE,
+            env=environment,
         )
         try:
             stdout, stderr = await asyncio.wait_for(
@@ -109,7 +136,13 @@ class SubprocessCodingAgent:
                 status="failed",
                 summary=f"{self.name} timed out after {budget.timeout_seconds}s",
                 memory_references=list(memory_references or []),
-                tool_trace=[{"action": "cli_timeout", "command": command}],
+                tool_trace=[
+                    {
+                        "action": "cli_timeout",
+                        "command": trace_command,
+                        "environment_keys": trace_env,
+                    }
+                ],
             )
 
         out = stdout.decode("utf-8", errors="replace")
@@ -122,7 +155,8 @@ class SubprocessCodingAgent:
                 tool_trace=[
                     {
                         "action": "cli_run",
-                        "command": command,
+                        "command": trace_command,
+                        "environment_keys": trace_env,
                         "returncode": process.returncode,
                     }
                 ],
@@ -137,7 +171,8 @@ class SubprocessCodingAgent:
             tool_trace=[
                 {
                     "action": "cli_run",
-                    "command": command,
+                    "command": trace_command,
+                    "environment_keys": trace_env,
                     "returncode": process.returncode,
                 }
             ],
