@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import subprocess
 from pathlib import Path
 
@@ -81,11 +82,9 @@ def test_tui_mounts_with_fleet_binding(tmp_path: Path) -> None:
     async def exercise() -> None:
         app = ArcDashboard(repo=repo, project_id="tui-orch")
         async with app.run_test() as pilot:
-            assert any(binding.key == "a" for binding in app.BINDINGS)
+            assert any(binding[0] == "a" and binding[1] == "orchestrate" for binding in app.BINDINGS)
             await pilot.press("a")
-            await pilot.pause(0.5)
-
-    import asyncio
+            await pilot.pause(0.75)
 
     asyncio.run(exercise())
     assert (repo / "demo.py").exists()
