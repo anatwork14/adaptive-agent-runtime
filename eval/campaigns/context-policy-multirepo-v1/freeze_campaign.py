@@ -2,17 +2,20 @@
 
 This command performs no provider inference. It configures the canonical ARC
 profile in three pinned repository clones, verifies the private hidden-test tree
-digests, freezes one shared runtime lock, writes three self-digesting repository
-preregistrations, and finally freezes the cross-repository meta-study plan.
+digests, freezes one shared runtime and grading-sandbox lock, writes three
+self-digesting repository preregistrations, and finally freezes the
+cross-repository meta-study plan.
 
-Run it only after installing the intended Codex CLI build. Authentication is not
-required for freezing; authenticated execution happens strictly afterwards.
+Run it only after building the campaign grading image and installing the intended
+Codex CLI build. Authentication is not required for freezing; authenticated
+execution happens strictly afterwards.
 """
 
 from __future__ import annotations
 
 import argparse
 import json
+import os
 import shutil
 import subprocess
 import sys
@@ -38,6 +41,7 @@ from eval.studies.preregistration import (  # noqa: E402
     save_preregistration,
     tree_digest,
 )
+from isolation.container import WORKSPACE_PYTHONPATH  # noqa: E402
 from runtime_lock import freeze as freeze_runtime_lock  # noqa: E402
 from runtime_lock import verify as verify_runtime_lock  # noqa: E402
 
@@ -61,6 +65,17 @@ def _run_git(repo: Path, *args: str) -> str:
 
 def _load_contract() -> dict[str, Any]:
     return json.loads((CAMPAIGN_DIR / "campaign_contract.json").read_text(encoding="utf-8"))
+
+
+def _configure_grading_sandbox(contract: dict[str, Any]) -> None:
+    sandbox = contract["grading_sandbox"]
+    if sandbox["pythonpath"] != WORKSPACE_PYTHONPATH:
+        raise SystemExit(
+            "campaign grading_sandbox.pythonpath differs from ARC candidate-import policy"
+        )
+    if sandbox.get("network_enabled") is not False:
+        raise SystemExit("primary campaign requires network-disabled grading")
+    os.environ["ARC_SANDBOX_IMAGE"] = sandbox["image"]
 
 
 def _validate_repo(repo: Path, expected_commit: str) -> None:
@@ -130,6 +145,7 @@ def freeze_campaign(
     output_dir: Path,
 ) -> Path:
     contract = _load_contract()
+    _configure_grading_sandbox(contract)
     protocol = contract["shared_protocol"]
     repository_contracts = contract["repositories"]
 
@@ -220,6 +236,9 @@ def freeze_campaign(
             "runtime_lock": runtime_lock.name,
             "runtime_lock_digest": lock_payload["lock_digest"],
             "provider_cli_version": lock_payload["provider_cli_version"],
+            "sandbox_image": lock_payload["sandbox_image"],
+            "sandbox_image_id": lock_payload["sandbox_image_id"],
+            "docker_cli_version": lock_payload["docker_cli_version"],
             "repository_plans": {
                 slug: {
                     "path": plan_paths[slug],
@@ -243,6 +262,7 @@ def freeze_campaign(
         raise
 
     print(f"campaign_freeze={output_dir.resolve()}")
+    print(f"sandbox_image_id={lock_payload['sandbox_image_id']}")
     print(f"meta_plan_digest={meta.plan_digest}")
     print("provider_execution_started=false")
     return output_dir
