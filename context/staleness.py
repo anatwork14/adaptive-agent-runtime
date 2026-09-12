@@ -2,6 +2,7 @@
 
 from dataclasses import dataclass
 from typing import List, Set
+
 from memory.lifecycle import MemoryLifecycle
 from memory.models import MemoryStatus
 from state.events import EventStore
@@ -22,7 +23,7 @@ class StalenessAssessment:
 
 
 class StalenessDetector:
-    """Detects whether an agent's context packet became stale during isolated execution."""
+    """Detect whether an agent's ContextPacket became stale during isolated execution."""
 
     def __init__(
         self,
@@ -36,6 +37,28 @@ class StalenessDetector:
         self.revalidate_threshold = revalidate_threshold
         self.reject_threshold = reject_threshold
 
+    @staticmethod
+    def _is_own_execution_event(kind: str) -> bool:
+        """Return true for events that describe this attempt rather than mutate its inputs.
+
+        v0.6 persistent workers can emit many conversation/terminal supervision
+        events between dispatch and submit. Those events are important for replay,
+        but they do not make the worker's own immutable ContextPacket stale. Real
+        dependency changes, project-spec changes, memory invalidation, and
+        declared-file changes remain relevant below.
+        """
+        if kind.startswith("session.") or kind.startswith("shell."):
+            return True
+        return kind in {
+            "context.compiled",
+            "task.dispatched",
+            "task.submitted",
+            "budget.consumed",
+            "budget.reserved",
+            "lease.granted",
+            "lease.released",
+        }
+
     def evaluate_submission(
         self,
         submission: PatchSubmission,
@@ -43,9 +66,8 @@ class StalenessDetector:
         dependency_task_ids: Set[str],
         declared_files: Set[str],
     ) -> StalenessAssessment:
-        """Compute staleness score based on delta events since dispatch_state_version."""
+        """Compute staleness score based on semantic delta events since dispatch."""
         dispatch_v = submission.dispatch_state_version
-        current_v = self.event_store.current_version(project_id)
         delta_events = self.event_store.read_after(dispatch_v, project_id=project_id)
 
         details: List[str] = []
@@ -53,34 +75,35 @@ class StalenessDetector:
         dep_changes = 0
 
         for ev in delta_events:
-            # Skip this task's own lifecycle events for the current dispatch
-            if ev.task_id == submission.task_id and ev.kind in (
-                "context.compiled", "task.dispatched", "task.submitted",
-                "budget.consumed", "budget.reserved", "lease.granted"
-            ):
+            # Skip the current task's own execution/supervision trail. In
+            # particular, a persistent worker may accumulate arbitrarily many
+            # session.message/session.turn_* events before submit; counting those
+            # as external drift would make long conversations self-invalidating.
+            if ev.task_id == submission.task_id and self._is_own_execution_event(ev.kind):
                 continue
 
-            # Check if event touches task or dependencies
+            # Check if another actor changed the task or one of its dependencies.
             if ev.task_id == submission.task_id and ev.actor != submission.agent_id:
                 relevant_events += 1
-                details.append(f"Event {ev.id} touched task {submission.task_id}")
+                details.append(f"Event {ev.id} touched task {submission.task_id}: {ev.kind}")
             elif ev.task_id in dependency_task_ids:
                 relevant_events += 1
                 dep_changes += 1
-                details.append(f"Event {ev.id} changed dependency {ev.task_id}")
+                details.append(f"Event {ev.id} changed dependency {ev.task_id}: {ev.kind}")
 
-            # Check if event touches declared files
+            # Check if an event explicitly reports mutation of a declared file.
             touched_files = ev.payload.get("files", [])
-            if any(f in declared_files for f in touched_files):
+            if any(path in declared_files for path in touched_files):
                 relevant_events += 1
                 details.append(f"Event {ev.id} touched declared files: {touched_files}")
 
-            # Check if event changed constraints or spec
+            # Project constraints/spec are always semantic inputs.
             if ev.kind in ("project.constraint_added", "project.constraint_removed", "project.spec_updated"):
                 relevant_events += 1
                 details.append(f"Event {ev.id} updated project constraints/spec: {ev.kind}")
 
-        # Check if memories used in submission have since been superseded or invalidated
+        # Check whether memories referenced by the immutable packet have since
+        # been superseded or invalidated.
         invalidated_memories = 0
         superseded_memories = 0
         for mem_id in submission.memories_used:
