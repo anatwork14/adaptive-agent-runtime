@@ -4,6 +4,7 @@ from pathlib import Path
 
 from eval.comparison import validate_comparable_manifests
 from eval.io import load_manifest
+from isolation.container import WORKSPACE_PYTHONPATH
 
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -41,9 +42,18 @@ def test_campaign_manifest_triplets_are_valid_and_matched() -> None:
 def test_campaign_freeze_contract_matches_manifests() -> None:
     contract = json.loads((CAMPAIGN / "campaign_contract.json").read_text(encoding="utf-8"))
     assert contract["campaign_id"] == "context-policy-multirepo-v1"
-    assert contract["shared_protocol"]["verification_level"] == "V1"
-    assert contract["shared_protocol"]["repeats"] == 6
-    assert contract["shared_protocol"]["hard_project_usd"] == 350.0
+    protocol = contract["shared_protocol"]
+    assert protocol["verification_level"] == "V1"
+    assert protocol["repeats"] == 6
+    assert protocol["hard_project_usd"] == 350.0
+    assert protocol["visible_test_cmd"] == [
+        "python",
+        "-m",
+        "pytest",
+        "-q",
+        "-m",
+        "not network",
+    ]
 
     profile = contract["provider_profile"]
     assert profile["provider"] == "codex"
@@ -52,6 +62,13 @@ def test_campaign_freeze_contract_matches_manifests() -> None:
     assert argv[:4] == ["codex", "exec", "--full-auto", "--model"]
     assert "model_reasoning_effort=\"high\"" in argv
     assert argv[-1] == "-"
+
+    sandbox = contract["grading_sandbox"]
+    assert sandbox["image"] == "arc-context-policy-v1:py311"
+    assert sandbox["pythonpath"] == WORKSPACE_PYTHONPATH
+    assert sandbox["network_enabled"] is False
+    assert sandbox["hidden_test_mount"] == "/arc-hidden-tests"
+    assert (ROOT / sandbox["dockerfile"]).is_file()
 
     treatments = contract["treatments"]
     assert treatments["B3"]["memory_policy"] == "static_no_memory"
@@ -68,12 +85,19 @@ def test_campaign_freeze_contract_matches_manifests() -> None:
         repo_contract = contract["repositories"][repo_name]
         assert repo_contract["benchmark_id"] == benchmark_id
         assert repo_contract["commit"] == repo_commit
+        assert repo_contract["import_module"]
+        assert repo_contract["expected_import_prefix"].startswith("/workspace/")
         hidden_digest = repo_contract["hidden_tree_sha256"]
         assert len(hidden_digest) == 64
         int(hidden_digest, 16)
 
 
 def test_campaign_freeze_and_execution_scripts_compile() -> None:
-    for name in ("runtime_lock.py", "freeze_campaign.py", "execute_campaign.py"):
+    for name in (
+        "runtime_lock.py",
+        "grading_preflight.py",
+        "freeze_campaign.py",
+        "execute_campaign.py",
+    ):
         source = (CAMPAIGN / name).read_text(encoding="utf-8")
         compile(source, str(CAMPAIGN / name), "exec")
