@@ -8,13 +8,13 @@ into ARC's append-only event stream so the loop is replayable and inspectable.
 from __future__ import annotations
 
 import asyncio
+import hashlib
 import subprocess
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 from pydantic import BaseModel, Field
 
-from application.sessions import SessionStatus
 from integrations.github_cli import GitHubCheck, GitHubCliClient, GitHubPullRequestSnapshot
 
 if TYPE_CHECKING:  # pragma: no cover
@@ -109,9 +109,14 @@ class ReviewLoopManager:
                 status.merge_state_status = str(payload.get("merge_state_status") or "")
                 status.last_digest = str(payload.get("digest") or "")
                 status.checks = [GitHubCheck.model_validate(item) for item in payload.get("checks", [])]
-                status.pending_feedback = str(payload.get("actionable_feedback") or "")
-                if status.pending_feedback:
-                    status.feedback_digest = status.last_digest
+                candidate_feedback = str(payload.get("actionable_feedback") or "")
+                candidate_digest = str(payload.get("feedback_digest") or "")
+                status.feedback_digest = candidate_digest
+                status.pending_feedback = (
+                    candidate_feedback
+                    if candidate_digest and candidate_digest != status.applied_feedback_digest
+                    else ""
+                )
             elif event.kind == "session.review_feedback_applied":
                 status.applied_feedback_digest = str(payload.get("digest") or "")
                 if status.feedback_digest == status.applied_feedback_digest:
@@ -173,7 +178,11 @@ class ReviewLoopManager:
             commit_sha = self._git(workspace, ["rev-parse", "HEAD"]).stdout.strip()
             if not existing.linked:
                 parent_count = int(
-                    self._git(workspace, ["rev-list", "--count", f"{base}..HEAD"], check=False).stdout.strip()
+                    self._git(
+                        workspace,
+                        ["rev-list", "--count", f"{base}..HEAD"],
+                        check=False,
+                    ).stdout.strip()
                     or "0"
                 )
                 if parent_count == 0:
@@ -182,7 +191,7 @@ class ReviewLoopManager:
         client = GitHubCliClient(workspace)
         pr_title = title or f"[ARC {session.task_id}] {task.goal}"
         body = (
-            f"Automated review branch published by ARC.\n\n"
+            "Automated review branch published by ARC.\n\n"
             f"- Task: `{session.task_id}`\n"
             f"- Worker session: `{session_id}`\n"
             f"- Agent: `{session.agent_name}` ({session.provider})\n"
@@ -236,6 +245,9 @@ class ReviewLoopManager:
         if not force and previous.last_digest == snapshot.digest:
             return False
         actionable = snapshot.actionable_feedback()
+        feedback_digest = (
+            hashlib.sha256(actionable.encode("utf-8")).hexdigest() if actionable else ""
+        )
         self.app.event_store.append(
             actor="review-supervisor",
             kind="session.review_synced",
@@ -255,9 +267,13 @@ class ReviewLoopManager:
                 "digest": snapshot.digest,
                 "healthy": snapshot.healthy,
                 "actionable_feedback": actionable,
+                "feedback_digest": feedback_digest,
             },
         )
-        if actionable:
+        is_new_feedback = bool(
+            actionable and feedback_digest != previous.applied_feedback_digest
+        )
+        if is_new_feedback:
             self.app.event_store.append(
                 actor="review-supervisor",
                 kind="session.review_feedback",
@@ -266,7 +282,8 @@ class ReviewLoopManager:
                 correlation_id=session_id,
                 payload={
                     "session_id": session_id,
-                    "digest": snapshot.digest,
+                    "digest": feedback_digest,
+                    "snapshot_digest": snapshot.digest,
                     "content": actionable,
                 },
             )
@@ -282,7 +299,7 @@ class ReviewLoopManager:
                     "content": "GitHub review update:\n\n" + actionable,
                 },
             )
-        elif previous.pending_feedback:
+        elif not actionable and previous.pending_feedback:
             self.app.event_store.append(
                 actor="review-supervisor",
                 kind="session.review_feedback_cleared",
@@ -324,7 +341,9 @@ class ReviewLoopManager:
         if not session:
             raise ValueError(f"Worker session {session_id} not found")
         if session.status not in self.app.sessions.ACTIVE:
-            raise ValueError(f"Session {session_id} is {session.status.value}; cannot apply review feedback")
+            raise ValueError(
+                f"Session {session_id} is {session.status.value}; cannot apply review feedback"
+            )
         prompt = (
             "Address the following GitHub review/CI feedback in the existing worker workspace. "
             "Inspect the actual failure before editing. Preserve the task goal and acceptance criteria. "
