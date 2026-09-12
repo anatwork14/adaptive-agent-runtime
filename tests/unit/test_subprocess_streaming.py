@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import os
 import sys
 from pathlib import Path
 
@@ -97,6 +98,56 @@ async def test_provider_turn_can_be_cancelled_without_waiting_for_timeout(tmp_pa
     assert result.status == "cancelled"
     assert "cancelled" in result.summary.lower()
     assert result.tool_trace[-1]["action"] == "cli_cancelled"
+
+
+@pytest.mark.asyncio
+@pytest.mark.skipif(os.name != "posix", reason="POSIX process-group semantics")
+async def test_provider_cancellation_terminates_descendant_processes(tmp_path: Path) -> None:
+    marker = tmp_path / "orphan-survived.txt"
+    child_code = (
+        "import pathlib,time; "
+        "time.sleep(1.0); "
+        f"pathlib.Path({str(marker)!r}).write_text('alive', encoding='utf-8')"
+    )
+    provider_code = (
+        "import subprocess,sys,time; "
+        "sys.stdin.read(); "
+        f"subprocess.Popen([{sys.executable!r}, '-c', {child_code!r}]); "
+        "print('child-started', flush=True); "
+        "time.sleep(30)"
+    )
+    agent = SubprocessCodingAgent(
+        name="tree-cancel-test",
+        executable=sys.executable,
+        command=[sys.executable, "-c", provider_code],
+        provider=None,
+    )
+    cancel = asyncio.Event()
+    child_started = asyncio.Event()
+
+    async def capture(stream: str, text: str) -> None:
+        if stream == "stdout" and "child-started" in text:
+            child_started.set()
+
+    task = asyncio.create_task(
+        agent.run_prompt(
+            prompt="spawn child",
+            workspace=tmp_path,
+            budget=AgentBudget(timeout_seconds=40),
+            output_callback=capture,
+            cancel_event=cancel,
+        )
+    )
+    await asyncio.wait_for(child_started.wait(), timeout=2)
+    cancel.set()
+    result = await asyncio.wait_for(task, timeout=4)
+    assert result.status == "cancelled"
+
+    # If ARC killed only the provider parent, the inherited child would still
+    # write this marker after cancellation. The whole supervised process group
+    # must be gone before the turn lock can be released.
+    await asyncio.sleep(1.2)
+    assert not marker.exists()
 
 
 @pytest.mark.asyncio
