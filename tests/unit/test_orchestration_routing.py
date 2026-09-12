@@ -1,3 +1,5 @@
+import pytest
+
 from application.agents import AgentDoctorResult
 from application.config import AgentProfile
 from application.planner import DeterministicPlanner
@@ -5,13 +7,13 @@ from application.routing import AgentRouter
 from state.models import TaskState, TaskStatus
 
 
-def _doctor(name: str, status: str = "READY") -> AgentDoctorResult:
+def _doctor(name: str, status: str = "READY", provider: str = "mock") -> AgentDoctorResult:
     return AgentDoctorResult(
         name=name,
-        provider="mock",
+        provider=provider,
         model=None,
         executable=None,
-        installed=True,
+        installed=status != "MISSING",
         status=status,
         detail="test",
     )
@@ -51,7 +53,7 @@ def test_router_prefers_required_capability_and_quality() -> None:
     assert "required capabilities matched" in decision.reasons
 
 
-def test_router_filters_unready_and_concurrency_saturated_profiles() -> None:
+def test_router_filters_unready_and_concurrency_saturated_mock_profiles() -> None:
     task = TaskState(
         task_id="T001",
         project_id="p",
@@ -61,7 +63,7 @@ def test_router_filters_unready_and_concurrency_saturated_profiles() -> None:
         status=TaskStatus.READY,
     )
     unavailable = AgentProfile(
-        name="codex",
+        name="unavailable",
         provider="mock",
         capabilities=["implementation"],
     )
@@ -81,13 +83,74 @@ def test_router_filters_unready_and_concurrency_saturated_profiles() -> None:
         task,
         [unavailable, busy, fallback],
         {
-            "codex": _doctor("codex", "AUTH_REQUIRED"),
+            "unavailable": _doctor("unavailable", "AUTH_REQUIRED"),
             "busy": _doctor("busy"),
             "fallback": _doctor("fallback"),
         },
         {"busy": 1},
     )
     assert decision.agent_name == "fallback"
+
+
+def test_router_does_not_mask_real_auth_failure_with_mock() -> None:
+    task = TaskState(
+        task_id="T001",
+        project_id="p",
+        goal="implement",
+        task_type="implementation",
+        required_capabilities=["implementation"],
+        status=TaskStatus.READY,
+    )
+    codex = AgentProfile(
+        name="builder",
+        provider="codex",
+        capabilities=["implementation"],
+    )
+    mock = AgentProfile(
+        name="mock",
+        provider="mock",
+        capabilities=["implementation"],
+    )
+    with pytest.raises(RuntimeError, match="builder=AUTH_REQUIRED"):
+        AgentRouter().route(
+            task,
+            [codex, mock],
+            {
+                "builder": _doctor("builder", "AUTH_REQUIRED", "codex"),
+                "mock": _doctor("mock"),
+            },
+        )
+
+
+def test_router_uses_mock_when_no_capable_real_profile_is_configured() -> None:
+    task = TaskState(
+        task_id="T001",
+        project_id="p",
+        goal="write docs",
+        task_type="docs",
+        required_capabilities=["docs"],
+        status=TaskStatus.READY,
+    )
+    codex = AgentProfile(
+        name="builder",
+        provider="codex",
+        capabilities=["implementation", "test"],
+    )
+    mock = AgentProfile(
+        name="mock",
+        provider="mock",
+        capabilities=["docs"],
+    )
+    decision = AgentRouter().route(
+        task,
+        [codex, mock],
+        {
+            "builder": _doctor("builder", "READY", "codex"),
+            "mock": _doctor("mock"),
+        },
+    )
+    assert decision.agent_name == "mock"
+    assert any("no capable real agent" in reason for reason in decision.reasons)
 
 
 def test_deterministic_planner_splits_source_docs_and_tests() -> None:
