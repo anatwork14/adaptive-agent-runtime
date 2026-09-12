@@ -115,7 +115,6 @@ def test_summary_reports_coverage_and_never_coerces_unknown_to_zero() -> None:
         gate_status="accepted",
         event_start=1,
         event_end=2,
-        end_to_end_latency_ms=10.0,
     )
     measurements = [
         TaskMeasurement(
@@ -127,6 +126,7 @@ def test_summary_reports_coverage_and_never_coerces_unknown_to_zero() -> None:
             token_usage_observed=True,
             cost_usd=0.1,
             cost_observed=True,
+            end_to_end_latency_ms=10.0,
         ),
         TaskMeasurement(
             **common,
