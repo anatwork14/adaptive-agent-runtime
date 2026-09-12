@@ -1,292 +1,367 @@
-"""Central Single-Writer Orchestrator governing authoritative state, tasks, and agents."""
+"""Context compiler assembling immutable, token-budgeted ContextPackets."""
 
-import asyncio
+from __future__ import annotations
+
+import hashlib
 import uuid
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, Iterable, List, Optional
 
-from adapters.base import AgentAdapter, AgentBudget, AgentRunResult
-from context.compiler import ContextCompiler
+from pydantic import BaseModel, Field
+
+from context.allocator import BudgetAllocator, ClassBudgets
+from context.digest import compute_context_digest
 from context.request import ContextRequest
-from context.retrieval import MemoryRetriever
-from context.staleness import StalenessDetector
-from isolation.worktree import WorktreeError, WorktreeManager
-from memory.lifecycle import MemoryLifecycle
-from runtime.budgets import BudgetAccountant
-from runtime.gate import IntegrationGate
-from runtime.leases import LeaseManager
-from runtime.recovery import RecoveryEngine
-from runtime.scheduler import TaskScheduler
+from context.retrieval import RetrievalResult
+from memory.models import MemoryStatus, MemoryType
 from state.events import EventStore
-from state.models import GateResult, GateStatus, Lease, PatchSubmission
-from state.projection import DeterministicStateProjection
+from state.models import ProjectState, TaskState
 
 
-class LeaseUnavailableError(RuntimeError):
-    """Transient task deferral because another agent owns a declared surface."""
+class ContextBudgetExceeded(ValueError):
+    """Raised when mandatory authoritative context exceeds the hard budget."""
 
 
-class Orchestrator:
-    """Single authoritative writer for task execution and integration."""
+class ContextPacket(BaseModel):
+    """Immutable compiled context packet dispatched to an agent."""
+
+    context_id: str
+    project_id: str
+    task_id: str
+    agent_id: str
+    state_version: int
+    compiled_event: int
+    context_policy: str = "B7"
+    goal: str
+    acceptance_criteria: List[str] = Field(default_factory=list)
+    constraints: List[str] = Field(default_factory=list)
+    dependency_state: List[Dict[str, Any]] = Field(default_factory=list)
+    files_declared: List[str] = Field(default_factory=list)
+    decisions: List[Dict[str, Any]] = Field(default_factory=list)
+    assumptions: List[Dict[str, Any]] = Field(default_factory=list)
+    code_context: List[Dict[str, Any]] = Field(default_factory=list)
+    failures: List[Dict[str, Any]] = Field(default_factory=list)
+    procedures: List[Dict[str, Any]] = Field(default_factory=list)
+    open_questions: List[Dict[str, Any]] = Field(default_factory=list)
+    leases: List[Dict[str, Any]] = Field(default_factory=list)
+    risk_flags: List[str] = Field(default_factory=list)
+    budget_remaining_tokens: int = 0
+    context_token_count: int = 0
+    memory_ids: List[str] = Field(default_factory=list)
+    stale_memory_ids: List[str] = Field(default_factory=list)
+    retrieval_strategies: List[str] = Field(default_factory=list)
+    digest: str = ""
+
+    model_config = {"frozen": True}
+
+
+class ContextCompiler:
+    """Compile authoritative state + selected memory into bounded task context."""
 
     def __init__(
         self,
         event_store: EventStore,
-        memory_lifecycle: MemoryLifecycle,
-        repo_path: str | Path,
-        project_id: str,
-        verification_level: str = "V0",
-        hard_task_usd: float = 5.0,
-        hard_project_usd: float = 500.0,
-        visible_test_cmd: Optional[List[str]] = None,
+        allocator: Optional[BudgetAllocator] = None,
+        repo_path: Optional[str | Path] = None,
     ) -> None:
         self.event_store = event_store
-        self.memory_lifecycle = memory_lifecycle
-        self.memory_lifecycle.bind_event_store(event_store)
-        self.repo_path = Path(repo_path).resolve()
-        self.project_id = project_id
-        self.hard_task_usd = hard_task_usd
-        self.visible_test_cmd = visible_test_cmd
+        self.allocator = allocator or BudgetAllocator()
+        self.repo_path = Path(repo_path).resolve() if repo_path is not None else None
 
-        self.scheduler = TaskScheduler(event_store, project_id)
-        self.budgets = BudgetAccountant(event_store, project_id, hard_task_usd, hard_project_usd)
-        self.leases = LeaseManager(event_store, project_id)
-        self.gate = IntegrationGate(event_store, project_id, self.repo_path, verification_level)
-        self.recovery = RecoveryEngine(event_store, project_id)
-        self.worktree_mgr = WorktreeManager(self.repo_path)
+    def _declared_files(self, patterns: Iterable[str]) -> List[Path]:
+        """Resolve declared paths/globs without allowing repository escape."""
+        if self.repo_path is None:
+            return []
 
-        self.retriever = MemoryRetriever(self.memory_lifecycle)
-        self.compiler = ContextCompiler(self.event_store, repo_path=self.repo_path)
-        self.staleness_detector = StalenessDetector(self.event_store, self.memory_lifecycle)
-        # Agent work may be concurrent. Verification/integration remains a
-        # single-writer critical section by construction rather than by event-loop accident.
-        self._integration_lock = asyncio.Lock()
+        seen: set[Path] = set()
+        results: List[Path] = []
+        for raw in patterns:
+            if not raw or Path(raw).is_absolute():
+                continue
+            has_glob = any(ch in raw for ch in "*?[]")
+            candidates = self.repo_path.glob(raw) if has_glob else [self.repo_path / raw]
+            for candidate in candidates:
+                try:
+                    resolved = candidate.resolve()
+                    resolved.relative_to(self.repo_path)
+                except (OSError, ValueError):
+                    continue
+                if not resolved.is_file():
+                    continue
+                rel = resolved.relative_to(self.repo_path)
+                if any(part in {".git", ".arc", ".venv", "__pycache__"} for part in rel.parts):
+                    continue
+                if resolved not in seen:
+                    seen.add(resolved)
+                    results.append(resolved)
+        return sorted(results, key=lambda path: str(path.relative_to(self.repo_path)))
 
-    def init_project(self, spec: Dict[str, Any], constraints: Optional[List[str]] = None) -> int:
-        return self.event_store.append(
-            actor="orchestrator",
-            kind="project.created",
-            project_id=self.project_id,
-            payload={"spec": spec, "constraints": constraints or []},
+    def _code_evidence(
+        self,
+        patterns: Iterable[str],
+        symbols: List[str],
+        token_budget: int,
+    ) -> tuple[List[Dict[str, Any]], int]:
+        if self.repo_path is None or token_budget <= 0:
+            return [], 0
+
+        evidence: List[Dict[str, Any]] = []
+        used = 0
+        for path in self._declared_files(patterns):
+            if used >= token_budget:
+                break
+            try:
+                full_content = path.read_text(encoding="utf-8", errors="replace")
+            except OSError:
+                continue
+
+            remaining = token_budget - used
+            if remaining <= 0:
+                break
+            max_chars = max(0, remaining * 4)
+            included = full_content[:max_chars]
+            cost = self.allocator.estimate_tokens(included)
+            if cost > remaining:
+                continue
+
+            rel = str(path.relative_to(self.repo_path))
+            evidence.append(
+                {
+                    "path": rel,
+                    "start_line": 1,
+                    "end_line": max(1, included.count("\n") + 1),
+                    "content": included,
+                    "content_hash": hashlib.sha256(
+                        full_content.encode("utf-8")
+                    ).hexdigest(),
+                    "truncated": len(included) < len(full_content),
+                    "symbols_requested": list(symbols),
+                    "reason": "declared task code surface",
+                }
+            )
+            used += cost
+        return evidence, used
+
+    @staticmethod
+    def _memory_is_stale(memory, state_version: int) -> bool:
+        if memory.status in (
+            MemoryStatus.SUPERSEDED,
+            MemoryStatus.DELETED,
+            MemoryStatus.ARCHIVED,
+        ):
+            return True
+        if memory.valid_from_event > state_version:
+            return True
+        return memory.valid_to_event is not None and memory.valid_to_event < state_version
+
+    def compile(
+        self,
+        request: ContextRequest,
+        retrieval: RetrievalResult,
+        project_state: ProjectState,
+        task_state: Optional[TaskState] = None,
+        active_leases: Optional[List[Dict[str, Any]]] = None,
+        *,
+        policy_id: str = "B7",
+        enforce_memory_validity: bool = True,
+    ) -> ContextPacket:
+        """Compile context while enforcing ``request.token_budget`` as a hard ceiling.
+
+        ``enforce_memory_validity`` defaults to the safe production behavior. It
+        exists so research baselines can intentionally deliver stale/superseded
+        memory while still sharing the exact same packet assembly and execution
+        path. Production callers should not disable it.
+        """
+        context_id = f"CTX_{uuid.uuid4().hex[:8]}"
+        budgets: ClassBudgets = self.allocator.allocate(
+            risk=request.risk,
+            declared_budget=request.token_budget,
         )
 
-    def create_task(
-        self,
-        task_id: str,
-        goal: str,
-        dependencies: Optional[List[str]] = None,
-        files_declared: Optional[List[str]] = None,
-        symbols: Optional[List[str]] = None,
-        acceptance_criteria: Optional[List[str]] = None,
-        task_type: str = "code",
-        required_capabilities: Optional[List[str]] = None,
-        risk: float = 0.5,
-        token_budget: int = 24000,
-    ) -> int:
-        return self.event_store.append(
+        goal = request.goal
+        acceptance_criteria = task_state.acceptance_criteria if task_state else []
+        constraints = list(project_state.constraints)
+        leases = active_leases or []
+        dependency_state = [
+            {"task_id": dependency, "status": "dependency"}
+            for dependency in request.dependencies
+        ]
+
+        authoritative_text = "\n".join(
+            [
+                goal,
+                *acceptance_criteria,
+                *constraints,
+                *request.dependencies,
+                *request.files_declared,
+            ]
+        )
+        authoritative_tokens = self.allocator.estimate_tokens(authoritative_text)
+        if authoritative_tokens > budgets.total_budget:
+            raise ContextBudgetExceeded(
+                f"mandatory authoritative context ({authoritative_tokens} tokens) "
+                f"exceeds hard budget ({budgets.total_budget})"
+            )
+        remaining_total = budgets.total_budget - authoritative_tokens
+
+        decisions: List[Dict[str, Any]] = []
+        assumptions: List[Dict[str, Any]] = []
+        failures: List[Dict[str, Any]] = []
+        procedures: List[Dict[str, Any]] = []
+        memory_ids: List[str] = []
+        stale_memory_ids: List[str] = []
+
+        class_used = {
+            "decisions": 0,
+            "assumptions": 0,
+            "failures": 0,
+            "procedures": 0,
+        }
+        class_caps = {
+            "decisions": budgets.c1_decisions,
+            "assumptions": budgets.c3_assumptions,
+            "failures": budgets.c4_failures,
+            "procedures": budgets.c5_procedures,
+        }
+
+        for candidate in retrieval.candidates:
+            memory = candidate.memory
+            is_stale = self._memory_is_stale(memory, request.state_version)
+            if is_stale and enforce_memory_validity:
+                continue
+
+            cost = max(
+                1,
+                memory.token_size
+                or self.allocator.estimate_tokens(memory.content_text),
+            )
+            bucket: Optional[str] = None
+            target: Optional[List[Dict[str, Any]]] = None
+            entry: Dict[str, Any]
+
+            if memory.type in (
+                MemoryType.DECISION,
+                MemoryType.CONSTRAINT,
+                MemoryType.FACT,
+            ):
+                bucket, target = "decisions", decisions
+                entry = {
+                    "memory_id": memory.memory_id,
+                    "text": memory.content_text,
+                    "source_events": memory.source_events,
+                    "valid_from_event": memory.valid_from_event,
+                    "valid_to_event": memory.valid_to_event,
+                    "status": memory.status.value,
+                }
+            elif memory.type == MemoryType.ASSUMPTION:
+                bucket, target = "assumptions", assumptions
+                entry = {
+                    "memory_id": memory.memory_id,
+                    "text": memory.content_text,
+                    "confidence": memory.confidence,
+                    "status": memory.status.value,
+                    "source_events": memory.source_events,
+                }
+            elif memory.type == MemoryType.FAILURE:
+                bucket, target = "failures", failures
+                entry = {
+                    "memory_id": memory.memory_id,
+                    "text": memory.content_text,
+                    "status": memory.status.value,
+                    "source_events": memory.source_events,
+                }
+            elif memory.type == MemoryType.PROCEDURE:
+                bucket, target = "procedures", procedures
+                entry = {
+                    "memory_id": memory.memory_id,
+                    "text": memory.content_text,
+                    "status": memory.status.value,
+                    "source_events": memory.source_events,
+                }
+            else:
+                continue
+
+            assert bucket is not None and target is not None
+            if class_used[bucket] + cost > class_caps[bucket] or cost > remaining_total:
+                continue
+            target.append(entry)
+            class_used[bucket] += cost
+            remaining_total -= cost
+            memory_ids.append(memory.memory_id)
+            if is_stale:
+                stale_memory_ids.append(memory.memory_id)
+
+        code_cap = min(budgets.c2_code, remaining_total)
+        code_context, code_tokens = self._code_evidence(
+            request.files_declared,
+            request.symbols,
+            code_cap,
+        )
+        remaining_total -= code_tokens
+
+        total_tokens = budgets.total_budget - remaining_total
+        if total_tokens > request.token_budget:
+            raise AssertionError("compiled context exceeded the declared hard budget")
+
+        risk_flags: List[str] = []
+        if request.risk > 0.7:
+            risk_flags.append("HIGH_RISK_TASK")
+        if any(item.get("status") == "disputed" for item in assumptions):
+            risk_flags.append("CONTRADICTORY_ASSUMPTIONS_PRESENT")
+        if stale_memory_ids:
+            risk_flags.append("STALE_MEMORY_DELIVERED")
+        if self.repo_path is None and request.files_declared:
+            risk_flags.append("CODE_EVIDENCE_UNAVAILABLE")
+
+        packet_dict: Dict[str, Any] = {
+            "context_id": context_id,
+            "project_id": request.project_id,
+            "task_id": request.task_id,
+            "agent_id": request.agent_id,
+            "state_version": request.state_version,
+            "compiled_event": self.event_store.current_version(request.project_id),
+            "context_policy": policy_id,
+            "goal": goal,
+            "acceptance_criteria": acceptance_criteria,
+            "constraints": constraints,
+            "dependency_state": dependency_state,
+            "files_declared": list(request.files_declared),
+            "decisions": decisions,
+            "assumptions": assumptions,
+            "code_context": code_context,
+            "failures": failures,
+            "procedures": procedures,
+            "open_questions": [],
+            "leases": leases,
+            "risk_flags": risk_flags,
+            "budget_remaining_tokens": remaining_total,
+            "context_token_count": total_tokens,
+            "memory_ids": sorted(set(memory_ids)),
+            "stale_memory_ids": sorted(set(stale_memory_ids)),
+            "retrieval_strategies": list(retrieval.strategies_used),
+        }
+        digest = compute_context_digest(packet_dict)
+        packet_dict["digest"] = digest
+
+        event_id = self.event_store.append(
             actor="orchestrator",
-            kind="task.created",
-            project_id=self.project_id,
-            task_id=task_id,
+            kind="context.compiled",
+            project_id=request.project_id,
+            task_id=request.task_id,
             payload={
-                "task_id": task_id,
-                "goal": goal,
-                "task_type": task_type,
-                "required_capabilities": required_capabilities or [],
-                "dependencies": dependencies or [],
-                "files_declared": files_declared or [],
-                "symbols": symbols or [],
-                "acceptance_criteria": acceptance_criteria or [],
-                "risk": risk,
-                "token_budget": token_budget,
+                "context_id": context_id,
+                "state_version": request.state_version,
+                "digest": digest,
+                "token_count": total_tokens,
+                "hard_budget": request.token_budget,
+                "context_policy": policy_id,
+                "memory_validity_enforced": enforce_memory_validity,
+                "memory_ids": packet_dict["memory_ids"],
+                "stale_memory_ids": packet_dict["stale_memory_ids"],
+                "retrieval_strategies": packet_dict["retrieval_strategies"],
+                "files_declared": packet_dict["files_declared"],
+                "code_files": [item["path"] for item in code_context],
             },
         )
-
-    def get_projection(self) -> DeterministicStateProjection:
-        events = self.event_store.read_all(project_id=self.project_id)
-        return DeterministicStateProjection.replay_from_events(self.project_id, events)
-
-    def _acquire_task_leases(self, task_id: str, agent_id: str, resources: List[str]) -> List[Lease]:
-        acquired: List[Lease] = []
-        for resource in sorted(set(resources)):
-            lease = self.leases.request_lease(resource=resource, holder=agent_id, task_id=task_id)
-            if lease is None:
-                for held in reversed(acquired):
-                    self.leases.release_lease(held.resource, agent_id, task_id)
-                raise LeaseUnavailableError(
-                    f"Task {task_id} deferred: declared resource {resource!r} is already leased"
-                )
-            acquired.append(lease)
-        return acquired
-
-    async def execute_task(
-        self,
-        task_id: str,
-        agent: AgentAdapter,
-        agent_id: str,
-    ) -> GateResult:
-        """Run one task from versioned context through transactional integration."""
-        task = self.scheduler.get_task(task_id)
-        if not task:
-            raise ValueError(f"Task {task_id} not found")
-        if not self.budgets.can_spend(task_id, 0.05):
-            raise RuntimeError(f"Budget ceiling exceeded for task {task_id}")
-
-        leases: List[Lease] = []
-        worktree_path: Optional[Path] = None
-        try:
-            # Acquire all declared file surfaces before authoritative dispatch.
-            # A conflict therefore leaves the task READY and safely retryable.
-            leases = self._acquire_task_leases(task_id, agent_id, task.files_declared)
-            self.scheduler.dispatch_task(task_id, agent_id)
-            dispatch_v = self.event_store.current_version(self.project_id)
-
-            context_req = ContextRequest(
-                context_request_id=f"CR_{task_id}_{dispatch_v}",
-                project_id=self.project_id,
-                task_id=task_id,
-                agent_id=agent_id,
-                state_version=dispatch_v,
-                goal=task.goal,
-                risk=task.risk,
-                files_declared=task.files_declared,
-                symbols=task.symbols,
-                dependencies=task.dependencies,
-                token_budget=task.token_budget,
-            )
-            retrieval_res = self.retriever.retrieve(context_req)
-            projection = self.get_projection()
-            leases_info = [
-                {"resource": lease.resource, "fencing_token": lease.fencing_token}
-                for lease in leases
-            ]
-            packet = self.compiler.compile(
-                request=context_req,
-                retrieval=retrieval_res,
-                project_state=projection.project.state,
-                task_state=task,
-                active_leases=leases_info,
-            )
-
-            worktree_path = self.worktree_mgr.create_worktree(task_id)
-            agent_budget = AgentBudget(
-                max_usd=self.hard_task_usd,
-                max_tokens=task.token_budget,
-            )
-            agent_result: AgentRunResult = await agent.run(
-                context=packet,
-                workspace=worktree_path,
-                budget=agent_budget,
-            )
-
-            self.budgets.record_consumption(
-                usd=agent_result.cost_usd,
-                tokens=(
-                    agent_result.token_usage.get("prompt_tokens", 0)
-                    + agent_result.token_usage.get("completion_tokens", 0)
-                ),
-                task_id=task_id,
-            )
-
-            if agent_result.status != "completed":
-                self.event_store.append(
-                    actor=agent_id,
-                    kind="task.failed",
-                    project_id=self.project_id,
-                    task_id=task_id,
-                    payload={"reason": f"agent_status={agent_result.status}"},
-                )
-                raise RuntimeError(
-                    f"agent {agent_id} did not complete task {task_id}: {agent_result.status}"
-                )
-
-            candidate_sha = self.worktree_mgr.commit_candidate(
-                task_id,
-                message=f"arc({task_id}): candidate from {agent_id}",
-            )
-            diff = self.worktree_mgr.get_commit_diff(candidate_sha)
-
-            patch_id = f"patch_{uuid.uuid4().hex[:8]}"
-            submission = PatchSubmission(
-                patch_id=patch_id,
-                task_id=task_id,
-                agent_id=agent_id,
-                context_id=packet.context_id,
-                dispatch_state_version=dispatch_v,
-                candidate_commit_sha=candidate_sha,
-                candidate_branch=self.worktree_mgr.branch_name(task_id),
-                fencing_tokens=[lease.fencing_token for lease in leases],
-                diff=diff,
-                summary=agent_result.summary,
-                memories_used=agent_result.memory_references,
-                decisions=agent_result.decisions,
-                assumptions=agent_result.assumptions,
-            )
-
-            self.event_store.append(
-                actor=agent_id,
-                kind="task.submitted",
-                project_id=self.project_id,
-                task_id=task_id,
-                payload={
-                    "patch_id": patch_id,
-                    "context_id": packet.context_id,
-                    "dispatch_state_version": dispatch_v,
-                    "candidate_commit_sha": candidate_sha,
-                    "candidate_branch": submission.candidate_branch,
-                    "summary": agent_result.summary,
-                    "memories_used": agent_result.memory_references,
-                    "decisions": agent_result.decisions,
-                    "assumptions": agent_result.assumptions,
-                },
-            )
-
-            # Only the integration phase is serialized. The expensive provider
-            # work above remains concurrent across independent tasks.
-            async with self._integration_lock:
-                staleness = self.staleness_detector.evaluate_submission(
-                    submission=submission,
-                    project_id=self.project_id,
-                    dependency_task_ids=set(task.dependencies),
-                    declared_files=set(task.files_declared),
-                )
-
-                gate_result = self.gate.evaluate_submission(
-                    submission=submission,
-                    staleness_score=staleness.staleness_score,
-                    visible_test_cmd=self.visible_test_cmd,
-                )
-
-                if gate_result.status == GateStatus.ACCEPTED:
-                    latest_events = self.event_store.read_after(
-                        dispatch_v,
-                        project_id=self.project_id,
-                    )
-                    # Concurrent tasks can emit events after this task's dispatch.
-                    # Only this accepted task crosses the durable-memory boundary.
-                    for event in latest_events:
-                        if event.task_id == task_id:
-                            self.memory_lifecycle.process_event(event)
-                else:
-                    self.recovery.handle_failure(
-                        task_id=task_id,
-                        failure_type=gate_result.rejection_stage or "unknown_rejection",
-                        details={"error": gate_result.error_detail},
-                        attempt_count=task.attempt_count,
-                    )
-
-            return gate_result
-        except WorktreeError as exc:
-            self.event_store.append(
-                actor="orchestrator",
-                kind="task.failed",
-                project_id=self.project_id,
-                task_id=task_id,
-                payload={"reason": "worktree_error", "error": str(exc)},
-            )
-            raise
-        finally:
-            for lease in reversed(leases):
-                self.leases.release_lease(lease.resource, agent_id, task_id)
-            if worktree_path is not None:
-                self.worktree_mgr.remove_worktree(task_id)
+        packet_dict["compiled_event"] = event_id
+        return ContextPacket(**packet_dict)

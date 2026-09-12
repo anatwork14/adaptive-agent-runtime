@@ -1,335 +1,158 @@
-"""Context compiler assembling immutable, token-budgeted ContextPackets."""
+"""Normalized research context policies that share ARC's execution/gate path."""
 
 from __future__ import annotations
 
-import hashlib
-import uuid
-from pathlib import Path
-from typing import Any, Dict, Iterable, List, Optional
+import time
+from typing import Any
 
-from pydantic import BaseModel, Field
-
-from context.allocator import BudgetAllocator, ClassBudgets
-from context.digest import compute_context_digest
+from context.compiler import ContextCompiler
+from context.policy import ContextBuildResult
 from context.request import ContextRequest
-from context.retrieval import RetrievalResult
-from memory.models import MemoryStatus, MemoryType
-from state.events import EventStore
+from context.retrieval import RetrievalResult, ScoredCandidate
+from indexes.vector import VectorIndex
+from memory.lifecycle import MemoryLifecycle
 from state.models import ProjectState, TaskState
 
 
-class ContextBudgetExceeded(ValueError):
-    """Raised when mandatory authoritative context exceeds the hard budget."""
+class StaticStructuredContextPolicy:
+    """B3: authoritative task/code context with no long-term memory retrieval."""
+
+    policy_id = "B3"
+
+    def __init__(self, compiler: ContextCompiler) -> None:
+        self.compiler = compiler
+
+    def build(
+        self,
+        *,
+        request: ContextRequest,
+        project_state: ProjectState,
+        task_state: TaskState,
+        active_leases: list[dict[str, Any]],
+    ) -> ContextBuildResult:
+        retrieval_started = time.perf_counter()
+        retrieval = RetrievalResult(
+            candidates=[],
+            strategies_used=["static_no_memory"],
+            total_found=0,
+        )
+        retrieval_ms = (time.perf_counter() - retrieval_started) * 1000.0
+
+        compile_started = time.perf_counter()
+        packet = self.compiler.compile(
+            request=request,
+            retrieval=retrieval,
+            project_state=project_state,
+            task_state=task_state,
+            active_leases=active_leases,
+            policy_id=self.policy_id,
+            enforce_memory_validity=True,
+        )
+        compile_ms = (time.perf_counter() - compile_started) * 1000.0
+        return ContextBuildResult(
+            packet=packet,
+            policy_id=self.policy_id,
+            retrieval_latency_ms=retrieval_ms,
+            compile_latency_ms=compile_ms,
+            retrieval_strategies=tuple(retrieval.strategies_used),
+        )
 
 
-class ContextPacket(BaseModel):
-    """Immutable compiled context packet dispatched to an agent."""
+class VectorTopKContextPolicy:
+    """B5: naive deterministic vector top-k over persisted non-deleted memory.
 
-    context_id: str
-    project_id: str
-    task_id: str
-    agent_id: str
-    state_version: int
-    compiled_event: int
-    goal: str
-    acceptance_criteria: List[str] = Field(default_factory=list)
-    constraints: List[str] = Field(default_factory=list)
-    dependency_state: List[Dict[str, Any]] = Field(default_factory=list)
-    files_declared: List[str] = Field(default_factory=list)
-    decisions: List[Dict[str, Any]] = Field(default_factory=list)
-    assumptions: List[Dict[str, Any]] = Field(default_factory=list)
-    code_context: List[Dict[str, Any]] = Field(default_factory=list)
-    failures: List[Dict[str, Any]] = Field(default_factory=list)
-    procedures: List[Dict[str, Any]] = Field(default_factory=list)
-    open_questions: List[Dict[str, Any]] = Field(default_factory=list)
-    leases: List[Dict[str, Any]] = Field(default_factory=list)
-    risk_flags: List[str] = Field(default_factory=list)
-    budget_remaining_tokens: int = 0
-    context_token_count: int = 0
-    memory_ids: List[str] = Field(default_factory=list)
-    digest: str = ""
+    This intentionally ignores supersession and temporal validity when selecting
+    memories. It uses the same deterministic lexical-hash embedding substrate as
+    ARC's prototype vector index; it must not be described as a semantic-embedding
+    baseline unless a pinned semantic embedding provider is introduced separately.
+    """
 
-    model_config = {"frozen": True}
-
-
-class ContextCompiler:
-    """Compile authoritative state + derived memory into bounded task context."""
+    policy_id = "B5"
 
     def __init__(
         self,
-        event_store: EventStore,
-        allocator: Optional[BudgetAllocator] = None,
-        repo_path: Optional[str | Path] = None,
+        compiler: ContextCompiler,
+        memory_lifecycle: MemoryLifecycle,
+        *,
+        top_k: int = 5,
     ) -> None:
-        self.event_store = event_store
-        self.allocator = allocator or BudgetAllocator()
-        self.repo_path = Path(repo_path).resolve() if repo_path is not None else None
+        if top_k <= 0:
+            raise ValueError("top_k must be positive")
+        self.compiler = compiler
+        self.memory_lifecycle = memory_lifecycle
+        self.top_k = top_k
 
-    def _declared_files(self, patterns: Iterable[str]) -> List[Path]:
-        """Resolve declared paths/globs without allowing repository escape."""
-        if self.repo_path is None:
-            return []
-
-        seen: set[Path] = set()
-        results: List[Path] = []
-        for raw in patterns:
-            if not raw or Path(raw).is_absolute():
-                continue
-            has_glob = any(ch in raw for ch in "*?[]")
-            candidates = self.repo_path.glob(raw) if has_glob else [self.repo_path / raw]
-            for candidate in candidates:
-                try:
-                    resolved = candidate.resolve()
-                    resolved.relative_to(self.repo_path)
-                except (OSError, ValueError):
-                    continue
-                if not resolved.is_file():
-                    continue
-                rel = resolved.relative_to(self.repo_path)
-                if any(part in {".git", ".arc", ".venv", "__pycache__"} for part in rel.parts):
-                    continue
-                if resolved not in seen:
-                    seen.add(resolved)
-                    results.append(resolved)
-        return sorted(results, key=lambda path: str(path.relative_to(self.repo_path)))
-
-    def _code_evidence(
-        self,
-        patterns: Iterable[str],
-        symbols: List[str],
-        token_budget: int,
-    ) -> tuple[List[Dict[str, Any]], int]:
-        if self.repo_path is None or token_budget <= 0:
-            return [], 0
-
-        evidence: List[Dict[str, Any]] = []
-        used = 0
-        for path in self._declared_files(patterns):
-            if used >= token_budget:
-                break
-            try:
-                full_content = path.read_text(encoding="utf-8", errors="replace")
-            except OSError:
-                continue
-
-            remaining = token_budget - used
-            if remaining <= 0:
-                break
-            max_chars = max(0, remaining * 4)
-            included = full_content[:max_chars]
-            cost = self.allocator.estimate_tokens(included)
-            if cost > remaining:
-                continue
-
-            rel = str(path.relative_to(self.repo_path))
-            evidence.append(
-                {
-                    "path": rel,
-                    "start_line": 1,
-                    "end_line": max(1, included.count("\n") + 1),
-                    "content": included,
-                    "content_hash": hashlib.sha256(
-                        full_content.encode("utf-8")
-                    ).hexdigest(),
-                    "truncated": len(included) < len(full_content),
-                    "symbols_requested": list(symbols),
-                    "reason": "declared task code surface",
-                }
-            )
-            used += cost
-        return evidence, used
-
-    def compile(
-        self,
-        request: ContextRequest,
-        retrieval: RetrievalResult,
-        project_state: ProjectState,
-        task_state: Optional[TaskState] = None,
-        active_leases: Optional[List[Dict[str, Any]]] = None,
-    ) -> ContextPacket:
-        """Compile context while enforcing ``request.token_budget`` as a hard ceiling."""
-        context_id = f"CTX_{uuid.uuid4().hex[:8]}"
-        budgets: ClassBudgets = self.allocator.allocate(
-            risk=request.risk,
-            declared_budget=request.token_budget,
+    def _retrieve(self, request: ContextRequest) -> RetrievalResult:
+        memories = self.memory_lifecycle.get_project_memories(
+            request.project_id,
+            include_deleted=False,
         )
+        if not memories:
+            return RetrievalResult(
+                candidates=[],
+                strategies_used=["naive_vector_topk"],
+                total_found=0,
+            )
 
-        goal = request.goal
-        acceptance_criteria = task_state.acceptance_criteria if task_state else []
-        constraints = list(project_state.constraints)
-        leases = active_leases or []
-        dependency_state = [
-            {"task_id": dependency, "status": "dependency"}
-            for dependency in request.dependencies
+        dimension = self.memory_lifecycle.vector_index.dimension
+        index = VectorIndex(dimension=dimension)
+        by_id = {}
+        for memory in memories:
+            by_id[memory.memory_id] = memory
+            index.add_vector(
+                memory.memory_id,
+                VectorIndex.deterministic_hash_embed(
+                    memory.content_text,
+                    dimension=dimension,
+                ),
+            )
+
+        query = VectorIndex.deterministic_hash_embed(
+            request.goal,
+            dimension=dimension,
+        )
+        hits = index.search(query, top_k=self.top_k)
+        candidates = [
+            ScoredCandidate(
+                memory=by_id[memory_id],
+                score=float(score),
+                retrieval_strategy="naive_vector_topk",
+            )
+            for memory_id, score in hits
         ]
-
-        authoritative_text = "\n".join(
-            [
-                goal,
-                *acceptance_criteria,
-                *constraints,
-                *request.dependencies,
-                *request.files_declared,
-            ]
+        return RetrievalResult(
+            candidates=candidates,
+            strategies_used=["naive_vector_topk"],
+            total_found=len(candidates),
         )
-        authoritative_tokens = self.allocator.estimate_tokens(authoritative_text)
-        if authoritative_tokens > budgets.total_budget:
-            raise ContextBudgetExceeded(
-                f"mandatory authoritative context ({authoritative_tokens} tokens) "
-                f"exceeds hard budget ({budgets.total_budget})"
-            )
-        remaining_total = budgets.total_budget - authoritative_tokens
 
-        decisions: List[Dict[str, Any]] = []
-        assumptions: List[Dict[str, Any]] = []
-        failures: List[Dict[str, Any]] = []
-        procedures: List[Dict[str, Any]] = []
-        memory_ids: List[str] = []
+    def build(
+        self,
+        *,
+        request: ContextRequest,
+        project_state: ProjectState,
+        task_state: TaskState,
+        active_leases: list[dict[str, Any]],
+    ) -> ContextBuildResult:
+        retrieval_started = time.perf_counter()
+        retrieval = self._retrieve(request)
+        retrieval_ms = (time.perf_counter() - retrieval_started) * 1000.0
 
-        class_used = {
-            "decisions": 0,
-            "assumptions": 0,
-            "failures": 0,
-            "procedures": 0,
-        }
-        class_caps = {
-            "decisions": budgets.c1_decisions,
-            "assumptions": budgets.c3_assumptions,
-            "failures": budgets.c4_failures,
-            "procedures": budgets.c5_procedures,
-        }
-
-        for candidate in retrieval.candidates:
-            memory = candidate.memory
-            if memory.status in (
-                MemoryStatus.SUPERSEDED,
-                MemoryStatus.DELETED,
-                MemoryStatus.ARCHIVED,
-            ):
-                continue
-            if memory.valid_from_event > request.state_version:
-                continue
-            if memory.valid_to_event is not None and memory.valid_to_event < request.state_version:
-                continue
-
-            cost = max(
-                1,
-                memory.token_size
-                or self.allocator.estimate_tokens(memory.content_text),
-            )
-            bucket: Optional[str] = None
-            target: Optional[List[Dict[str, Any]]] = None
-            entry: Dict[str, Any]
-
-            if memory.type in (
-                MemoryType.DECISION,
-                MemoryType.CONSTRAINT,
-                MemoryType.FACT,
-            ):
-                bucket, target = "decisions", decisions
-                entry = {
-                    "memory_id": memory.memory_id,
-                    "text": memory.content_text,
-                    "source_events": memory.source_events,
-                    "valid_from_event": memory.valid_from_event,
-                    "valid_to_event": memory.valid_to_event,
-                }
-            elif memory.type == MemoryType.ASSUMPTION:
-                bucket, target = "assumptions", assumptions
-                entry = {
-                    "memory_id": memory.memory_id,
-                    "text": memory.content_text,
-                    "confidence": memory.confidence,
-                    "status": memory.status.value,
-                    "source_events": memory.source_events,
-                }
-            elif memory.type == MemoryType.FAILURE:
-                bucket, target = "failures", failures
-                entry = {
-                    "memory_id": memory.memory_id,
-                    "text": memory.content_text,
-                    "source_events": memory.source_events,
-                }
-            elif memory.type == MemoryType.PROCEDURE:
-                bucket, target = "procedures", procedures
-                entry = {
-                    "memory_id": memory.memory_id,
-                    "text": memory.content_text,
-                    "source_events": memory.source_events,
-                }
-            else:
-                continue
-
-            assert bucket is not None and target is not None
-            if class_used[bucket] + cost > class_caps[bucket] or cost > remaining_total:
-                continue
-            target.append(entry)
-            class_used[bucket] += cost
-            remaining_total -= cost
-            memory_ids.append(memory.memory_id)
-
-        code_cap = min(budgets.c2_code, remaining_total)
-        code_context, code_tokens = self._code_evidence(
-            request.files_declared,
-            request.symbols,
-            code_cap,
+        compile_started = time.perf_counter()
+        packet = self.compiler.compile(
+            request=request,
+            retrieval=retrieval,
+            project_state=project_state,
+            task_state=task_state,
+            active_leases=active_leases,
+            policy_id=self.policy_id,
+            enforce_memory_validity=False,
         )
-        remaining_total -= code_tokens
-
-        total_tokens = budgets.total_budget - remaining_total
-        if total_tokens > request.token_budget:
-            raise AssertionError("compiled context exceeded the declared hard budget")
-
-        risk_flags: List[str] = []
-        if request.risk > 0.7:
-            risk_flags.append("HIGH_RISK_TASK")
-        if any(item.get("status") == "disputed" for item in assumptions):
-            risk_flags.append("CONTRADICTORY_ASSUMPTIONS_PRESENT")
-        if self.repo_path is None and request.files_declared:
-            risk_flags.append("CODE_EVIDENCE_UNAVAILABLE")
-
-        packet_dict: Dict[str, Any] = {
-            "context_id": context_id,
-            "project_id": request.project_id,
-            "task_id": request.task_id,
-            "agent_id": request.agent_id,
-            "state_version": request.state_version,
-            "compiled_event": self.event_store.current_version(request.project_id),
-            "goal": goal,
-            "acceptance_criteria": acceptance_criteria,
-            "constraints": constraints,
-            "dependency_state": dependency_state,
-            "files_declared": list(request.files_declared),
-            "decisions": decisions,
-            "assumptions": assumptions,
-            "code_context": code_context,
-            "failures": failures,
-            "procedures": procedures,
-            "open_questions": [],
-            "leases": leases,
-            "risk_flags": risk_flags,
-            "budget_remaining_tokens": remaining_total,
-            "context_token_count": total_tokens,
-            "memory_ids": sorted(set(memory_ids)),
-        }
-        digest = compute_context_digest(packet_dict)
-        packet_dict["digest"] = digest
-
-        event_id = self.event_store.append(
-            actor="orchestrator",
-            kind="context.compiled",
-            project_id=request.project_id,
-            task_id=request.task_id,
-            payload={
-                "context_id": context_id,
-                "state_version": request.state_version,
-                "digest": digest,
-                "token_count": total_tokens,
-                "hard_budget": request.token_budget,
-                "memory_ids": packet_dict["memory_ids"],
-                "files_declared": packet_dict["files_declared"],
-                "code_files": [item["path"] for item in code_context],
-            },
+        compile_ms = (time.perf_counter() - compile_started) * 1000.0
+        return ContextBuildResult(
+            packet=packet,
+            policy_id=self.policy_id,
+            retrieval_latency_ms=retrieval_ms,
+            compile_latency_ms=compile_ms,
+            retrieval_strategies=tuple(retrieval.strategies_used),
         )
-        packet_dict["compiled_event"] = event_id
-        return ContextPacket(**packet_dict)
