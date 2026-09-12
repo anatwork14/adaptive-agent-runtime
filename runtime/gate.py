@@ -201,6 +201,8 @@ class IntegrationGate:
             apply_res = self._git(
                 [
                     "-c",
+                    "commit.gpgsign=false",
+                    "-c",
                     "user.name=ARC Gate",
                     "-c",
                     "user.email=arc-gate@local",
@@ -284,6 +286,8 @@ class IntegrationGate:
 
             merge_res = self._git(
                 [
+                    "-c",
+                    "commit.gpgsign=false",
                     "-c",
                     "user.name=ARC Gate",
                     "-c",
