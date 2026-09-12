@@ -3,7 +3,9 @@
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Protocol
+
 from pydantic import BaseModel, Field
+
 from context.compiler import ContextPacket
 
 
@@ -14,7 +16,7 @@ class AgentBudget(BaseModel):
 
 
 class AgentRunResult(BaseModel):
-    status: str = "completed"  # completed | failed | budget_exhausted
+    status: str = "completed"  # completed | failed | cancelled | budget_exhausted
     patch_ref: str = ""
     diff: str = ""
     summary: str = ""
