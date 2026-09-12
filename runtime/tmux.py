@@ -11,6 +11,7 @@ from __future__ import annotations
 import shlex
 import shutil
 import subprocess
+from collections.abc import Mapping
 from pathlib import Path
 from typing import Any
 
@@ -76,6 +77,7 @@ class TmuxController:
         name: str,
         cwd: str | Path,
         command: list[str],
+        environment: Mapping[str, str] | None = None,
     ) -> None:
         if not command:
             raise ValueError("Persistent runtime command cannot be empty")
@@ -84,9 +86,16 @@ class TmuxController:
         workspace = Path(cwd).resolve()
         if not workspace.exists():
             raise TmuxError(f"runtime working directory does not exist: {workspace}")
-        # tmux accepts one shell-command string. shlex.join safely quotes the
-        # argv provided by ARC; ARC never concatenates untrusted shell fragments.
-        shell_command = shlex.join(command)
+
+        # tmux accepts one shell-command string. When ARC supplies an explicit
+        # environment, start through `env -i` so an existing tmux server cannot
+        # silently reintroduce unrelated variables/secrets from its own process.
+        runtime_command = list(command)
+        if environment is not None:
+            assignments = [f"{key}={environment[key]}" for key in sorted(environment)]
+            runtime_command = ["env", "-i", *assignments, *runtime_command]
+
+        shell_command = shlex.join(runtime_command)
         self._run(
             [
                 "new-session",
