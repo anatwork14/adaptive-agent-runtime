@@ -15,6 +15,7 @@ from pydantic import BaseModel, Field
 
 from application.app import ArcApplication
 from application.config import AgentProfile
+from application.version import arc_version
 from webui.local_security import (
     LocalOriginGuardMiddleware,
     is_loopback_origin,
@@ -141,7 +142,7 @@ def create_web_app(
     static_dir = Path(__file__).parent / "static"
     app = FastAPI(
         title="ARC Mission Control",
-        version="0.8.1",
+        version=arc_version(),
         docs_url="/api/docs",
         redoc_url=None,
     )
