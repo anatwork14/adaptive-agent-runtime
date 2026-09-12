@@ -10,6 +10,7 @@ from __future__ import annotations
 import asyncio
 import webbrowser
 from collections import defaultdict
+from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Any, Optional
 
@@ -27,6 +28,7 @@ from webui.local_security import (
     require_loopback_bind,
 )
 from webui.review_routes import register_review_routes
+from webui.turn_supervisor import LiveTurnSupervisor
 
 
 class CreateTaskRequest(BaseModel):
@@ -70,6 +72,7 @@ class WorkspaceService:
         self.project_id = project_id
         self.integration_lock = asyncio.Lock()
         self.session_locks: dict[str, asyncio.Lock] = defaultdict(asyncio.Lock)
+        self.turns = LiveTurnSupervisor(open_arc=self.open, session_locks=self.session_locks)
 
     def open(self) -> SessionArcApplication:
         return SessionArcApplication(self.repo, self.project_id)
@@ -87,6 +90,9 @@ class WorkspaceService:
                 "leases": [lease.model_dump(mode="json") for lease in snap["leases"]],
                 "tasks": [task.model_dump(mode="json") for task in snap["tasks"]],
                 "sessions": [session.model_dump(mode="json") for session in sessions],
+                "live_turns": {
+                    session.session_id: self.turns.state(session.session_id) for session in sessions
+                },
                 "agents": [
                     {
                         **profile.model_dump(mode="json"),
@@ -105,11 +111,20 @@ def create_workspace_app(
 ) -> FastAPI:
     service = WorkspaceService(repo, project_id)
     static_dir = Path(__file__).parent / "static"
+
+    @asynccontextmanager
+    async def lifespan(_: FastAPI):
+        try:
+            yield
+        finally:
+            await service.turns.cancel_all()
+
     app = FastAPI(
         title="ARC Workspace",
         version=arc_version(),
         docs_url="/api/docs",
         redoc_url=None,
+        lifespan=lifespan,
     )
     app.state.arc_workspace = service
     app.add_middleware(LocalOriginGuardMiddleware)
@@ -168,14 +183,11 @@ def create_workspace_app(
                 item = arc.get_task(task_id)
                 if not item:
                     raise HTTPException(status_code=404, detail="task not found")
+                task_session = arc.sessions.for_task(task_id)
                 return {
                     "task": item.model_dump(mode="json"),
                     "events": [event.model_dump(mode="json") for event in arc.task_events(task_id)],
-                    "session": (
-                        arc.sessions.for_task(task_id).model_dump(mode="json")
-                        if arc.sessions.for_task(task_id)
-                        else None
-                    ),
+                    "session": task_session.model_dump(mode="json") if task_session else None,
                 }
         except HTTPException:
             raise
@@ -271,6 +283,7 @@ def create_workspace_app(
                         event.model_dump(mode="json")
                         for event in arc.task_events(session.task_id, limit=120)
                     ],
+                    "turn": service.turns.state(session_id),
                     "terminal_command": "arc attach " + session_id,
                     "review": arc.reviews.status(session_id).model_dump(mode="json"),
                 }
@@ -279,6 +292,9 @@ def create_workspace_app(
         except Exception as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
 
+    # Compatibility path for scripts and CLI callers that expect one blocking
+    # request per worker turn. Workspace itself uses the asynchronous live-turn
+    # routes below so output can arrive through the existing event WebSocket.
     @app.post("/api/sessions/{session_id}/messages")
     async def send_message(session_id: str, payload: MessageRequest) -> dict[str, Any]:
         lock = service.session_locks[session_id]
@@ -292,6 +308,23 @@ def create_workspace_app(
                 raise HTTPException(status_code=400, detail=str(exc)) from exc
             finally:
                 arc.close()
+
+    @app.post("/api/sessions/{session_id}/turn", status_code=202)
+    async def start_turn(session_id: str, payload: MessageRequest) -> dict[str, Any]:
+        try:
+            return await service.turns.start(session_id, payload.content)
+        except RuntimeError as exc:
+            raise HTTPException(status_code=409, detail=str(exc)) from exc
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    @app.get("/api/sessions/{session_id}/turn")
+    def turn_status(session_id: str) -> dict[str, Any]:
+        return service.turns.state(session_id)
+
+    @app.post("/api/sessions/{session_id}/turn/cancel", status_code=202)
+    async def cancel_turn(session_id: str) -> dict[str, Any]:
+        return await service.turns.cancel(session_id)
 
     @app.post("/api/sessions/{session_id}/submit")
     async def submit_session(session_id: str) -> dict[str, Any]:
@@ -310,7 +343,14 @@ def create_workspace_app(
                 arc.close()
 
     @app.post("/api/sessions/{session_id}/stop")
-    def stop_session(session_id: str, payload: ReasonRequest) -> dict[str, Any]:
+    async def stop_session(session_id: str, payload: ReasonRequest) -> dict[str, Any]:
+        lock = service.session_locks[session_id]
+        if service.turns.active(session_id):
+            await service.turns.cancel(session_id, wait=True)
+        elif lock.locked():
+            raise HTTPException(status_code=409, detail="worker is already processing an action")
+        if lock.locked():
+            raise HTTPException(status_code=409, detail="worker turn did not stop cleanly")
         try:
             with service.open() as arc:
                 return arc.sessions.stop(session_id, reason=payload.reason).model_dump(mode="json")
@@ -319,6 +359,8 @@ def create_workspace_app(
 
     @app.post("/api/sessions/{session_id}/resume")
     def resume_session(session_id: str) -> dict[str, Any]:
+        if service.turns.active(session_id):
+            raise HTTPException(status_code=409, detail="worker is processing a live turn")
         try:
             with service.open() as arc:
                 return arc.sessions.resume(session_id).model_dump(mode="json")

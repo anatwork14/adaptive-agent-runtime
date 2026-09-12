@@ -1,8 +1,8 @@
 # ARC Local Control-Plane Security
 
-ARC 0.9.1 treats its browser applications as **privileged local developer control planes**, not ordinary websites.
+Since ARC 0.9.1, the browser applications are treated as **privileged local developer control planes**, not ordinary websites.
 
-`arc ui` can continue coding-agent sessions, start provider terminals, launch application previews, publish/synchronize review state, and submit candidates for integration. `arc web` can create tasks, configure agents, and start orchestration. These powers are distinct from ARC 0.9's worker-environment hardening: least-privilege provider environments reduce what worker processes inherit, while this policy protects the browser control plane itself.
+`arc ui` can continue coding-agent sessions, start supervised provider turns, cancel live turns, start provider terminals, launch application previews, publish/synchronize review state, and submit candidates for integration. `arc web` can create tasks, configure agents, and start orchestration. These powers are distinct from ARC 0.9's worker-environment hardening: least-privilege provider environments reduce what worker processes inherit, while this policy protects the browser control plane itself.
 
 ## Current policy
 
@@ -47,7 +47,7 @@ Non-browser/local API clients normally omit `Origin`; those requests remain supp
 
 ## WebSocket boundary
 
-The event WebSocket applies the same Origin rule **before** accepting the connection. A non-local browser Origin is closed with WebSocket policy-violation code `1008` and does not receive the ARC event stream.
+The event WebSocket applies the same Origin rule **before** accepting the connection. A non-local browser Origin is closed with WebSocket policy-violation code `1008` and does not receive the ARC event stream. ARC 0.10 also carries supervised provider-turn output over this same protected event WebSocket rather than introducing a separate provider-specific browser stream.
 
 ## Response hardening
 
@@ -72,13 +72,15 @@ worker preview  http://127.0.0.1:<worker-port>
 
 ARC requires preview command templates to expose `{host}` and `{port}`, restricts preview binding to loopback, excludes provider credentials from preview environments under the 0.9 execution policy, and does not reverse-proxy untrusted preview content through the privileged Workspace origin.
 
-## Relationship to ARC 0.9 execution security
+## Relationship to ARC execution security
 
 ARC 0.9 introduced least-privilege worker environments. Provider processes receive a small runtime environment plus provider-scoped credentials and explicitly allowlisted variable names instead of inheriting the whole ARC host environment. Preview processes exclude provider credentials. Persistent tmux launches use a private single-use handoff so secret environment values do not need to appear in worker argv.
 
-See [EXECUTION_SECURITY.md](EXECUTION_SECURITY.md) for that process/environment boundary. The browser Origin policy in this document is complementary; neither boundary replaces the other.
+ARC 0.10 adds a complementary provider-output persistence boundary: credential-like values are redacted before streamed turn output is stored or emitted to the browser.
 
-## What ARC 0.9.1 does **not** claim
+See [EXECUTION_SECURITY.md](EXECUTION_SECURITY.md) and [LIVE_TURNS.md](LIVE_TURNS.md) for those process/environment/output boundaries. The browser Origin policy in this document is complementary; none of these boundaries replaces the others.
+
+## What ARC does **not** claim
 
 ARC still does not provide:
 
@@ -88,9 +90,10 @@ ARC still does not provide:
 - multi-user tenant isolation;
 - protection from a malicious process already running under the same local OS account;
 - a sandbox for tmux/provider CLIs;
-- complete provider filesystem/network isolation.
+- complete provider filesystem/network isolation;
+- complete data-loss prevention for arbitrary sensitive text emitted by an agent.
 
-`tmux` is process-lifecycle infrastructure, not a security sandbox.
+`tmux` and supervised live-turn process management are lifecycle infrastructure, not security sandboxes.
 
 ## Future authenticated remote mode
 
@@ -124,4 +127,4 @@ ARC tests verify:
 - explicit loopback browser Origins succeed;
 - non-browser clients without `Origin` still work;
 - hostile WebSocket Origins are rejected before event streaming;
-- Workspace and Mission Control version metadata match the installed ARC 0.9.1 package metadata.
+- Workspace and Mission Control version metadata match the installed ARC distribution metadata.

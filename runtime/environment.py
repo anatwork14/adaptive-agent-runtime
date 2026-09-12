@@ -108,6 +108,13 @@ _SECRET_MARKERS = (
     "private_key",
 )
 
+_TOKEN_PATTERNS = (
+    re.compile(r"\bsk-[A-Za-z0-9._-]{8,}\b"),
+    re.compile(r"\bsess-[A-Za-z0-9._-]{8,}\b"),
+    re.compile(r"\bya29\.[A-Za-z0-9._-]{8,}\b"),
+    re.compile(r"(?i)\bBearer\s+[A-Za-z0-9._~+/-]{8,}={0,2}"),
+)
+
 
 def validate_environment_name(name: str) -> str:
     """Validate and normalize an operator-configured environment variable name."""
@@ -162,4 +169,25 @@ def redact_command(command: Iterable[str]) -> list[str]:
                 redact_next = True
             continue
         output.append(arg)
+    return output
+
+
+def redact_text_secrets(text: str, environment: Mapping[str, str] | None = None) -> str:
+    """Remove obvious credential material before provider text becomes durable.
+
+    Live provider output can include echoed environment variables, tool output,
+    or authentication diagnostics. ARC redacts values of environment variables
+    whose names are credential-like and also masks common provider token shapes.
+    Non-secret runtime values such as HOME/PATH are intentionally preserved so
+    logs remain useful for debugging.
+    """
+    output = str(text)
+    for name, value in (environment or {}).items():
+        if not value or len(value) < 4:
+            continue
+        lower = name.lower()
+        if any(marker in lower for marker in _SECRET_MARKERS):
+            output = output.replace(str(value), "<redacted>")
+    for pattern in _TOKEN_PATTERNS:
+        output = pattern.sub("<redacted>", output)
     return output

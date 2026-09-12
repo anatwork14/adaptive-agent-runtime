@@ -3,6 +3,7 @@ const state = {
   selectedTask: null,
   selectedSession: null,
   selectedDetail: null,
+  liveTurn: null,
   cursor: 0,
   ws: null,
   reconnect: null,
@@ -105,7 +106,11 @@ function renderSnapshot(snapshot) {
   renderBoard();
   if (state.selectedSession) {
     const fresh = (snapshot.sessions || []).find((item) => item.session_id === state.selectedSession.session_id);
-    if (!fresh) closeInspector(); else state.selectedSession = fresh;
+    if (!fresh) closeInspector();
+    else {
+      state.selectedSession = fresh;
+      state.liveTurn = snapshot.live_turns?.[fresh.session_id] || state.liveTurn;
+    }
   } else if (state.selectedTask) {
     const fresh = (snapshot.tasks || []).find((item) => item.task_id === state.selectedTask.task_id);
     if (!fresh) closeInspector(); else state.selectedTask = fresh;
@@ -129,6 +134,7 @@ function selectItem(taskId, sessionId) {
   state.selectedSession = sessionId
     ? (state.snapshot?.sessions || []).find((session) => session.session_id === sessionId)
     : null;
+  state.liveTurn = sessionId ? state.snapshot?.live_turns?.[sessionId] || null : null;
   renderBoard();
   openInspector();
 }
@@ -137,9 +143,11 @@ function closeInspector() {
   state.selectedTask = null;
   state.selectedSession = null;
   state.selectedDetail = null;
+  state.liveTurn = null;
   $('#inspectorBody').hidden = true;
   $('#inspectorEmpty').hidden = false;
   $('#inspector').classList.remove('open');
+  $('#liveTurn').hidden = true;
   renderBoard();
 }
 
@@ -170,6 +178,7 @@ async function loadInspectorDetail() {
     state.selectedDetail = session
       ? await api(`/api/sessions/${encodeURIComponent(session.session_id)}`)
       : await api(`/api/tasks/${encodeURIComponent(task.task_id)}`);
+    if (state.selectedDetail?.turn) state.liveTurn = state.selectedDetail.turn;
     renderInspectorContent();
   } catch (error) {
     toast(error.message, true);
@@ -210,6 +219,44 @@ function renderReview(review, session) {
   $('#applyReviewBtn').disabled = !linked || !review?.pending_feedback;
 }
 
+function latestTurnId(events) {
+  for (const event of [...events].reverse()) {
+    const turnId = event.payload?.turn_id;
+    if (turnId && event.kind === 'session.turn_started') return turnId;
+  }
+  return null;
+}
+
+function turnOutput(events, turnId) {
+  if (!turnId) return '';
+  return events
+    .filter((event) => event.kind === 'session.turn_output' && event.payload?.turn_id === turnId)
+    .map((event) => `${event.payload?.stream === 'stderr' ? '[stderr] ' : ''}${event.payload?.content || ''}`)
+    .join('')
+    .slice(-20000);
+}
+
+function renderLiveTurn(turn, events, session) {
+  const panel = $('#liveTurn');
+  const output = $('#turnOutput');
+  const button = $('#cancelTurnBtn');
+  const turnId = turn?.turn_id || latestTurnId(events);
+  const replay = turnOutput(events, turnId);
+  const active = Boolean(turn?.active);
+  const cancelling = Boolean(turn?.cancel_requested);
+  const visible = Boolean(session && (active || cancelling || replay || turn?.error));
+
+  panel.hidden = !visible;
+  panel.classList.toggle('cancelling', cancelling);
+  panel.classList.toggle('complete', visible && !active && !cancelling);
+  $('#liveTurnId').textContent = turnId || 'latest turn';
+  button.disabled = !active || cancelling;
+  button.textContent = cancelling ? 'Cancelling…' : 'Cancel turn';
+  output.textContent = replay || (active ? 'Waiting for provider output…' : turn?.error || 'Turn complete.');
+  if (visible) output.scrollTop = output.scrollHeight;
+  $('#chatForm').hidden = !session || active || !['open', 'failed', 'needs_input'].includes(session.status);
+}
+
 function renderInspectorContent() {
   const detail = state.selectedDetail || {};
   const session = detail.session || state.selectedSession;
@@ -232,7 +279,7 @@ function renderInspectorContent() {
   const events = detail.events || [];
   $('#workerEvents').innerHTML = events.slice().reverse().map((event) => `<div class="worker-event"><b>#${event.id}</b><span><strong>${esc(event.kind)}</strong><br>${esc(JSON.stringify(event.payload || {}))}</span></div>`).join('') || '<div class="empty-column">No events.</div>';
   $('#terminalCommand').textContent = detail.terminal_command || `arc session open ${task?.task_id || ''}`;
-  $('#chatForm').hidden = !session || !['open', 'failed', 'needs_input'].includes(session.status);
+  renderLiveTurn(detail.turn || state.liveTurn, events, session || null);
   $('#copyTerminal').disabled = !session;
 }
 
@@ -305,15 +352,13 @@ async function sendChat(event) {
   textarea.disabled = true;
   button.disabled = true;
   try {
-    await api(`/api/sessions/${encodeURIComponent(state.selectedSession.session_id)}/messages`, {
+    const turn = await api(`/api/sessions/${encodeURIComponent(state.selectedSession.session_id)}/turn`, {
       method: 'POST', body: JSON.stringify({ content }),
     });
+    state.liveTurn = turn;
     textarea.value = '';
-    toast('Worker turn complete');
-    await refresh();
-    state.selectedSession = (state.snapshot?.sessions || []).find((session) => session.session_id === state.selectedSession.session_id) || state.selectedSession;
-    await loadInspectorDetail();
-    setTimeout(() => { $('#chatMessages').scrollTop = $('#chatMessages').scrollHeight; }, 20);
+    renderLiveTurn(turn, [], state.selectedSession);
+    toast(`Live turn ${turn.turn_id || ''} started`);
   } catch (error) {
     toast(error.message, true);
     await refresh();
@@ -321,6 +366,22 @@ async function sendChat(event) {
     textarea.disabled = false;
     button.disabled = false;
     textarea.focus();
+  }
+}
+
+async function cancelTurn() {
+  if (!state.selectedSession || !state.liveTurn?.active) return;
+  const button = $('#cancelTurnBtn');
+  try {
+    button.disabled = true;
+    const turn = await api(`/api/sessions/${encodeURIComponent(state.selectedSession.session_id)}/turn/cancel`, {
+      method: 'POST', body: '{}',
+    });
+    state.liveTurn = turn;
+    renderLiveTurn(turn, state.selectedDetail?.events || [], state.selectedSession);
+    toast('Turn cancellation requested');
+  } catch (error) {
+    toast(error.message, true);
   }
 }
 
@@ -444,6 +505,34 @@ function appendEvent(event) {
   while ($('#traceRows').children.length > 250) $('#traceRows').lastElementChild?.remove();
 }
 
+function appendLiveTurnOutput(event) {
+  if (!state.selectedSession || event.payload?.session_id !== state.selectedSession.session_id) return;
+  const turnId = event.payload?.turn_id;
+  if (state.liveTurn?.turn_id && turnId && state.liveTurn.turn_id !== turnId) return;
+  if (!state.liveTurn) state.liveTurn = { session_id: state.selectedSession.session_id, turn_id: turnId, active: true, cancel_requested: false };
+  $('#liveTurn').hidden = false;
+  $('#liveTurn').classList.remove('complete');
+  $('#liveTurnId').textContent = turnId || state.liveTurn.turn_id || 'live turn';
+  const output = $('#turnOutput');
+  const current = output.textContent === 'Waiting for provider output…' ? '' : output.textContent;
+  const prefix = event.payload?.stream === 'stderr' ? '[stderr] ' : '';
+  output.textContent = `${current}${prefix}${event.payload?.content || ''}`.slice(-20000);
+  output.scrollTop = output.scrollHeight;
+}
+
+function reflectTurnLifecycle(event) {
+  if (!state.selectedSession || event.payload?.session_id !== state.selectedSession.session_id) return;
+  const turnId = event.payload?.turn_id || state.liveTurn?.turn_id;
+  if (event.kind === 'session.turn_started') {
+    state.liveTurn = { session_id: state.selectedSession.session_id, turn_id: turnId, active: true, done: false, cancel_requested: false, error: null };
+  } else if (event.kind === 'session.turn_cancel_requested') {
+    state.liveTurn = { ...(state.liveTurn || {}), session_id: state.selectedSession.session_id, turn_id: turnId, active: true, cancel_requested: true };
+  } else if (['session.turn_finished', 'session.turn_cancelled', 'session.failed'].includes(event.kind)) {
+    state.liveTurn = { ...(state.liveTurn || {}), session_id: state.selectedSession.session_id, turn_id: turnId, active: false, done: true, cancel_requested: false, error: event.kind === 'session.failed' ? event.payload?.error || 'Provider turn failed' : null };
+  }
+  renderLiveTurn(state.liveTurn, state.selectedDetail?.events || [], state.selectedSession);
+}
+
 async function loadEvents() {
   try {
     const events = await api(`/api/events?after=${state.cursor}&limit=200`);
@@ -467,6 +556,13 @@ function connectEvents() {
     try {
       const event = JSON.parse(message.data);
       appendEvent(event);
+      if (event.kind === 'session.turn_output') {
+        appendLiveTurnOutput(event);
+        return;
+      }
+      if (event.kind.startsWith('session.turn_') || event.kind === 'session.failed') {
+        reflectTurnLifecycle(event);
+      }
       if (event.kind.startsWith('session.') || event.kind.startsWith('task.') || event.kind.startsWith('gate.') || event.kind.startsWith('orchestration.') || event.kind === 'recovery.retry') {
         await refresh();
         if (state.selectedSession || state.selectedTask) await loadInspectorDetail();
@@ -496,6 +592,7 @@ $('#openWorkerBtn').addEventListener('click', openWorker);
 $('#submitWorkerBtn').addEventListener('click', submitWorker);
 $('#stopWorkerBtn').addEventListener('click', stopWorker);
 $('#chatForm').addEventListener('submit', sendChat);
+$('#cancelTurnBtn').addEventListener('click', cancelTurn);
 $('#publishReviewBtn').addEventListener('click', publishReview);
 $('#syncReviewBtn').addEventListener('click', syncReview);
 $('#applyReviewBtn').addEventListener('click', applyReview);

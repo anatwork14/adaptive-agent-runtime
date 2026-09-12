@@ -1,10 +1,10 @@
 # Security Policy
 
-ARC is experimental/pre-alpha software that executes code produced by AI coding agents. Treat generated commands, patches, tests, dev servers, and provider processes as potentially untrusted.
+ARC is experimental/pre-alpha software that executes code produced by AI coding agents. Treat generated commands, patches, tests, dev servers, provider processes, and provider output as potentially untrusted.
 
 ## Supported security posture
 
-The current development line is ARC **0.9.x**. Security fixes are applied to `main`; older pre-alpha snapshots are not maintained as separate supported release branches.
+The current development line is ARC **0.10.x**. Security fixes are applied to `main`; older pre-alpha snapshots are not maintained as separate supported release branches.
 
 ## Reporting a vulnerability
 
@@ -37,6 +37,18 @@ ARC 0.9 introduced least-privilege environment propagation for worker/provider s
 
 See [`docs/EXECUTION_SECURITY.md`](docs/EXECUTION_SECURITY.md) for the exact environment policy and limitations.
 
+## Supervised live turns
+
+ARC 0.10 can start a provider subprocess from the Workspace, stream its stdout/stderr through ARC events, and cancel it explicitly. This improves observability but does **not** make the provider process authoritative or sandboxed.
+
+Before provider output becomes durable or reaches the Workspace WebSocket, ARC masks values of credential-like environment variables forwarded to that process and common provider-token forms. The final provider summary and stderr failure tail use the same redacted text. This is defense in depth, not a complete data-loss-prevention system; an agent can still intentionally emit sensitive repository content that does not match those redaction rules.
+
+A browser-started live turn owns the same per-worker action lock as review/runtime/submit operations. Worker stop requests cancellation, waits for the supervised provider to exit, and only then removes the worktree. Workspace shutdown also requests cancellation of supervised turns. If a provider ignores normal termination, ARC escalates to process kill.
+
+After an ARC restart, a historical `session.turn_started` event does not prove the provider process is still alive. ARC does not automatically launch a duplicate turn; recovery is explicit through the surviving worktree/session.
+
+See [`docs/LIVE_TURNS.md`](docs/LIVE_TURNS.md) for the exact lifecycle and restart semantics.
+
 ## Worker previews
 
 Application previews run from isolated worker worktrees but are still application code generated or modified by agents. ARC restricts preview binding to loopback and keeps preview content on a separate browser origin rather than reverse-proxying it through the privileged Workspace origin.
@@ -49,15 +61,16 @@ ARC delegates authentication to the tools that own it:
 
 - provider credentials remain in provider CLI/keyring storage;
 - GitHub credentials remain owned by `gh`;
-- ARC does not intentionally copy provider/GitHub tokens into `.arc/`, browser payloads, or authoritative events;
+- ARC does not intentionally copy provider/GitHub tokens into `.arc/` or browser configuration payloads;
 - runtime audit data stores environment-variable names, not values;
-- obvious secret-valued command arguments are redacted before persisted runtime metadata is emitted.
+- obvious secret-valued command arguments are redacted before persisted runtime metadata is emitted;
+- streamed provider output is redacted before ARC persists it as `session.turn_output` or includes it in provider summaries.
 
 ## Process isolation
 
-`tmux` is a process-lifecycle mechanism, **not a sandbox**.
+`tmux` and Workspace live-turn supervision are process-lifecycle mechanisms, **not sandboxes**.
 
-ARC's command/test execution path can use its Docker-backed sandbox with network/capability/resource restrictions. Provider coding CLIs remain experimental host-mode integrations, and ARC 0.9's environment filtering does not imply complete filesystem or network isolation.
+ARC's command/test execution path can use its Docker-backed sandbox with network/capability/resource restrictions. Provider coding CLIs remain experimental host-mode integrations, and ARC's environment filtering does not imply complete filesystem or network isolation.
 
 Review the exact execution path before using ARC with sensitive repositories or credentials.
 
@@ -66,22 +79,22 @@ Review the exact execution path before using ARC with sensitive repositories or 
 ARC's correctness model also serves as a security boundary:
 
 ```text
-chat / memory / PR / preview / terminal / external CI
-                    │
-                    ▼
-           operational context only
-                    │
-                    ▼
-             exact Git candidate
-                    │
-                    ▼
-             IntegrationGate
-                    │
-                    ▼
-          authoritative project state
+chat / provider output / memory / PR / preview / terminal / external CI
+                           │
+                           ▼
+                  operational context only
+                           │
+                           ▼
+                    exact Git candidate
+                           │
+                           ▼
+                    IntegrationGate
+                           │
+                           ▼
+                 authoritative project state
 ```
 
-A successful agent turn, green pull request, running preview, or external review approval must not bypass the exact-candidate IntegrationGate.
+A successful agent turn, streamed “done” message, cancelled turn, green pull request, running preview, or external review approval must not bypass the exact-candidate IntegrationGate.
 
 ## Secrets
 
