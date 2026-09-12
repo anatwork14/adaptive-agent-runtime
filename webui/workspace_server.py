@@ -10,6 +10,7 @@ from __future__ import annotations
 import asyncio
 import webbrowser
 from collections import defaultdict
+from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Any, Optional
 
@@ -110,14 +111,22 @@ def create_workspace_app(
 ) -> FastAPI:
     service = WorkspaceService(repo, project_id)
     static_dir = Path(__file__).parent / "static"
+
+    @asynccontextmanager
+    async def lifespan(_: FastAPI):
+        try:
+            yield
+        finally:
+            await service.turns.cancel_all()
+
     app = FastAPI(
         title="ARC Workspace",
         version=arc_version(),
         docs_url="/api/docs",
         redoc_url=None,
+        lifespan=lifespan,
     )
     app.state.arc_workspace = service
-    app.add_event_handler("shutdown", service.turns.cancel_all)
     app.add_middleware(LocalOriginGuardMiddleware)
     app.mount("/static", StaticFiles(directory=static_dir), name="static")
 
@@ -174,14 +183,11 @@ def create_workspace_app(
                 item = arc.get_task(task_id)
                 if not item:
                     raise HTTPException(status_code=404, detail="task not found")
+                task_session = arc.sessions.for_task(task_id)
                 return {
                     "task": item.model_dump(mode="json"),
                     "events": [event.model_dump(mode="json") for event in arc.task_events(task_id)],
-                    "session": (
-                        arc.sessions.for_task(task_id).model_dump(mode="json")
-                        if arc.sessions.for_task(task_id)
-                        else None
-                    ),
+                    "session": task_session.model_dump(mode="json") if task_session else None,
                 }
         except HTTPException:
             raise
