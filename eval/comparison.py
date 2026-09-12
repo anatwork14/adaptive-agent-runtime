@@ -25,6 +25,8 @@ class PairedComparison:
 def validate_comparable_manifests(a: BenchmarkManifest, b: BenchmarkManifest) -> None:
     """Fail closed when a baseline comparison changes more than the policy under test."""
     errors: list[str] = []
+    if a.execution_mode != b.execution_mode:
+        errors.append("execution_mode differs")
     if a.repo_commit != b.repo_commit:
         errors.append("repo_commit differs")
     if a.context_token_budget != b.context_token_budget:
@@ -42,18 +44,18 @@ def validate_comparable_manifests(a: BenchmarkManifest, b: BenchmarkManifest) ->
     ]:
         errors.append("fault declarations differ")
 
-    tasks_a = {task.task_id: task for task in a.tasks}
-    tasks_b = {task.task_id: task for task in b.tasks}
-    if set(tasks_a) != set(tasks_b):
-        errors.append("task IDs differ")
+    # Sequence order is part of the treatment because earlier accepted work and
+    # memory become context for later tasks.
+    ordered_ids_a = [task.task_id for task in a.tasks]
+    ordered_ids_b = [task.task_id for task in b.tasks]
+    if ordered_ids_a != ordered_ids_b:
+        errors.append("ordered task IDs differ")
     else:
-        for task_id in sorted(tasks_a):
-            left = tasks_a[task_id]
-            right = tasks_b[task_id]
+        for left, right in zip(a.tasks, b.tasks):
             fields = ("goal", "files", "acceptance", "risk", "token_budget", "hidden_test_pattern")
             for field in fields:
                 if getattr(left, field) != getattr(right, field):
-                    errors.append(f"task {task_id} field {field} differs")
+                    errors.append(f"task {left.task_id} field {field} differs")
 
     if errors:
         raise ValueError("incomparable benchmark manifests: " + "; ".join(errors))
