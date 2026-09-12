@@ -1,0 +1,27 @@
+benchmark_id: arc-context-iso-budget-smoke
+baseline: B7
+seed: 7
+agent_profile: mock
+model: null
+repo_commit: 665b90ed9aaf66f22f57bc65b06ee1ed7b470411
+context_token_budget: 8000
+hard_task_usd: 1.0
+faults: []
+notes: >-
+  Deterministic smoke manifest. Replace repo_commit and agent_profile for a real
+  provider experiment. Do not compare against another baseline unless
+  validate_comparable_manifests succeeds.
+tasks:
+  - task_id: T001
+    goal: Preserve the public parser API while adding one accepted edge case.
+    files:
+      - src/parser.py
+      - tests/test_parser.py
+    acceptance:
+      - Existing visible tests pass.
+      - The new edge-case test passes.
+    risk: 0.4
+    token_budget: 8000
+    hidden_test_pattern: test_hidden_parser_*.py
+    metadata:
+      category: code-maintenance
