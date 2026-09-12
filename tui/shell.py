@@ -3,12 +3,11 @@
 The shell intentionally feels closer to a coding-agent CLI than to an admin
 command collection. Natural-language input plans work at project scope or sends
 another instruction to the focused persistent worker session. Slash commands
-expose precise operator controls without leaving the conversation.
+expose precise operator and review-loop controls without leaving the conversation.
 """
 
 from __future__ import annotations
 
-import asyncio
 import shlex
 from pathlib import Path
 from typing import Optional
@@ -32,15 +31,19 @@ HELP = """[bold cyan]ARC commands[/bold cyan]
 [cyan]/send SESSION TEXT[/cyan]             send instruction to a worker
 [cyan]/files [SESSION][/cyan]               changed files in worker worktree
 [cyan]/diff [SESSION][/cyan]                current worker diff
-[cyan]/submit [SESSION][/cyan]              commit candidate and run ARC gate
+[cyan]/publish [SESSION][/cyan]             push worker branch and create/update PR
+[cyan]/review [SESSION][/cyan]              synchronize GitHub checks/review feedback
+[cyan]/fix-review [SESSION][/cyan]          route pending GitHub feedback to worker
+[cyan]/submit [SESSION][/cyan]              freeze exact candidate and run ARC gate
 [cyan]/stop [SESSION][/cyan]                stop worker and return task to READY
-[cyan]/run[/cyan]                            route + run the READY fleet
+[cyan]/run[/cyan]                           route + run the READY fleet
 [cyan]/attach [SESSION][/cyan]              show native terminal attach command
-[cyan]/exit[/cyan]                           leave ARC
+[cyan]/exit[/cyan]                          leave ARC
 
 Without a focused worker, normal text is treated as a project objective and
 planned into a task DAG. With a focused worker, normal text becomes the next
-instruction for that worker.
+instruction for that worker. GitHub is an external review surface; ARC events,
+tasks, Git candidates and gate outcomes remain authoritative.
 """
 
 
@@ -117,11 +120,14 @@ class ArcShell(App[None]):
         doctors = self.arc.doctor_agents()
         ready = [item.name for item in doctors if item.status == "READY"]
         connected = ", ".join(ready) if ready else "no real providers ready"
+        review = self.arc.reviews.doctor()
+        review_state = review.get("status", "UNKNOWN")
         log = self.query_one("#conversation", RichLog)
         log.write(
             "[bold cyan]ARC[/bold cyan] — persistent multi-agent coding supervisor\n"
             f"[dim]{self.repo}[/dim]\n\n"
             f"Providers: [green]{escape(connected)}[/green]\n"
+            f"GitHub review loop: [cyan]{escape(review_state)}[/cyan]\n"
             "Describe an outcome to plan it, or [cyan]/open T001[/cyan] to work with one agent.\n"
             "Type [cyan]/help[/cyan] for controls."
         )
@@ -153,8 +159,18 @@ class ArcShell(App[None]):
                     SessionStatus.STOPPED: "dim",
                     SessionStatus.SUBMITTED: "yellow",
                 }.get(session.status, "white")
+                review = self.arc.reviews.status(session.session_id)
+                review_marker = ""
+                if review.linked:
+                    if review.pending_feedback or review.failed_checks:
+                        review_marker = f" [red]PR#{review.pr_number}![/red]"
+                    elif review.pending_checks:
+                        review_marker = f" [yellow]PR#{review.pr_number}…[/yellow]"
+                    else:
+                        review_marker = f" [green]PR#{review.pr_number}[/green]"
                 lines.append(
-                    f"\n{focused} [bold]{session.task_id}[/bold]  [{status_color}]{session.status.value}[/]\n"
+                    f"\n{focused} [bold]{session.task_id}[/bold]  "
+                    f"[{status_color}]{session.status.value}[/]{review_marker}\n"
                     f"  [dim]{session.session_id} · {escape(session.agent_name)}[/dim]"
                 )
             self.query_one("#sessionList", Static).update("\n".join(lines))
@@ -171,6 +187,10 @@ class ArcShell(App[None]):
         event.input.disabled = True
         try:
             await self._process(raw)
+        except Exception as exc:
+            self.query_one("#conversation", RichLog).write(
+                f"[bold red]ARC error:[/bold red] {escape(str(exc))}"
+            )
         finally:
             self.busy = False
             event.input.disabled = False
@@ -207,10 +227,14 @@ class ArcShell(App[None]):
             snap = self.arc.snapshot()
             tasks = snap["tasks"]
             active = len([s for s in self.arc.sessions.list() if s.status in self.arc.sessions.ACTIVE])
+            linked = len([r for r in self.arc.reviews.list() if r.linked])
+            attention = len(
+                [r for r in self.arc.reviews.list() if r.pending_feedback or r.failed_checks]
+            )
             log.write(
                 f"[bold]STATE v{snap['version']}[/bold]  tasks={len(tasks)}  "
-                f"workers={active}  leases={len(snap['leases'])}  "
-                f"tokens={snap['budget'].consumed_tokens:,}  "
+                f"workers={active}  reviews={linked}/{attention} attention  "
+                f"leases={len(snap['leases'])}  tokens={snap['budget'].consumed_tokens:,}  "
                 f"cost=${snap['budget'].consumed_usd:.2f}"
             )
         elif command == "/tasks":
@@ -227,9 +251,11 @@ class ArcShell(App[None]):
             if not sessions:
                 log.write("[dim]No worker sessions.[/dim]")
             for session in sessions:
+                review = self.arc.reviews.status(session.session_id)
+                pr = f"PR#{review.pr_number}" if review.linked else "-"
                 log.write(
                     f"[cyan]{session.session_id}[/cyan]  {session.task_id}  "
-                    f"{session.status.value:<11}  {escape(session.agent_name)}"
+                    f"{session.status.value:<11}  {escape(session.agent_name)}  {escape(pr)}"
                 )
         elif command == "/open":
             if not args:
@@ -258,11 +284,54 @@ class ArcShell(App[None]):
         elif command == "/files":
             session = self._focused_or(args[0] if args else None)
             files = self.arc.sessions.changed_files(session.session_id)
-            log.write("[bold]Changed files[/bold]\n" + ("\n".join(f"  {escape(f)}" for f in files) or "  none"))
+            log.write(
+                "[bold]Changed files[/bold]\n"
+                + ("\n".join(f"  {escape(file)}" for file in files) or "  none")
+            )
         elif command == "/diff":
             session = self._focused_or(args[0] if args else None)
             diff = self.arc.sessions.diff(session.session_id)
-            log.write(f"[bold]Diff // {session.session_id}[/bold]\n{escape(diff or 'No changes yet.')}")
+            log.write(
+                f"[bold]Diff // {session.session_id}[/bold]\n"
+                f"{escape(diff or 'No uncommitted changes. Published commits remain on the worker branch.')}"
+            )
+        elif command == "/publish":
+            session = self._focused_or(args[0] if args else None)
+            doctor = self.arc.reviews.doctor()
+            if doctor.get("status") != "READY":
+                raise RuntimeError(
+                    f"GitHub review loop is {doctor.get('status')}: {doctor.get('detail')}"
+                )
+            log.write(f"[yellow]Publishing {session.session_id} for GitHub review…[/yellow]")
+            review = self.arc.reviews.publish(session.session_id)
+            log.write(
+                f"[green]PR #{review.pr_number}[/green]  {escape(review.pr_url)}\n"
+                "[dim]Use /review to synchronize CI/reviewer feedback.[/dim]"
+            )
+        elif command == "/review":
+            session = self._focused_or(args[0] if args else None)
+            result = await self.arc.reviews.sync(session.session_id, auto_apply=False)
+            review = result.status
+            color = "green" if review.healthy else "yellow"
+            log.write(
+                f"[{color}]PR #{review.pr_number}[/]  state={escape(review.state or '-')}  "
+                f"review={escape(review.review_decision or '-')}  "
+                f"failed={len(review.failed_checks)}  pending={len(review.pending_checks)}"
+            )
+            if review.pending_feedback:
+                log.write(
+                    "[bold magenta]Actionable feedback pending[/bold magenta]\n"
+                    + escape(review.pending_feedback)
+                    + "\n[dim]Use /fix-review to route it to this worker.[/dim]"
+                )
+        elif command == "/fix-review":
+            session = self._focused_or(args[0] if args else None)
+            applied = await self.arc.reviews.apply_latest(session.session_id)
+            if applied:
+                log.write("[green]GitHub feedback routed to the same worker and a new turn completed.[/green]")
+                self.focused_session_id = session.session_id
+            else:
+                log.write("[dim]No new actionable GitHub feedback to apply.[/dim]")
         elif command == "/submit":
             session = self._focused_or(args[0] if args else None)
             log.write(f"[yellow]Submitting {session.session_id} through ARC gate…[/yellow]")
@@ -277,7 +346,9 @@ class ArcShell(App[None]):
         elif command == "/stop":
             session = self._focused_or(args[0] if args else None)
             self.arc.sessions.stop(session.session_id)
-            log.write(f"[yellow]Stopped {session.session_id}; {session.task_id} returned to scheduler.[/yellow]")
+            log.write(
+                f"[yellow]Stopped {session.session_id}; {session.task_id} returned to scheduler.[/yellow]"
+            )
             if self.focused_session_id == session.session_id:
                 self.focused_session_id = None
         elif command == "/run":
@@ -323,7 +394,10 @@ class ArcShell(App[None]):
             lines.append(
                 f"  [cyan]{task.task_id}[/cyan]  {escape(task.goal)}  [dim]→ {escape(agent)}[/dim]"
             )
-        lines.append("\nType [cyan]/run[/cyan] to execute the READY fleet, or [cyan]/open Txxx[/cyan] to supervise one worker interactively.")
+        lines.append(
+            "\nType [cyan]/run[/cyan] to execute the READY fleet, or "
+            "[cyan]/open Txxx[/cyan] to supervise one worker interactively."
+        )
         response = "\n".join(lines)
         log.write(response)
         self.arc.event_store.append(
@@ -351,7 +425,10 @@ class ArcShell(App[None]):
                 None,
             )
             if assistant:
-                log.write(f"[bold cyan]{escape(updated.agent_name)}[/bold cyan]\n{escape(assistant.content)}")
+                log.write(
+                    f"[bold cyan]{escape(updated.agent_name)}[/bold cyan]\n"
+                    f"{escape(assistant.content)}"
+                )
         files = self.arc.sessions.changed_files(session_id)
         if files:
             log.write("[dim]changed: " + escape(", ".join(files[:8])) + "[/dim]")
