@@ -1,3 +1,5 @@
+import json
+import shlex
 from pathlib import Path
 
 from eval.comparison import validate_comparable_manifests
@@ -18,18 +20,49 @@ EXPECTED = {
 
 def test_campaign_manifest_triplets_are_valid_and_matched() -> None:
     for repo_name, (benchmark_id, repo_commit) in EXPECTED.items():
-        manifests = [load_manifest(CAMPAIGN / repo_name / f"{baseline.lower()}.yaml") for baseline in ("B3", "B5", "B7")]
+        manifests = [
+            load_manifest(CAMPAIGN / repo_name / f"{baseline.lower()}.yaml")
+            for baseline in ("B3", "B5", "B7")
+        ]
         assert [manifest.baseline for manifest in manifests] == ["B3", "B5", "B7"]
         assert {manifest.benchmark_id for manifest in manifests} == {benchmark_id}
         assert {manifest.repo_commit for manifest in manifests} == {repo_commit}
         assert {manifest.model for manifest in manifests} == {"gpt-5.3-codex"}
         assert {manifest.context_token_budget for manifest in manifests} == {12000}
         assert {manifest.hard_task_usd for manifest in manifests} == {2.0}
-        assert all([task.task_id for task in manifest.tasks] == ["T001", "T002", "T003"] for manifest in manifests)
+        assert all(
+            [task.task_id for task in manifest.tasks] == ["T001", "T002", "T003"]
+            for manifest in manifests
+        )
         for other in manifests[1:]:
             validate_comparable_manifests(manifests[0], other)
 
 
-def test_runtime_lock_script_compiles() -> None:
-    source = (CAMPAIGN / "runtime_lock.py").read_text(encoding="utf-8")
-    compile(source, str(CAMPAIGN / "runtime_lock.py"), "exec")
+def test_campaign_freeze_contract_matches_manifests() -> None:
+    contract = json.loads((CAMPAIGN / "campaign_contract.json").read_text(encoding="utf-8"))
+    assert contract["campaign_id"] == "context-policy-multirepo-v1"
+    assert contract["shared_protocol"]["verification_level"] == "V1"
+    assert contract["shared_protocol"]["repeats"] == 6
+    assert contract["shared_protocol"]["hard_project_usd"] == 350.0
+
+    profile = contract["provider_profile"]
+    assert profile["provider"] == "codex"
+    assert profile["model"] == "gpt-5.3-codex"
+    argv = shlex.split(profile["command_override"])
+    assert argv[:4] == ["codex", "exec", "--full-auto", "--model"]
+    assert "model_reasoning_effort=\"high\"" in argv
+    assert argv[-1] == "-"
+
+    for repo_name, (benchmark_id, repo_commit) in EXPECTED.items():
+        repo_contract = contract["repositories"][repo_name]
+        assert repo_contract["benchmark_id"] == benchmark_id
+        assert repo_contract["commit"] == repo_commit
+        hidden_digest = repo_contract["hidden_tree_sha256"]
+        assert len(hidden_digest) == 64
+        int(hidden_digest, 16)
+
+
+def test_campaign_freeze_scripts_compile() -> None:
+    for name in ("runtime_lock.py", "freeze_campaign.py"):
+        source = (CAMPAIGN / name).read_text(encoding="utf-8")
+        compile(source, str(CAMPAIGN / name), "exec")
