@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import asyncio
-import codecs
 import json
 import os
 import shlex
@@ -18,6 +17,7 @@ from runtime.environment import (
     build_execution_environment,
     environment_key_manifest,
     redact_command,
+    redact_text_secrets,
 )
 
 
@@ -136,9 +136,9 @@ class SubprocessCodingAgent:
 
         The provider process remains disposable operational state. Durable worker
         continuity still comes from the isolated worktree plus ARC's event log.
-        ``output_callback`` receives decoded stdout/stderr chunks as they arrive.
-        ``cancel_event`` lets a supervisor terminate the live provider without
-        treating cancellation as a successful patch or a provider failure.
+        ``output_callback`` receives redacted decoded stdout/stderr lines as they
+        arrive. ``cancel_event`` lets a supervisor terminate the live provider
+        without treating cancellation as a successful patch or provider failure.
         """
         command = self.build_command()
         self.ensure_available(command)
@@ -168,6 +168,7 @@ class SubprocessCodingAgent:
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE,
             env=environment,
+            limit=1024 * 1024,
         )
         stdout_tail = ""
         stderr_tail = ""
@@ -181,26 +182,21 @@ class SubprocessCodingAgent:
             nonlocal stdout_tail, stderr_tail
             if reader is None:
                 return
-            decoder = codecs.getincrementaldecoder("utf-8")(errors="replace")
+            # Provider CLIs are predominantly line-oriented. Buffering one full
+            # line before persistence prevents an environment credential split
+            # across OS read chunks from leaking as two individually harmless
+            # fragments. The subprocess stream limit is raised for long lines.
             while True:
-                chunk = await reader.read(4096)
-                if not chunk:
+                raw = await reader.readline()
+                if not raw:
                     break
-                text = decoder.decode(chunk)
-                if not text:
-                    continue
+                text = raw.decode("utf-8", errors="replace")
+                safe_text = redact_text_secrets(text, environment)
                 if stream == "stdout":
-                    stdout_tail = (stdout_tail + text)[-tail_limit:]
+                    stdout_tail = (stdout_tail + safe_text)[-tail_limit:]
                 else:
-                    stderr_tail = (stderr_tail + text)[-tail_limit:]
-                await _emit_stream(output_callback, stream, text)
-            final = decoder.decode(b"", final=True)
-            if final:
-                if stream == "stdout":
-                    stdout_tail = (stdout_tail + final)[-tail_limit:]
-                else:
-                    stderr_tail = (stderr_tail + final)[-tail_limit:]
-                await _emit_stream(output_callback, stream, final)
+                    stderr_tail = (stderr_tail + safe_text)[-tail_limit:]
+                await _emit_stream(output_callback, stream, safe_text)
 
         stdout_task = asyncio.create_task(pump(process.stdout, "stdout", tail_limit=8000))
         stderr_task = asyncio.create_task(pump(process.stderr, "stderr", tail_limit=4000))
@@ -219,9 +215,9 @@ class SubprocessCodingAgent:
                 except (AttributeError, BrokenPipeError, ConnectionResetError):
                     pass
 
-            waiters: set[asyncio.Task[object]] = {wait_task}  # type: ignore[arg-type]
+            waiters = {wait_task}
             if cancel_task is not None:
-                waiters.add(cancel_task)  # type: ignore[arg-type]
+                waiters.add(cancel_task)
             done, _ = await asyncio.wait(
                 waiters,
                 timeout=budget.timeout_seconds,
