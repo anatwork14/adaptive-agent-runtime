@@ -63,6 +63,26 @@ def _process_spawn_kwargs() -> dict[str, object]:
     return {}
 
 
+def _posix_process_group_exists(group_id: int) -> bool:
+    try:
+        os.killpg(group_id, 0)
+    except ProcessLookupError:
+        return False
+    except PermissionError:
+        return True
+    return True
+
+
+async def _wait_posix_process_group_gone(group_id: int, timeout: float) -> bool:
+    loop = asyncio.get_running_loop()
+    deadline = loop.time() + max(timeout, 0.0)
+    while _posix_process_group_exists(group_id):
+        if loop.time() >= deadline:
+            return False
+        await asyncio.sleep(0.05)
+    return True
+
+
 async def _terminate_process(
     process: asyncio.subprocess.Process,
     *,
@@ -70,37 +90,46 @@ async def _terminate_process(
 ) -> None:
     """Terminate the supervised provider process tree and escalate if needed."""
     if os.name == "posix":
+        group_id = process.pid
+        loop = asyncio.get_running_loop()
+        deadline = loop.time() + grace_seconds
         try:
-            os.killpg(process.pid, signal.SIGTERM)
+            os.killpg(group_id, signal.SIGTERM)
         except ProcessLookupError:
-            pass
-    elif process.returncode is None:
-        process.terminate()
-
-    if process.returncode is None:
-        try:
-            await asyncio.wait_for(process.wait(), timeout=grace_seconds)
-        except asyncio.TimeoutError:
-            if os.name == "posix":
-                try:
-                    os.killpg(process.pid, signal.SIGKILL)
-                except ProcessLookupError:
-                    pass
-            else:
-                process.kill()
-            await process.wait()
-    elif os.name == "posix":
-        # The group leader may already have exited while descendants remain.
-        # Give TERM a short interval before escalating the surviving group.
-        await asyncio.sleep(min(grace_seconds, 0.1))
-        try:
-            os.killpg(process.pid, 0)
-        except ProcessLookupError:
+            if process.returncode is None:
+                await process.wait()
             return
+
+        if process.returncode is None:
+            remaining = max(0.0, deadline - loop.time())
+            try:
+                await asyncio.wait_for(process.wait(), timeout=remaining)
+            except asyncio.TimeoutError:
+                pass
+
+        remaining = max(0.0, deadline - loop.time())
+        if await _wait_posix_process_group_gone(group_id, remaining):
+            if process.returncode is None:
+                await process.wait()
+            return
+
         try:
-            os.killpg(process.pid, signal.SIGKILL)
+            os.killpg(group_id, signal.SIGKILL)
         except ProcessLookupError:
             pass
+        if process.returncode is None:
+            await process.wait()
+        await _wait_posix_process_group_gone(group_id, 0.5)
+        return
+
+    if process.returncode is not None:
+        return
+    process.terminate()
+    try:
+        await asyncio.wait_for(process.wait(), timeout=grace_seconds)
+    except asyncio.TimeoutError:
+        process.kill()
+        await process.wait()
 
 
 class SubprocessCodingAgent:
