@@ -155,6 +155,14 @@ class ExperimentRunner:
                 "fault-enabled manifests are not executable in v0.11 until a deterministic "
                 "fault schedule is wired into the shared runner"
             )
+        if (
+            manifest.hard_task_usd is not None
+            and abs(orchestrator.hard_task_usd - manifest.hard_task_usd) > 1e-12
+        ):
+            raise ValueError(
+                f"runtime hard_task_usd {orchestrator.hard_task_usd} does not match "
+                f"manifest hard_task_usd {manifest.hard_task_usd}"
+            )
 
         head = self._repo_head(orchestrator)
         if not head.startswith(manifest.repo_commit) and not manifest.repo_commit.startswith(head):
@@ -252,8 +260,6 @@ class ExperimentRunner:
                     cost_observed=trace.cost_observed,
                     token_usage_observed=trace.token_usage_observed,
                     end_to_end_latency_ms=end_to_end_ms,
-                    # These remain null until ARC records the two phases separately.
-                    # End-to-end task latency is never mislabeled as retrieval latency.
                     retrieval_latency_ms=None,
                     context_compile_latency_ms=None,
                     staleness_score=gate_result.staleness_score,
