@@ -35,6 +35,13 @@ from eval.runners.paired import (
     IsolatedPairedBenchmarkRunner,
     blind_context_for_provider,
 )
+from eval.runners.repeated import (
+    AggregateMetric,
+    AggregatePairedComparison,
+    RepeatedPairedBenchmarkResult,
+    RepeatedPairedBenchmarkRunner,
+    aggregate_repeated_results,
+)
 from eval.telemetry import TraceTelemetry, collect_trace_telemetry
 
 __all__ = [
@@ -69,4 +76,9 @@ __all__ = [
     "IsolatedPairedBenchmarkRunner",
     "BlindedAgentAdapter",
     "blind_context_for_provider",
+    "AggregateMetric",
+    "AggregatePairedComparison",
+    "RepeatedPairedBenchmarkResult",
+    "RepeatedPairedBenchmarkRunner",
+    "aggregate_repeated_results",
 ]
