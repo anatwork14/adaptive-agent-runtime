@@ -1,9 +1,10 @@
 """Campaign-specific runtime lock for the first provider-backed ARC study.
 
-This is deliberately outside ARC's generic preregistration schema. It closes one
-empirical reproducibility gap in v0.16 without changing historical plan digests:
-profile command overrides (including reasoning-effort flags) are otherwise live
-operator state. The lock stores a digest of effective argv, never argv itself.
+This is deliberately outside ARC's generic preregistration schema. It closes
+empirical reproducibility gaps in v0.16 without changing historical plan
+digests: profile command overrides, reasoning-effort flags, and provider CLI
+version are otherwise live operator state. The lock stores a digest of the
+effective argv, never argv itself.
 """
 
 from __future__ import annotations
@@ -19,11 +20,16 @@ from typing import Any
 from application.agents import build_agent
 from application.config import ConfigStore
 
-SCHEMA = "arc-empirical-runtime-lock-v1"
+SCHEMA = "arc-empirical-runtime-lock-v2"
 
 
 def _canonical(payload: Any) -> bytes:
-    return json.dumps(payload, sort_keys=True, separators=(",", ":"), ensure_ascii=False).encode("utf-8")
+    return json.dumps(
+        payload,
+        sort_keys=True,
+        separators=(",", ":"),
+        ensure_ascii=False,
+    ).encode("utf-8")
 
 
 def _digest_argv(argv: list[str]) -> str:
@@ -38,9 +44,36 @@ def _effective_argv(profile) -> list[str]:
     return list(builder())
 
 
+def _provider_cli_version(argv: list[str]) -> str:
+    if not argv:
+        raise SystemExit("provider command is empty; cannot freeze CLI version")
+    try:
+        proc = subprocess.run(
+            [argv[0], "--version"],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+    except FileNotFoundError as exc:
+        raise SystemExit(
+            f"provider executable {argv[0]!r} is not installed; cannot freeze runtime"
+        ) from exc
+    if proc.returncode != 0:
+        detail = (proc.stderr or proc.stdout or "version command failed").strip()
+        raise SystemExit(f"cannot read provider CLI version: {detail}")
+    version = (proc.stdout or proc.stderr).strip().splitlines()
+    if not version:
+        raise SystemExit("provider CLI returned an empty version string")
+    return version[0].strip()
+
+
 def _git_head(path: Path) -> str:
     proc = subprocess.run(
-        ["git", "rev-parse", "HEAD"], cwd=path, capture_output=True, text=True, check=False
+        ["git", "rev-parse", "HEAD"],
+        cwd=path,
+        capture_output=True,
+        text=True,
+        check=False,
     )
     return proc.stdout.strip() if proc.returncode == 0 else ""
 
@@ -59,6 +92,7 @@ def runtime_payload(repo: Path, profile_name: str) -> dict[str, Any]:
         "role": profile.role,
         "capabilities": sorted(set(profile.capabilities)),
         "effective_argv_sha256": _digest_argv(argv),
+        "provider_cli_version": _provider_cli_version(argv),
         "env_allow": sorted(set(profile.env_allow)),
     }
 
@@ -82,10 +116,14 @@ def freeze(repo: Path, profile: str, output: Path, arc_repo: Path | None) -> Non
     )
     payload["lock_digest"] = lock_digest(payload)
     output.parent.mkdir(parents=True, exist_ok=True)
-    output.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    output.write_text(
+        json.dumps(payload, indent=2, sort_keys=True) + "\n",
+        encoding="utf-8",
+    )
     print(f"runtime_lock={output.resolve()}")
     print(f"lock_digest={payload['lock_digest']}")
     print(f"effective_argv_sha256={payload['effective_argv_sha256']}")
+    print(f"provider_cli_version={payload['provider_cli_version']}")
 
 
 def verify(repo: Path, profile: str, lock: Path) -> None:
@@ -95,11 +133,21 @@ def verify(repo: Path, profile: str, lock: Path) -> None:
     if frozen.get("lock_digest") != lock_digest(frozen):
         raise SystemExit("runtime-lock digest mismatch: lock was modified")
     live = runtime_payload(repo, profile)
-    keys = ("profile", "provider", "model", "role", "capabilities", "effective_argv_sha256", "env_allow")
+    keys = (
+        "profile",
+        "provider",
+        "model",
+        "role",
+        "capabilities",
+        "effective_argv_sha256",
+        "provider_cli_version",
+        "env_allow",
+    )
     mismatches = [key for key in keys if frozen.get(key) != live.get(key)]
     if mismatches:
         details = ", ".join(
-            f"{key}: frozen={frozen.get(key)!r}, live={live.get(key)!r}" for key in mismatches
+            f"{key}: frozen={frozen.get(key)!r}, live={live.get(key)!r}"
+            for key in mismatches
         )
         raise SystemExit("runtime contract drift: " + details)
     print("runtime_contract=VERIFIED")
