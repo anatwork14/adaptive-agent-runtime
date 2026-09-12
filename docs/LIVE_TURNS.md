@@ -33,7 +33,7 @@ operator instruction
        ↓
 TURN_<id>
        ↓
-provider subprocess ──────► redacted output lines
+provider process group ────► redacted output lines
        │                          │
        │                          ▼
        │                 session.turn_output
@@ -175,14 +175,16 @@ session.turn_cancel_requested
        ↓
 async cancellation signal
        ↓
-provider receives terminate
+supervised provider process group receives TERM
        ↓
-kill escalation if necessary
+process-group KILL escalation if necessary
        ↓
 session.turn_cancelled
        ↓
 worker returns to OPEN
 ```
+
+On POSIX, each disposable provider turn starts in its own session/process group. Cancellation therefore targets the provider CLI **and descendants it spawned**, such as shells and tool subprocesses, before ARC releases the worker action lock. This prevents an orphaned child from continuing to edit the worktree after the UI reports the turn as cancelled.
 
 Cancellation is **not** recorded as a successful provider result and does not complete the task.
 
@@ -195,7 +197,7 @@ Stopping a worker while a browser-started live turn is active follows:
 ```text
 request turn cancellation
        ↓
-wait for provider process exit
+wait for supervised provider process tree cleanup
        ↓
 release worker action lock
        ↓
@@ -204,11 +206,11 @@ stop WorkerSession
 remove worktree
 ```
 
-ARC will not intentionally delete the worktree underneath a provider process it is supervising.
+ARC will not intentionally delete the worktree underneath a provider process tree it is supervising.
 
 ## Server shutdown
 
-Workspace shutdown requests cancellation for active supervised turns and waits for process cleanup. `SubprocessCodingAgent` also handles asyncio task cancellation by terminating its child process, providing a final cleanup path if the supervisor task itself is cancelled.
+Workspace shutdown requests cancellation for active supervised turns and waits for process cleanup. `SubprocessCodingAgent` also handles asyncio task cancellation by terminating the supervised provider process group on POSIX, providing a final cleanup path if the supervisor task itself is cancelled.
 
 ## Restart semantics
 
