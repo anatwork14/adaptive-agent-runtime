@@ -1,9 +1,10 @@
 """Isolated Hidden Test Grader enforcing Invariant I10."""
 
-import subprocess
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Dict, List, Optional
+
+from isolation.container import SandboxRunner, WORKSPACE_PYTHONPATH
 
 
 @dataclass
@@ -28,7 +29,7 @@ class HiddenTestGrader:
     ) -> GradingResult:
         """Run hidden tests against the final integrated workspace."""
         ws_path = Path(workspace_path).resolve()
-        hidden_files = list(self.hidden_test_dir.glob(test_file_pattern))
+        hidden_files = sorted(self.hidden_test_dir.glob(test_file_pattern))
 
         if not hidden_files:
             return GradingResult(
@@ -39,17 +40,26 @@ class HiddenTestGrader:
                 output="No hidden tests found for grading.",
             )
 
-        # Run pytest specifically on the hidden test files against the workspace
-        cmd = ["python", "-m", "pytest", "-v"] + [str(f) for f in hidden_files]
-        proc = subprocess.run(
+        # Hidden tests remain outside the candidate repository and are mounted
+        # read-only only after provider work has finished. Candidate source is
+        # forced ahead of site-packages so src-layout projects are graded against
+        # the exact integrated tree rather than an installed package of the same
+        # name.
+        hidden_mount = "/arc-hidden-tests"
+        cmd = ["python", "-m", "pytest", "-v"] + [
+            f"{hidden_mount}/{path.name}" for path in hidden_files
+        ]
+        result = SandboxRunner(ws_path).run_command(
             cmd,
-            cwd=str(ws_path),
-            capture_output=True,
-            text=True,
+            env_vars={
+                "PYTHONPATH": WORKSPACE_PYTHONPATH,
+                "PYTHONDONTWRITEBYTECODE": "1",
+            },
+            read_only_mounts={self.hidden_test_dir: hidden_mount},
         )
 
-        passed = proc.returncode == 0
-        output = proc.stdout + "\n" + proc.stderr
+        passed = result.exit_code == 0
+        output = result.stdout + "\n" + result.stderr
 
         return GradingResult(
             passed=passed,
