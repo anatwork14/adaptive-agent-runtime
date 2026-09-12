@@ -18,6 +18,7 @@ The primary study uses one provider/model/profile across all repositories:
 
 - provider: `codex`
 - model: `gpt-5.3-codex`
+- reasoning effort: `high`, pinned in the effective CLI argv
 - agent profile: `builder`
 - baselines: `B3`, `B5`, `B7`
 - context ceiling: 12,000 tokens per task
@@ -33,7 +34,7 @@ The primary study uses one provider/model/profile across all repositories:
 - visible test command: `python -m pytest -q`
 - no injected faults in the primary study
 
-The operator must configure the same effective Codex command in every target clone. The intended command is Codex with model `gpt-5.3-codex` and high reasoning. Before any preregistration, run `runtime_lock.py freeze` once and `runtime_lock.py verify` in every repository. The lock stores only a SHA-256 digest of the effective argv, never the argv itself.
+The machine-readable source of truth is `campaign_contract.json`. The canonical Codex command override is intentionally public because it contains no credential. Authentication values are never stored in the campaign contract or runtime lock.
 
 ## Why these are sequences rather than independent tasks
 
@@ -47,58 +48,98 @@ Each repository contains three ordered maintenance tasks. T002 depends on T001 a
 
 ### HTTPX
 
-1. Introduce a reusable, non-mutating sensitive-header redaction primitive.
-2. Route verbose request-header rendering through that policy with an explicit unsafe opt-out.
+1. Introduce `Headers.redacted()` as a reusable, non-mutating sensitive-header redaction primitive.
+2. Route verbose request-header rendering through that policy with explicit `--show-sensitive` opt-out.
 3. Apply the exact same policy to verbose response headers while preserving formatting and duplicate ordering.
 
 ### python-dotenv
 
-1. Preserve source-line provenance as a public immutable entry representation.
-2. Add an interpolated metadata-returning API that keeps the winning source line for duplicate keys.
-3. Surface the same provenance through a new CLI JSON metadata format without changing existing formats.
+1. Preserve source-line provenance as public immutable `DotEnvEntry` data.
+2. Add `dotenv_values_with_metadata(...)` with interpolated values and winning source lines.
+3. Surface the same provenance through `dotenv list --format json-meta` without changing existing formats.
 
 ## Hidden grading
 
-Actual hidden tests MUST remain outside this public repository. Their public behavior contracts are documented in `hidden_test_contracts.md`. Before preregistration, place the private suites in one external directory per repository. ARC hashes the complete hidden tree into the repository study plan. Any edit, rename, add, or delete after preregistration must invalidate execution.
+Actual hidden tests MUST remain outside this public repository. Their public behavior contracts are documented in `hidden_test_contracts.md`. The private suites are hashed independently per repository; the expected tree digests are frozen in `campaign_contract.json`.
 
-Do not preregister against an empty or placeholder hidden directory.
+Any edit, rename, add, or delete in a private hidden suite after freeze invalidates the study. Do not preregister against an empty or placeholder hidden directory.
 
-## Operator sequence
+## Runtime reproducibility lock
 
-For each target repository clone:
+`runtime_lock.py` is separate from ARC's historical v0.16 preregistration schema so old plan digests remain valid. For this campaign it freezes and later verifies:
+
+- profile, provider, model, role and capabilities;
+- SHA-256 of the effective provider argv, including reasoning configuration;
+- allowed environment-variable names;
+- installed provider CLI version;
+- ARC repository commit.
+
+The raw effective argv is not written to the runtime lock.
+
+## One-command freeze before any provider run
+
+Prepare three clean clones at the exact commits above and extract the private hidden-test bundle so the hidden root contains `click/`, `httpx/`, and `python-dotenv/`. Install the intended Codex CLI build, but provider login is not required yet.
+
+Then run:
 
 ```bash
-git checkout --detach <FROZEN_SHA>
-arc init . --project-id context-policy-multirepo-v1
-# Configure profile `builder` as Codex / gpt-5.3-codex and set project ceiling to 350 USD.
-python /path/to/adaptive-agent-runtime/eval/campaigns/context-policy-multirepo-v1/runtime_lock.py verify \
-  --repo . --lock /secure/context-policy-runtime-lock-v1.json
+python eval/campaigns/context-policy-multirepo-v1/freeze_campaign.py \
+  --click-repo /study/repos/click \
+  --httpx-repo /study/repos/httpx \
+  --python-dotenv-repo /study/repos/python-dotenv \
+  --hidden-root /secure/hidden/context-policy-multirepo-v1-hidden \
+  --output-dir /secure/prereg/context-policy-multirepo-v1
+```
 
+The command fails closed unless every public repository HEAD and private hidden-tree digest matches the frozen contract. It then deterministically configures the same ARC `builder` profile in all three clones and emits:
+
+```text
+runtime-lock.json
+click-context-policy-v1.json
+httpx-context-policy-v1.json
+python-dotenv-context-policy-v1.json
+context-policy-multirepo-v1.json
+freeze-manifest.json
+```
+
+The three repository plans freeze V1 explicitly. The final meta plan freezes the exact three repository-plan digests before provider execution. `freeze-manifest.json` records the ARC commit, runtime-lock digest, provider CLI version, repository plan digests, meta-plan digest, and `provider_execution_started=false`.
+
+Do not edit any generated freeze artifact. If anything in the execution contract must change, create a new campaign/version rather than overwriting this one.
+
+## Authenticated execution
+
+Only after the complete freeze directory exists should provider authentication and expensive execution begin. Before each repository run, verify the runtime lock again:
+
+```bash
+python eval/campaigns/context-policy-multirepo-v1/runtime_lock.py verify \
+  --repo /study/repos/click \
+  --profile builder \
+  --lock /secure/prereg/context-policy-multirepo-v1/runtime-lock.json
+```
+
+Then execute its frozen plan with the matching private hidden directory. Use a new explicit attempt ID for every retry and retain all failed attempt trees.
+
+## Manual preregistration fallback
+
+If the campaign driver cannot be used, the CLI now requires the study's declared verification level to be explicit:
+
+```bash
 arc benchmark preregister \
-  /path/to/<repo>/b3.yaml /path/to/<repo>/b5.yaml /path/to/<repo>/b7.yaml \
+  b3.yaml b5.yaml b7.yaml \
   --repo . \
   --study-id <repo>-context-policy-v1 \
-  --output /secure/prereg/<repo>-context-policy-v1.json \
-  --repeats 6 --bootstrap-samples 2000 --ci 0.95 \
+  --output <repo>-context-policy-v1.json \
+  --verification-level V1 \
+  --repeats 6 \
+  --bootstrap-samples 2000 \
+  --ci 0.95 \
   --hidden-test-dir /secure/hidden/<repo> \
   --exclude "provider outage before the first provider turn" \
   --exclude "host failure before the first provider turn"
 ```
 
-After all three repository plans exist, freeze the repository set before executing any treatment:
-
-```bash
-arc benchmark meta-preregister \
-  /secure/prereg/click-context-policy-v1.json \
-  /secure/prereg/httpx-context-policy-v1.json \
-  /secure/prereg/python-dotenv-context-policy-v1.json \
-  --meta-id context-policy-multirepo-v1 \
-  --output /secure/prereg/context-policy-multirepo-v1.json \
-  --bootstrap-samples 5000 --ci 0.95 --random-seed 42
-```
-
-Only after the meta plan is frozen should authenticated provider execution begin. Retain every attempt ID, including failed attempts.
+The one-command driver is preferred because it removes operator drift across repositories.
 
 ## Interpretation discipline
 
-The repository is the top-level analysis cluster. Never pool task rows across repositories. Primary claims come from the preregistered hierarchical meta-analysis. Repository-specific task outcomes are diagnostic secondary analyses. Provider-side alias revisions that the provider does not expose remain an external reproducibility limitation and must be reported.
+The repository is the top-level analysis cluster. Never pool task rows across repositories. Primary claims come from the preregistered hierarchical meta-analysis. Repository-specific task outcomes are diagnostic secondary analyses. Provider-side model revisions that the provider does not expose remain an external reproducibility limitation and must be reported.

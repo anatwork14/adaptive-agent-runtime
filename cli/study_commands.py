@@ -24,6 +24,7 @@ from eval.studies.preregistration import (
 
 
 console = Console()
+VALID_VERIFICATION_LEVELS = {"V0", "V1", "V2", "V3"}
 
 
 def _fmt_metric(metric: AggregateMetric, digits: int = 4) -> str:
@@ -100,6 +101,11 @@ def register_study_commands(benchmark_app: typer.Typer) -> None:
         repeats: int = typer.Option(6, min=2),
         bootstrap_samples: int = typer.Option(2000, min=1),
         ci: float = typer.Option(0.95, min=0.01, max=0.99),
+        verification_level: str = typer.Option(
+            "V0",
+            "--verification-level",
+            help="Frozen IntegrationGate verification level: V0, V1, V2, or V3.",
+        ),
         hidden_test_dir: Optional[Path] = typer.Option(
             None,
             help="Optional external hidden-test tree to hash into the frozen contract",
@@ -114,6 +120,11 @@ def register_study_commands(benchmark_app: typer.Typer) -> None:
         try:
             if len(manifests) < 2:
                 raise typer.BadParameter("preregistration requires at least two manifests")
+            if verification_level not in VALID_VERIFICATION_LEVELS:
+                allowed = ", ".join(sorted(VALID_VERIFICATION_LEVELS))
+                raise typer.BadParameter(
+                    f"verification_level must be one of {allowed}; got {verification_level!r}"
+                )
             if output.exists():
                 raise typer.BadParameter(
                     f"preregistration output already exists; choose a new path: {output}"
@@ -130,6 +141,7 @@ def register_study_commands(benchmark_app: typer.Typer) -> None:
                 visible_test_cmd=config.visible_test_cmd,
                 hard_project_usd=config.hard_project_usd,
                 hidden_test_dir=hidden_test_dir,
+                verification_level=verification_level,
                 repeats=repeats,
                 bootstrap_samples=bootstrap_samples,
                 ci=ci,
@@ -139,6 +151,7 @@ def register_study_commands(benchmark_app: typer.Typer) -> None:
             console.print(f"preregistration={saved.resolve()}")
             console.print(f"plan_digest={plan.plan_digest}")
             console.print(f"repo_commit={plan.canonical_repo_commit}")
+            console.print(f"verification_level={plan.runtime.verification_level}")
             console.print("comparisons=" + ",".join(plan.planned_comparisons))
             console.print(
                 "[dim]Provider login is not required to preregister. `run-plan` "

@@ -1,0 +1,62 @@
+{
+  "campaign_id": "context-policy-multirepo-v1",
+  "provider_profile": {
+    "name": "builder",
+    "provider": "codex",
+    "model": "gpt-5.3-codex",
+    "role": "implementation",
+    "capabilities": [
+      "implementation",
+      "test",
+      "debug",
+      "refactor"
+    ],
+    "env_allow": [],
+    "command_override": "codex exec --full-auto --model gpt-5.3-codex --config 'model_reasoning_effort=\"high\"' -"
+  },
+  "shared_protocol": {
+    "context_token_budget": 12000,
+    "hard_task_usd": 2.0,
+    "hard_project_usd": 350.0,
+    "visible_test_cmd": [
+      "python",
+      "-m",
+      "pytest",
+      "-q"
+    ],
+    "verification_level": "V1",
+    "repeats": 6,
+    "bootstrap_samples": 2000,
+    "ci": 0.95,
+    "meta_bootstrap_samples": 5000,
+    "meta_ci": 0.95,
+    "meta_random_seed": 42,
+    "exclusions": [
+      "provider outage before the first provider turn",
+      "host failure before the first provider turn"
+    ]
+  },
+  "repositories": {
+    "click": {
+      "study_id": "click-context-policy-v1",
+      "benchmark_id": "context-policy-click-v1",
+      "repo": "pallets/click",
+      "commit": "6aabf099bfdd4c1e75fe8d0e0d4241372b988ab1",
+      "hidden_tree_sha256": "4e9241310067b13e36f9ecce3913dbf0bd936bab6486a42300d032575141a3ef"
+    },
+    "httpx": {
+      "study_id": "httpx-context-policy-v1",
+      "benchmark_id": "context-policy-httpx-v1",
+      "repo": "encode/httpx",
+      "commit": "b5addb64f0161ff6bfe94c124ef76f6a1fba5254",
+      "hidden_tree_sha256": "771e5afa152bcc41676fe173aad7809485eb5cccdcaf312865b2f6dd2a798334"
+    },
+    "python-dotenv": {
+      "study_id": "python-dotenv-context-policy-v1",
+      "benchmark_id": "context-policy-python-dotenv-v1",
+      "repo": "theskumar/python-dotenv",
+      "commit": "a00cb2eed0704cd6d2071b2004c37e95ccc86ee5",
+      "hidden_tree_sha256": "950297bdebad5f5e2560ec8406e6f80ca289e6cc6672a3e9648a814a55284bb7"
+    }
+  }
+}

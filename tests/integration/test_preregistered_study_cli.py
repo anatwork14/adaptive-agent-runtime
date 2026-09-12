@@ -75,10 +75,15 @@ def test_preregister_run_plan_and_export_mock_study(tmp_path) -> None:
             "2",
             "--bootstrap-samples",
             "50",
+            "--verification-level",
+            "V1",
         ],
     )
     assert preregister.exit_code == 0, preregister.output
     assert plan_path.is_file()
+    plan_payload = json.loads(plan_path.read_text(encoding="utf-8"))
+    assert plan_payload["runtime"]["verification_level"] == "V1"
+    assert "verification_level=V1" in preregister.output
 
     results_root = tmp_path / "results"
     runtime_root = tmp_path / "runtime"
