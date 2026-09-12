@@ -1,16 +1,24 @@
+import re
+
 from typer.testing import CliRunner
 
 from cli.bootstrap import app
 
 
 runner = CliRunner()
+_ANSI_ESCAPE = re.compile(r"\x1b\[[0-?]*[ -/]*[@-~]")
+
+
+def _plain_output(text: str) -> str:
+    return _ANSI_ESCAPE.sub("", text)
 
 
 def test_benchmark_help_registers_cross_repository_meta_commands() -> None:
     result = runner.invoke(app, ["benchmark", "--help"])
     assert result.exit_code == 0
-    assert "meta-preregister" in result.output
-    assert "meta" in result.output
+    plain = _plain_output(result.output)
+    assert "meta-preregister" in plain
+    assert "meta" in plain
 
 
 def test_meta_preregister_requires_multiple_repository_plans() -> None:
@@ -25,7 +33,7 @@ def test_meta_preregister_requires_multiple_repository_plans() -> None:
         ],
     )
     assert result.exit_code != 0
-    assert "at least two repository study plans" in result.output
+    assert "at least two repository study plans" in _plain_output(result.output)
 
 
 def test_meta_analysis_requires_multiple_study_directories() -> None:
@@ -39,4 +47,4 @@ def test_meta_analysis_requires_multiple_study_directories() -> None:
         ],
     )
     assert result.exit_code != 0
-    assert "at least two study directories" in result.output
+    assert "at least two study directories" in _plain_output(result.output)
