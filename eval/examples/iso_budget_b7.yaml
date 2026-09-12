@@ -1,5 +1,6 @@
 benchmark_id: arc-context-iso-budget-smoke
 baseline: B7
+execution_mode: sequence
 seed: 7
 agent_profile: mock
 model: null
@@ -8,9 +9,10 @@ context_token_budget: 8000
 hard_task_usd: 1.0
 faults: []
 notes: >-
-  Deterministic smoke manifest. Replace repo_commit and agent_profile for a real
-  provider experiment. Do not compare against another baseline unless
-  validate_comparable_manifests succeeds.
+  Deterministic ordered-sequence smoke manifest. Earlier accepted tasks are part
+  of the repository/memory state seen by later tasks. Replace repo_commit and
+  agent_profile for a real provider experiment. Do not compare against another
+  baseline unless validate_comparable_manifests succeeds.
 tasks:
   - task_id: T001
     goal: Preserve the public parser API while adding one accepted edge case.
