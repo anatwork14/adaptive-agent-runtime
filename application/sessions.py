@@ -132,7 +132,11 @@ class WorkerSessionManager:
                     session.last_summary = str(event.payload.get("content", ""))
             elif event.kind == "session.turn_started":
                 session.status = SessionStatus.RUNNING
-            elif event.kind in {"session.turn_finished", "session.resumed"}:
+            elif event.kind in {
+                "session.turn_finished",
+                "session.turn_cancelled",
+                "session.resumed",
+            }:
                 session.status = SessionStatus.OPEN
                 session.changed_files = list(event.payload.get("changed_files", session.changed_files))
             elif event.kind == "session.needs_input":
@@ -307,7 +311,14 @@ class WorkerSessionManager:
         )
         return self._require(session_id)
 
-    async def send(self, session_id: str, instruction: str) -> WorkerSession:
+    async def send(
+        self,
+        session_id: str,
+        instruction: str,
+        *,
+        turn_id: str | None = None,
+        cancel_event: asyncio.Event | None = None,
+    ) -> WorkerSession:
         session = self._require(session_id)
         if session.status not in self.ACTIVE:
             raise ValueError(f"Session {session_id} is {session.status.value}; it is not interactive")
@@ -317,13 +328,41 @@ class WorkerSessionManager:
         if not workspace.exists():
             raise RuntimeError(f"Session worktree is missing: {workspace}")
 
+        turn_id = turn_id or f"TURN_{uuid.uuid4().hex[:10]}"
+        sequence = 0
+
+        async def record_output(stream: str, content: str) -> None:
+            nonlocal sequence
+            if not content:
+                return
+            sequence += 1
+            self.app.event_store.append(
+                actor=session.agent_name,
+                kind="session.turn_output",
+                project_id=self.app.project_id,
+                task_id=session.task_id,
+                correlation_id=session_id,
+                payload={
+                    "session_id": session_id,
+                    "turn_id": turn_id,
+                    "sequence": sequence,
+                    "stream": stream,
+                    "content": content,
+                },
+            )
+
         self.app.event_store.append(
             actor="operator",
             kind="session.message",
             project_id=self.app.project_id,
             task_id=session.task_id,
             correlation_id=session_id,
-            payload={"session_id": session_id, "role": "user", "content": instruction.strip()},
+            payload={
+                "session_id": session_id,
+                "turn_id": turn_id,
+                "role": "user",
+                "content": instruction.strip(),
+            },
         )
         self.app.event_store.append(
             actor=session.agent_name,
@@ -331,7 +370,7 @@ class WorkerSessionManager:
             project_id=self.app.project_id,
             task_id=session.task_id,
             correlation_id=session_id,
-            payload={"session_id": session_id},
+            payload={"session_id": session_id, "turn_id": turn_id},
         )
 
         packet = self.context_packet(session_id)
@@ -346,20 +385,26 @@ class WorkerSessionManager:
 
         try:
             if profile.provider == "mock":
-                # Deterministic interactive smoke path. This is never selected
-                # as a silent substitute for a configured real provider.
-                target = workspace / ".arc-mock" / f"{session.session_id}.txt"
-                target.parent.mkdir(parents=True, exist_ok=True)
-                with target.open("a", encoding="utf-8") as handle:
-                    handle.write(f"\n# instruction: {instruction.strip()}\n")
-                result = AgentRunResult(
-                    status="completed",
-                    patch_ref="WORKTREE",
-                    summary=f"Mock worker applied instruction: {instruction.strip()}",
-                    memory_references=list(packet.memory_ids),
-                    token_usage={"prompt_tokens": 0, "completion_tokens": 0},
-                    cost_usd=0.0,
-                )
+                if cancel_event is not None and cancel_event.is_set():
+                    result = AgentRunResult(
+                        status="cancelled",
+                        summary="Mock worker turn cancelled before execution",
+                        memory_references=list(packet.memory_ids),
+                    )
+                else:
+                    await record_output("stdout", f"mock: applying {instruction.strip()}\n")
+                    target = workspace / ".arc-mock" / f"{session.session_id}.txt"
+                    target.parent.mkdir(parents=True, exist_ok=True)
+                    with target.open("a", encoding="utf-8") as handle:
+                        handle.write(f"\n# instruction: {instruction.strip()}\n")
+                    result = AgentRunResult(
+                        status="completed",
+                        patch_ref="WORKTREE",
+                        summary=f"Mock worker applied instruction: {instruction.strip()}",
+                        memory_references=list(packet.memory_ids),
+                        token_usage={"prompt_tokens": 0, "completion_tokens": 0},
+                        cost_usd=0.0,
+                    )
             elif isinstance(adapter, SubprocessCodingAgent):
                 transcript = self._require(session_id).messages[-12:]
                 prompt = self._render_turn_prompt(packet, transcript, instruction)
@@ -368,6 +413,8 @@ class WorkerSessionManager:
                     workspace=workspace,
                     budget=budget,
                     memory_references=list(packet.memory_ids),
+                    output_callback=record_output,
+                    cancel_event=cancel_event,
                 )
             else:
                 result = await adapter.run(context=packet, workspace=workspace, budget=budget)
@@ -380,6 +427,37 @@ class WorkerSessionManager:
                 ),
                 task_id=session.task_id,
             )
+
+            changed = self.changed_files(session_id)
+            if result.status == "cancelled":
+                self.app.event_store.append(
+                    actor="operator",
+                    kind="session.turn_cancelled",
+                    project_id=self.app.project_id,
+                    task_id=session.task_id,
+                    correlation_id=session_id,
+                    payload={
+                        "session_id": session_id,
+                        "turn_id": turn_id,
+                        "changed_files": changed,
+                        "summary": result.summary,
+                    },
+                )
+                self.app.event_store.append(
+                    actor="orchestrator",
+                    kind="session.message",
+                    project_id=self.app.project_id,
+                    task_id=session.task_id,
+                    correlation_id=session_id,
+                    payload={
+                        "session_id": session_id,
+                        "turn_id": turn_id,
+                        "role": "system",
+                        "content": result.summary or "Provider turn cancelled by operator.",
+                    },
+                )
+                return self._require(session_id)
+
             if result.status != "completed":
                 raise RuntimeError(f"agent turn ended with status={result.status}: {result.summary}")
 
@@ -390,9 +468,13 @@ class WorkerSessionManager:
                 project_id=self.app.project_id,
                 task_id=session.task_id,
                 correlation_id=session_id,
-                payload={"session_id": session_id, "role": "assistant", "content": summary},
+                payload={
+                    "session_id": session_id,
+                    "turn_id": turn_id,
+                    "role": "assistant",
+                    "content": summary,
+                },
             )
-            changed = self.changed_files(session_id)
             self.app.event_store.append(
                 actor=session.agent_name,
                 kind="session.turn_finished",
@@ -401,10 +483,27 @@ class WorkerSessionManager:
                 correlation_id=session_id,
                 payload={
                     "session_id": session_id,
+                    "turn_id": turn_id,
                     "changed_files": changed,
                     "tool_trace": result.tool_trace,
                 },
             )
+        except asyncio.CancelledError:
+            changed = self.changed_files(session_id)
+            self.app.event_store.append(
+                actor="orchestrator",
+                kind="session.turn_cancelled",
+                project_id=self.app.project_id,
+                task_id=session.task_id,
+                correlation_id=session_id,
+                payload={
+                    "session_id": session_id,
+                    "turn_id": turn_id,
+                    "changed_files": changed,
+                    "summary": "Provider turn cancelled because its supervisor stopped.",
+                },
+            )
+            raise
         except Exception as exc:
             self.app.event_store.append(
                 actor=session.agent_name,
@@ -412,7 +511,7 @@ class WorkerSessionManager:
                 project_id=self.app.project_id,
                 task_id=session.task_id,
                 correlation_id=session_id,
-                payload={"session_id": session_id, "error": str(exc)},
+                payload={"session_id": session_id, "turn_id": turn_id, "error": str(exc)},
             )
             raise
         return self._require(session_id)
