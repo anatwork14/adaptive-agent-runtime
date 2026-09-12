@@ -43,7 +43,7 @@ class BenchmarkManifest(BaseModel):
     seed: int = 0
     agent_profile: str = Field(min_length=1)
     model: str | None = None
-    repo_commit: str = Field(min_length=7)
+    repo_commit: str = Field(min_length=7, max_length=40, pattern=r"^[0-9a-fA-F]+$")
     context_token_budget: int = Field(ge=1)
     hard_task_usd: float | None = Field(default=None, ge=0.0)
     tasks: list[EvaluationTaskSpec] = Field(min_length=1)
