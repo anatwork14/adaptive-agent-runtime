@@ -1,5 +1,6 @@
 """Regression coverage for persistent-worker staleness semantics."""
 
+import sqlite3
 from pathlib import Path
 
 from context.staleness import StalenessDetector
@@ -10,6 +11,7 @@ from state.models import PatchSubmission
 
 def test_own_session_events_do_not_self_invalidate_submission(tmp_path: Path) -> None:
     store = EventStore(tmp_path / "events.db")
+    memory_conn = sqlite3.connect(":memory:")
     try:
         store.append(actor="orchestrator", kind="project.created", project_id="demo", payload={})
         dispatch_v = store.current_version("demo")
@@ -37,7 +39,7 @@ def test_own_session_events_do_not_self_invalidate_submission(tmp_path: Path) ->
             correlation_id="S_test",
             payload={"session_id": "S_test"},
         )
-        detector = StalenessDetector(store, MemoryLifecycle(store))
+        detector = StalenessDetector(store, MemoryLifecycle(memory_conn, event_store=store))
         submission = PatchSubmission(
             patch_id="P1",
             task_id="T001",
@@ -63,4 +65,5 @@ def test_own_session_events_do_not_self_invalidate_submission(tmp_path: Path) ->
         assert assessment.relevant_delta_events == 0
         assert not assessment.is_stale
     finally:
+        memory_conn.close()
         store.close()
