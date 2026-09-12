@@ -40,6 +40,14 @@ The machine-readable source of truth is `campaign_contract.json`. The canonical 
 
 Each repository contains three ordered maintenance tasks. T002 depends on T001 and T003 depends on T002. Later work intentionally reuses an abstraction or policy introduced earlier. This makes context continuity scientifically relevant instead of turning the benchmark into a collection of unrelated one-shot patches.
 
+### Treatment separation
+
+Successful subprocess coding-agent runs primarily contribute durable `TASK_SUMMARY` episodic memory. In a three-task sequence, a fixed B5 `top_k=5` policy can therefore retain essentially all prior successful summaries. Without an additional provenance rule, B7's lexical/vector fallback could retrieve the same small history and collapse the B5-vs-B7 treatment contrast.
+
+The frozen B7 treatment is therefore dependency-aware for episodic history: when a task declares dependencies, `TASK_SUMMARY` and `EPISODE` memories from declared predecessor tasks remain eligible through dependency-linked retrieval, while unrelated episodic history is excluded from generic lexical/vector expansion. Root tasks with no declared dependencies retain generic semantic episode fallback, and non-episodic memory classes retain their existing retrieval behavior.
+
+B5 remains the unchanged naive vector top-k baseline. For example, T003 may receive T001 and T002 summaries under B5, whereas B7 scopes successful episodic history to its declared predecessor T002. This treatment distinction is frozen before any provider execution; it is not selected after observing benchmark outcomes.
+
 ### Click
 
 1. Add opt-in sensitive metadata to parameters without changing normal parsing/help behavior.

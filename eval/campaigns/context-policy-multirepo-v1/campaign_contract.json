@@ -36,6 +36,26 @@
       "host failure before the first provider turn"
     ]
   },
+  "treatments": {
+    "B3": {
+      "memory_policy": "static_no_memory"
+    },
+    "B5": {
+      "memory_policy": "naive_vector_topk",
+      "top_k": 5,
+      "validity_enforced": false
+    },
+    "B7": {
+      "memory_policy": "provenance_aware_adaptive",
+      "validity_enforced": true,
+      "episodic_dependency_scope": "When dependencies are declared, TASK_SUMMARY and EPISODE memories must match a declared dependency to remain eligible for generic lexical/vector expansion; explicit dependency-linked retrieval remains eligible.",
+      "root_task_generic_episode_fallback": true
+    }
+  },
+  "identification": {
+    "progressive_sequence": "T001 -> T002 -> T003",
+    "b5_vs_b7": "On T003, B5 may retrieve broader prior episodic history such as T001 plus T002, while B7 scopes episodic history to the declared predecessor T002. This treatment distinction is frozen before provider execution."
+  },
   "repositories": {
     "click": {
       "study_id": "click-context-policy-v1",

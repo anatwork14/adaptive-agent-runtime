@@ -53,6 +53,17 @@ def test_campaign_freeze_contract_matches_manifests() -> None:
     assert "model_reasoning_effort=\"high\"" in argv
     assert argv[-1] == "-"
 
+    treatments = contract["treatments"]
+    assert treatments["B3"]["memory_policy"] == "static_no_memory"
+    assert treatments["B5"]["memory_policy"] == "naive_vector_topk"
+    assert treatments["B5"]["top_k"] == 5
+    assert treatments["B5"]["validity_enforced"] is False
+    assert treatments["B7"]["memory_policy"] == "provenance_aware_adaptive"
+    assert treatments["B7"]["validity_enforced"] is True
+    assert treatments["B7"]["root_task_generic_episode_fallback"] is True
+    assert "declared dependency" in treatments["B7"]["episodic_dependency_scope"]
+    assert "before provider execution" in contract["identification"]["b5_vs_b7"]
+
     for repo_name, (benchmark_id, repo_commit) in EXPECTED.items():
         repo_contract = contract["repositories"][repo_name]
         assert repo_contract["benchmark_id"] == benchmark_id

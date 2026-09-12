@@ -135,3 +135,131 @@ def test_b3_b5_b7_change_only_context_selection_semantics(tmp_path) -> None:
 
     store.close()
     conn.close()
+
+
+
+def test_b7_dependency_scopes_successful_task_summaries_while_b5_keeps_topk_history(
+    tmp_path,
+) -> None:
+    """The empirical progressive sequence must not collapse B5 and B7.
+
+    Real subprocess coding agents currently persist successful task summaries,
+    not structured decision/procedure fields. With only a three-task campaign,
+    naive B5 top-k can therefore contain every prior summary. B7 must use task
+    provenance so a dependent task receives its declared predecessor rather
+    than unrelated older episodic history.
+    """
+    store = EventStore(tmp_path / "separation.db")
+    store.append(actor="orch", kind="project.created", project_id="p1", payload={})
+
+    conn = sqlite3.connect(":memory:")
+    conn.row_factory = sqlite3.Row
+    lifecycle = MemoryLifecycle(conn, event_store=store)
+
+    for memory_id, task_id, text in (
+        ("M_T1", "T001", "introduced the first sensitive parameter contract"),
+        ("M_T2", "T002", "added parameter snapshot using the sensitive contract"),
+    ):
+        lifecycle.save_memory(
+            Memory(
+                memory_id=memory_id,
+                project_id="p1",
+                type=MemoryType.TASK_SUMMARY,
+                representation=MemoryRepresentation.SUMMARY,
+                content_json={"task_id": task_id, "summary": text},
+                content_text=f"Task Summary [{task_id}]: {text}",
+                created_event=1,
+                valid_from_event=1,
+                state_version_at_write=1,
+                status=MemoryStatus.ACTIVE,
+                confidence=1.0,
+                importance=0.70,
+                predicted_reuse=0.60,
+                token_size=24,
+                source_events=[1],
+                tags=["summary", task_id],
+            ),
+            emit_event=True,
+        )
+
+    project = ProjectState(project_id="p1", constraints=["preserve-api"])
+    task = TaskState(
+        task_id="T003",
+        project_id="p1",
+        goal="generalize the sensitive contract while preserving parameter snapshots",
+        dependencies=["T002"],
+        acceptance_criteria=["T001 and T002 behavior remains compatible"],
+        token_budget=12000,
+        risk=0.65,
+    )
+    request = ContextRequest(
+        context_request_id="CR_separation",
+        project_id="p1",
+        task_id=task.task_id,
+        agent_id="mock",
+        state_version=store.current_version("p1"),
+        goal=task.goal,
+        dependencies=["T002"],
+        token_budget=task.token_budget,
+        risk=task.risk,
+    )
+    compiler = ContextCompiler(store)
+
+    b5 = VectorTopKContextPolicy(compiler, lifecycle, top_k=5).build(
+        request=request,
+        project_state=project,
+        task_state=task,
+        active_leases=[],
+    )
+    b7 = RuntimeContextPolicy(MemoryRetriever(lifecycle), compiler).build(
+        request=request,
+        project_state=project,
+        task_state=task,
+        active_leases=[],
+    )
+
+    assert set(b5.packet.memory_ids) == {"M_T1", "M_T2"}
+    assert b7.packet.memory_ids == ["M_T2"]
+    assert [item["text"] for item in b7.packet.episodes] == [
+        "Task Summary [T002]: added parameter snapshot using the sensitive contract"
+    ]
+    assert b5.packet.memory_ids != b7.packet.memory_ids
+
+    store.close()
+    conn.close()
+
+
+
+def test_b7_episode_scope_preserves_root_fallback_and_dependency_matching() -> None:
+    summary = Memory(
+        memory_id="M_T1",
+        project_id="p1",
+        type=MemoryType.TASK_SUMMARY,
+        representation=MemoryRepresentation.SUMMARY,
+        content_json={"task_id": "T001"},
+        content_text="Task Summary [T001]: root history",
+        created_event=1,
+        valid_from_event=1,
+        state_version_at_write=1,
+        status=MemoryStatus.ACTIVE,
+        tags=["summary", "T001"],
+    )
+    root_request = ContextRequest(
+        context_request_id="CR_root",
+        project_id="p1",
+        task_id="T001",
+        agent_id="mock",
+        state_version=1,
+        goal="root task",
+        token_budget=12000,
+    )
+    dependent_request = root_request.model_copy(
+        update={"task_id": "T003", "dependencies": ["T002"]}
+    )
+    matching_request = root_request.model_copy(
+        update={"task_id": "T002", "dependencies": ["T001"]}
+    )
+
+    assert MemoryRetriever._eligible_for_generic_retrieval(summary, root_request)
+    assert not MemoryRetriever._eligible_for_generic_retrieval(summary, dependent_request)
+    assert MemoryRetriever._eligible_for_generic_retrieval(summary, matching_request)
