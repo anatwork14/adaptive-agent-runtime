@@ -207,13 +207,21 @@ class SubprocessCodingAgent:
 
         try:
             if process.stdin is not None:
-                process.stdin.write(prompt.encode("utf-8"))
-                await process.stdin.drain()
-                process.stdin.close()
                 try:
-                    await process.stdin.wait_closed()
-                except (AttributeError, BrokenPipeError, ConnectionResetError):
+                    process.stdin.write(prompt.encode("utf-8"))
+                    await process.stdin.drain()
+                except (BrokenPipeError, ConnectionResetError):
+                    # A provider may reject its invocation or exit before ARC
+                    # finishes writing the prompt. Classification still comes
+                    # from the process return code/stderr below; a closed stdin
+                    # pipe is not itself a reason to abandon process cleanup.
                     pass
+                finally:
+                    process.stdin.close()
+                    try:
+                        await process.stdin.wait_closed()
+                    except (AttributeError, BrokenPipeError, ConnectionResetError):
+                        pass
 
             waiters = {wait_task}
             if cancel_task is not None:
