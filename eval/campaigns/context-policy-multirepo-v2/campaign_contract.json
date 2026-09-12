@@ -148,6 +148,7 @@
         "environment": {"PYTHONPATH": "/workspace"},
         "hidden_command": ["python", "-m", "pytest", "-q", "-p", "no:cacheprovider", "/arc-hidden-tests"],
         "hidden_environment": {"PYTHONPATH": "/workspace"},
+        "tmpfs_exec": false,
         "python_toolchain": "CPython 3.11.16; requirements.txt editable environment",
         "timeout_seconds": 180,
         "qualification_id": "httpx-docker-python311-requirements-resourcewarning-filter-v2"
