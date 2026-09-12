@@ -41,6 +41,7 @@ from eval.runners.repeated import (
     RepeatedPairedBenchmarkResult,
     RepeatedPairedBenchmarkRunner,
     aggregate_repeated_results,
+    balanced_execution_orders,
 )
 from eval.telemetry import TraceTelemetry, collect_trace_telemetry
 
@@ -81,4 +82,5 @@ __all__ = [
     "RepeatedPairedBenchmarkResult",
     "RepeatedPairedBenchmarkRunner",
     "aggregate_repeated_results",
+    "balanced_execution_orders",
 ]
