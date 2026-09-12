@@ -3,8 +3,8 @@
 This is deliberately outside ARC's generic preregistration schema. It closes
 empirical reproducibility gaps in v0.16 without changing historical plan
 digests: profile command overrides, reasoning-effort flags, provider CLI
-version, and the ARC evaluation engine commit are otherwise live operator
-state. The lock stores a digest of the effective argv, never argv itself.
+version, grading-sandbox image identity, and the ARC evaluation engine commit
+are otherwise live operator state. Raw provider argv is never persisted.
 """
 
 from __future__ import annotations
@@ -12,6 +12,8 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import os
+import shutil
 import subprocess
 from datetime import datetime, timezone
 from pathlib import Path
@@ -20,7 +22,7 @@ from typing import Any
 from application.agents import build_agent
 from application.config import ConfigStore
 
-SCHEMA = "arc-empirical-runtime-lock-v4"
+SCHEMA = "arc-empirical-runtime-lock-v5"
 DEFAULT_ARC_REPO = Path(__file__).resolve().parents[3]
 
 
@@ -66,6 +68,40 @@ def _provider_cli_version(argv: list[str]) -> str:
     if not version:
         raise SystemExit("provider CLI returned an empty version string")
     return version[0].strip()
+
+
+def _sandbox_runtime() -> dict[str, str]:
+    image = os.environ.get("ARC_SANDBOX_IMAGE", "arc-runner:latest")
+    docker = shutil.which("docker")
+    if docker is None:
+        raise SystemExit("docker is not installed; cannot freeze grading sandbox")
+
+    inspect = subprocess.run(
+        [docker, "image", "inspect", image, "--format", "{{.Id}}"],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    if inspect.returncode != 0 or not inspect.stdout.strip():
+        detail = (inspect.stderr or inspect.stdout or "docker image inspect failed").strip()
+        raise SystemExit(f"cannot inspect grading sandbox image {image!r}: {detail}")
+    image_id = inspect.stdout.strip().splitlines()[0]
+
+    version = subprocess.run(
+        [docker, "--version"],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    if version.returncode != 0 or not (version.stdout or version.stderr).strip():
+        detail = (version.stderr or version.stdout or "docker --version failed").strip()
+        raise SystemExit(f"cannot read Docker CLI version: {detail}")
+    docker_version = (version.stdout or version.stderr).strip().splitlines()[0]
+    return {
+        "sandbox_image": image,
+        "sandbox_image_id": image_id,
+        "docker_cli_version": docker_version,
+    }
 
 
 def _git_head(path: Path) -> str:
@@ -121,6 +157,7 @@ def runtime_payload(repo: Path, profile_name: str) -> dict[str, Any]:
         "effective_argv_sha256": _digest_argv(argv),
         "provider_cli_version": _provider_cli_version(argv),
         "env_allow": sorted(set(profile.env_allow)),
+        **_sandbox_runtime(),
     }
 
 
@@ -156,6 +193,9 @@ def freeze(repo: Path, profile: str, output: Path, arc_repo: Path | None) -> Non
     print("arc_worktree_clean=true")
     print(f"effective_argv_sha256={payload['effective_argv_sha256']}")
     print(f"provider_cli_version={payload['provider_cli_version']}")
+    print(f"sandbox_image={payload['sandbox_image']}")
+    print(f"sandbox_image_id={payload['sandbox_image_id']}")
+    print(f"docker_cli_version={payload['docker_cli_version']}")
 
 
 def verify(
@@ -183,6 +223,9 @@ def verify(
         "effective_argv_sha256",
         "provider_cli_version",
         "env_allow",
+        "sandbox_image",
+        "sandbox_image_id",
+        "docker_cli_version",
         "arc_commit",
         "arc_worktree_clean",
     )
