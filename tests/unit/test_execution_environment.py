@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+import json
 import os
+import shlex
 import subprocess
 
 import pytest
@@ -12,6 +14,7 @@ from application.agents import build_agent
 from application.config import AgentProfile
 from runtime.environment import build_execution_environment, redact_command
 from runtime.tmux import TmuxController
+from runtime.tmux_bootstrap import _load_environment
 
 
 def test_provider_environment_excludes_unrelated_host_secrets() -> None:
@@ -85,7 +88,7 @@ def test_command_trace_redacts_obvious_secret_arguments() -> None:
     ) == ["tool", "--api-key=<redacted>", "--token", "<redacted>", "--safe", "value"]
 
 
-def test_tmux_start_uses_clean_environment_boundary(tmp_path, monkeypatch) -> None:
+def test_tmux_start_uses_private_environment_handoff(tmp_path, monkeypatch) -> None:
     controller = TmuxController("tmux")
     calls: list[list[str]] = []
 
@@ -96,16 +99,33 @@ def test_tmux_start_uses_clean_environment_boundary(tmp_path, monkeypatch) -> No
         return subprocess.CompletedProcess(args, 0, stdout="", stderr="")
 
     monkeypatch.setattr(controller, "_run", fake_run)
+    secret = "secret-that-must-not-appear-in-tmux-argv"
     controller.start(
         name="arc-terminal-test",
         cwd=tmp_path,
         command=["python", "-V"],
-        environment={"PATH": "/usr/bin:/bin", "HOME": "/home/arc"},
+        environment={"PATH": "/usr/bin:/bin", "HOME": "/home/arc", "API_KEY": secret},
     )
 
     new_session = next(call for call in calls if call and call[0] == "new-session")
     shell_command = new_session[-1]
-    assert shell_command.startswith("env -i ")
-    assert "HOME=/home/arc" in shell_command
-    assert "PATH=/usr/bin:/bin" in shell_command
-    assert shell_command.endswith("python -V")
+    assert secret not in shell_command
+    assert "API_KEY=" not in shell_command
+    argv = shlex.split(shell_command)
+    assert argv[1:3] == ["-m", "runtime.tmux_bootstrap"]
+    assert "--" in argv
+    handoff = next(arg for arg in argv if arg.startswith("/tmp/arc-runtime-env-"))
+    handoff_path = __import__("pathlib").Path(handoff)
+    assert handoff_path.exists()
+    assert handoff_path.stat().st_mode & 0o777 == 0o600
+    payload = json.loads(handoff_path.read_text(encoding="utf-8"))
+    assert payload["API_KEY"] == secret
+    handoff_path.unlink()
+
+
+def test_tmux_bootstrap_deletes_handoff_after_read(tmp_path) -> None:
+    handoff = tmp_path / "env.json"
+    handoff.write_text(json.dumps({"PATH": "/usr/bin", "TOKEN": "secret"}), encoding="utf-8")
+    environment = _load_environment(handoff)
+    assert environment == {"PATH": "/usr/bin", "TOKEN": "secret"}
+    assert not handoff.exists()
