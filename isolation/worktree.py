@@ -90,15 +90,60 @@ class WorktreeManager:
         logger.info("Created worktree at %s on branch %s", worktree_path, branch_name)
         return worktree_path
 
+    def _squash_candidate(
+        self,
+        *,
+        worktree_path: Path,
+        integration_head: str,
+        message: str,
+    ) -> str:
+        """Create an unattached one-commit representation of a reviewed branch.
+
+        Pull-request supervision may leave several commits on a worker branch.
+        ARC's integration gate intentionally accepts exactly one immutable commit.
+        Rather than rewriting/force-pushing the public review branch, build a
+        synthetic commit whose tree is the worker's current HEAD and whose parent
+        is the branch/integration merge-base. Cherry-picking that single commit
+        therefore applies the complete reviewed branch delta.
+        """
+        merge_base = self._run_git(
+            ["merge-base", "HEAD", integration_head],
+            cwd=worktree_path,
+        ).stdout.strip()
+        if not merge_base:
+            raise WorktreeError("cannot determine worker/integration merge-base")
+        tree_sha = self._run_git(
+            ["rev-parse", "HEAD^{tree}"],
+            cwd=worktree_path,
+        ).stdout.strip()
+        result = self._run_git(
+            [
+                "-c",
+                "user.name=ARC Agent",
+                "-c",
+                "user.email=arc@local",
+                "commit-tree",
+                tree_sha,
+                "-p",
+                merge_base,
+                "-m",
+                message,
+            ],
+            cwd=worktree_path,
+        )
+        candidate_sha = result.stdout.strip()
+        if not candidate_sha:
+            raise WorktreeError("git commit-tree did not produce a candidate commit")
+        return candidate_sha
+
     def commit_candidate(self, task_id: str, message: str) -> str:
         """Freeze the worker's exact candidate commit.
 
-        Normal workers leave an uncommitted draft, which ARC stages and commits.
-        Interactive/review workers may already have committed their draft (for
-        example before pushing a PR). In that case ARC accepts the current HEAD
-        only when it contains commits that are not reachable from the current
-        integration HEAD. A clean branch with no worker-authored commit still
-        fails closed as a no-op.
+        Normal one-shot workers still produce a regular branch commit. Persistent
+        review workers can accumulate multiple commits as CI/review feedback is
+        fixed and pushed. For those branches ARC synthesizes an immutable squash
+        candidate without moving or rewriting the published branch, preserving
+        both review history and the gate's one-candidate correctness contract.
         """
         worktree_path = self.worktree_root / task_id
         if not worktree_path.exists():
@@ -106,32 +151,42 @@ class WorktreeManager:
 
         self._run_git(["add", "-A"], cwd=worktree_path)
         staged = self._run_git(["diff", "--cached", "--quiet"], cwd=worktree_path, check=False)
-        if staged.returncode == 0:
-            integration_head = self._run_git(["rev-parse", "HEAD"]).stdout.strip()
-            ahead = self._run_git(
-                ["rev-list", "--count", "HEAD", "--not", integration_head],
-                cwd=worktree_path,
-                check=False,
-            )
-            if ahead.returncode == 0 and int((ahead.stdout or "0").strip() or "0") > 0:
-                return self._run_git(["rev-parse", "HEAD"], cwd=worktree_path).stdout.strip()
-            raise WorktreeError(f"task {task_id} produced no repository changes")
         if staged.returncode not in (0, 1):
             raise WorktreeError(f"cannot inspect staged changes for task {task_id}")
+        if staged.returncode == 1:
+            self._run_git(
+                [
+                    "-c",
+                    "user.name=ARC Agent",
+                    "-c",
+                    "user.email=arc@local",
+                    "commit",
+                    "-m",
+                    message,
+                ],
+                cwd=worktree_path,
+            )
 
-        self._run_git(
-            [
-                "-c",
-                "user.name=ARC Agent",
-                "-c",
-                "user.email=arc@local",
-                "commit",
-                "-m",
-                message,
-            ],
+        integration_head = self._run_git(["rev-parse", "HEAD"]).stdout.strip()
+        ahead = self._run_git(
+            ["rev-list", "--count", "HEAD", "--not", integration_head],
             cwd=worktree_path,
+            check=False,
         )
-        return self._run_git(["rev-parse", "HEAD"], cwd=worktree_path).stdout.strip()
+        if ahead.returncode != 0:
+            raise WorktreeError(f"cannot compare task {task_id} against integration HEAD")
+        ahead_count = int((ahead.stdout or "0").strip() or "0")
+        if ahead_count <= 0:
+            raise WorktreeError(f"task {task_id} produced no repository changes")
+
+        branch_head = self._run_git(["rev-parse", "HEAD"], cwd=worktree_path).stdout.strip()
+        if ahead_count == 1:
+            return branch_head
+        return self._squash_candidate(
+            worktree_path=worktree_path,
+            integration_head=integration_head,
+            message=message,
+        )
 
     def get_commit_diff(self, commit_sha: str) -> str:
         return self._run_git(["show", "--format=", "--binary", commit_sha]).stdout
