@@ -148,6 +148,12 @@ def _load_freeze_bundle(
     if meta.random_seed != int(protocol["meta_random_seed"]):
         raise SystemExit("meta random seed drifted from public campaign contract")
 
+    expected_benchmarks = {
+        contract["repositories"][slug]["benchmark_id"] for slug in REPOSITORY_ORDER
+    }
+    if {item.benchmark_id for item in meta.repositories} != expected_benchmarks:
+        raise SystemExit("meta plan repository set does not match the public campaign contract")
+
     refs = {item.benchmark_id: item for item in meta.repositories}
     plans: dict[str, Any] = {}
     frozen_repositories = freeze_manifest.get("repository_plans", {})
@@ -188,12 +194,50 @@ def _load_freeze_bundle(
 
 
 def _study_dir(output_root: Path, plan: Any, attempt_id: str) -> Path:
-    return (
-        output_root
-        / plan.benchmark_id
-        / "studies"
-        / f"{plan.study_id}-{attempt_id}"
+    return output_root / plan.benchmark_id / "studies" / f"{plan.study_id}-{attempt_id}"
+
+
+def _validate_live_repository(
+    repo: Path,
+    plan: Any,
+    *,
+    hidden_dir: Path,
+    runtime_lock_path: Path,
+) -> dict[str, Any]:
+    base_report = _validate_repo(repo, plan.canonical_repo_commit)
+    actual_hidden_digest = tree_digest(hidden_dir)
+    if actual_hidden_digest != plan.runtime.hidden_tests_digest:
+        raise SystemExit(
+            f"hidden-test tree drift for {plan.benchmark_id}: "
+            f"planned={plan.runtime.hidden_tests_digest}, actual={actual_hidden_digest}"
+        )
+
+    config = ConfigStore(repo).load()
+    profile = config.agents.get(plan.runtime.agent_profile)
+    if profile is None:
+        raise SystemExit(
+            f"preregistered profile {plan.runtime.agent_profile!r} is not configured in {repo}"
+        )
+    verify_runtime_lock(repo, profile.name, runtime_lock_path, ARC_REPO_ROOT)
+    validate_execution_environment(
+        plan,
+        repo,
+        provider=profile.provider,
+        model=profile.model,
+        profile_role=profile.role,
+        profile_capabilities=profile.capabilities,
+        visible_test_cmd=config.visible_test_cmd,
+        hard_project_usd=config.hard_project_usd,
+        hidden_test_dir=hidden_dir,
+        verification_level=plan.runtime.verification_level,
     )
+    return {
+        **base_report,
+        "hidden_tests_digest": actual_hidden_digest,
+        "profile": profile.name,
+        "provider": profile.provider,
+        "model": profile.model,
+    }
 
 
 def _run_logged(args: list[str], *, log_path: Path) -> None:
@@ -238,6 +282,8 @@ def preflight_campaign(
     protected = [ARC_REPO_ROOT.resolve(), *resolved_repos.values()]
     results_root = _require_external(results_root, protected, label="results-root")
     workspace_root = _require_external(workspace_root, protected, label="workspace-root")
+    if results_root == workspace_root:
+        raise SystemExit("results-root and workspace-root must be distinct directories")
 
     execution_root = results_root / contract["campaign_id"] / attempt_id
     execution_workspace = workspace_root / contract["campaign_id"] / attempt_id
@@ -256,45 +302,22 @@ def preflight_campaign(
     for slug in REPOSITORY_ORDER:
         plan = plans[slug]
         repo = resolved_repos[slug]
-        base_report = _validate_repo(repo, plan.canonical_repo_commit)
-        hidden_dir = hidden_root / slug
-        actual_hidden_digest = tree_digest(hidden_dir)
-        if actual_hidden_digest != plan.runtime.hidden_tests_digest:
-            raise SystemExit(
-                f"hidden-test tree drift for {slug}: planned={plan.runtime.hidden_tests_digest}, actual={actual_hidden_digest}"
-            )
-
-        config = ConfigStore(repo).load()
-        profile = config.agents.get(plan.runtime.agent_profile)
-        if profile is None:
-            raise SystemExit(
-                f"preregistered profile {plan.runtime.agent_profile!r} is not configured in {repo}"
-            )
-        verify_runtime_lock(repo, profile.name, runtime_lock_path, ARC_REPO_ROOT)
-        validate_execution_environment(
-            plan,
+        live = _validate_live_repository(
             repo,
-            provider=profile.provider,
-            model=profile.model,
-            profile_role=profile.role,
-            profile_capabilities=profile.capabilities,
-            visible_test_cmd=config.visible_test_cmd,
-            hard_project_usd=config.hard_project_usd,
-            hidden_test_dir=hidden_dir,
-            verification_level=plan.runtime.verification_level,
+            plan,
+            hidden_dir=hidden_root / slug,
+            runtime_lock_path=runtime_lock_path,
         )
-
         repo_output_root = execution_root / "repositories" / slug
         repo_workspace_root = execution_workspace / slug
         expected_study = _study_dir(repo_output_root, plan, attempt_id)
         if expected_study.exists():
             raise SystemExit(f"study output already exists for {slug}: {expected_study}")
         repository_report[slug] = {
-            **base_report,
+            **live,
             "study_id": plan.study_id,
             "benchmark_id": plan.benchmark_id,
             "plan_digest": plan.plan_digest,
-            "hidden_tests_digest": actual_hidden_digest,
             "output_root": str(repo_output_root),
             "workspace_root": str(repo_workspace_root),
             "expected_study_dir": str(expected_study),
@@ -368,6 +391,7 @@ def execute_campaign(
         "completed_at_utc": None,
         "status": "RUNNING",
         "provider_execution_started": False,
+        "provider_execution_started_at_utc": None,
         "freeze_manifest_sha256": report["freeze_manifest_sha256"],
         "runtime_lock_digest": report["runtime_lock_digest"],
         "meta_plan_digest": meta.plan_digest,
@@ -379,6 +403,8 @@ def execute_campaign(
             slug: {
                 "status": "PENDING",
                 "plan_digest": plans[slug].plan_digest,
+                "live_revalidated_at_utc": None,
+                "provider_auth_state_before_run": None,
                 "started_at_utc": None,
                 "completed_at_utc": None,
                 "study_dir": None,
@@ -403,16 +429,37 @@ def execute_campaign(
     _atomic_json(ledger_path, ledger)
 
     study_dirs: list[Path] = []
+    runtime_lock_path = freeze_dir.resolve() / freeze_manifest["runtime_lock"]
+    provider = contract["provider_profile"]["provider"]
     try:
-        ledger["provider_execution_started"] = True
-        _atomic_json(ledger_path, ledger)
         for slug in REPOSITORY_ORDER:
             plan = plans[slug]
             repo_state = ledger["repositories"][slug]
+
+            # Revalidate immediately before each expensive repository study. A long
+            # campaign must not assume the machine remained unchanged since the
+            # campaign-level preflight.
+            _validate_live_repository(
+                repos[slug].resolve(),
+                plan,
+                hidden_dir=hidden_root.resolve() / slug,
+                runtime_lock_path=runtime_lock_path,
+            )
+            auth = auth_status(provider)
+            repo_state["live_revalidated_at_utc"] = _now()
+            repo_state["provider_auth_state_before_run"] = auth.state
+            if not (auth.installed and auth.authenticated):
+                raise RuntimeError(
+                    f"provider authentication drift before {slug}: state={auth.state}, detail={auth.detail}"
+                )
+
             repo_state["status"] = "RUNNING"
             repo_state["started_at_utc"] = _now()
             log_path = logs_root / f"{slug}-run-plan.log"
             repo_state["log"] = str(log_path)
+            if not ledger["provider_execution_started"]:
+                ledger["provider_execution_started"] = True
+                ledger["provider_execution_started_at_utc"] = _now()
             _atomic_json(ledger_path, ledger)
 
             repo_output_root = execution_root / "repositories" / slug
@@ -537,7 +584,10 @@ def main() -> None:
     parser.add_argument(
         "--execute",
         action="store_true",
-        help="Start authenticated provider inference after a successful preflight. Without this flag the command is read-only.",
+        help=(
+            "Start authenticated provider inference after a successful preflight. "
+            "Without this flag the command is read-only."
+        ),
     )
     args = parser.parse_args()
     repos = {
