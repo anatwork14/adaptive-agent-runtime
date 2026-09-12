@@ -192,7 +192,7 @@ arc route T001
 arc route T001 --policy quality
 ```
 
-The built-in mock adapter is automatic fallback only when no eligible real READY coding-agent profile can satisfy the task.
+The built-in mock adapter is an automatic route only when no capable real executor profile is configured for the task. If a capable real provider is configured but is `AUTH_REQUIRED`, `MISSING`, saturated, or otherwise unavailable, routing fails closed and the task is deferred rather than being silently replaced by mock. Explicit `arc run TASK --agent mock` remains available for intentional smoke testing.
 
 ## Task lifecycle
 
