@@ -1,0 +1,1 @@
+ARC 0.8 branch freeze marker. Exact merge candidate begins at the commit containing this file; no implementation changes should follow without re-running the full branch and PR gates.

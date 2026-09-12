@@ -1,4 +1,4 @@
-"""Installed ARC product surface for interactive supervision and review loops."""
+"""Installed ARC product surface for interactive supervision, reviews, and live runtimes."""
 
 from __future__ import annotations
 
@@ -37,6 +37,21 @@ def _review_panel(status) -> Panel:
     )
     border = "green" if status.healthy else "yellow" if status.linked else "dim"
     return Panel(body, title=f"GitHub review // {status.session_id}", border_style=border)
+
+
+def _runtime_panel(state) -> Panel:
+    body = (
+        f"backend={state.backend}\n"
+        f"runtime={state.runtime_name}\n"
+        f"running={state.running}  ready={state.ready}\n"
+        f"workspace={state.workspace}\n"
+    )
+    if state.url:
+        body += f"url={state.url}\n"
+    if state.command:
+        body += "command=" + " ".join(state.command)
+    color = "green" if state.ready else "yellow" if state.running else "dim"
+    return Panel(body.rstrip(), title=f"{state.kind} // {state.session_id}", border_style=color)
 
 
 @app.command("ui")
@@ -179,6 +194,137 @@ def supervise_reviews(
             arc.close()
     except typer.BadParameter:
         raise
+    except Exception as exc:
+        raise typer.BadParameter(str(exc)) from exc
+
+
+@app.command("terminal")
+def persistent_terminal(
+    session_id: str = typer.Argument(..., help="Worker session to attach in persistent tmux mode"),
+    start_only: bool = typer.Option(
+        False,
+        "--start-only/--attach",
+        help="Start persistent provider terminal without attaching the current shell",
+    ),
+    repo: Path = typer.Option(Path(".")),
+    project_id: Optional[str] = typer.Option(None),
+) -> None:
+    """Start or reattach a provider terminal that survives the invoking ARC process."""
+    arc = _open(repo, project_id)
+    try:
+        doctor = arc.worker_runtime.doctor()
+        if doctor["status"] != "READY":
+            raise typer.BadParameter(f"Persistent runtime is {doctor['status']}: {doctor['detail']}")
+        state = arc.worker_runtime.start_terminal(session_id)
+        console.print(_runtime_panel(state))
+        if start_only:
+            console.print(
+                f"[dim]Reattach later with: arc terminal {session_id}[/dim]"
+            )
+            return
+        code = arc.worker_runtime.attach_terminal(session_id)
+        if code != 0:
+            console.print(f"[yellow]tmux attach exited with code {code}[/yellow]")
+    except typer.BadParameter:
+        raise
+    except Exception as exc:
+        raise typer.BadParameter(str(exc)) from exc
+    finally:
+        arc.close()
+
+
+@session_app.command("terminal-status")
+def terminal_status(
+    session_id: str,
+    repo: Path = typer.Option(Path(".")),
+    project_id: Optional[str] = typer.Option(None),
+) -> None:
+    """Inspect persistent provider-terminal state and recent terminal output."""
+    try:
+        with _open(repo, project_id) as arc:
+            state = arc.worker_runtime.status(session_id, "terminal")
+            console.print(_runtime_panel(state))
+            if state.log_tail:
+                console.print(Panel(state.log_tail[-12000:], title="Terminal tail", border_style="dim"))
+    except Exception as exc:
+        raise typer.BadParameter(str(exc)) from exc
+
+
+@session_app.command("terminal-stop")
+def terminal_stop(
+    session_id: str,
+    repo: Path = typer.Option(Path(".")),
+    project_id: Optional[str] = typer.Option(None),
+) -> None:
+    """Stop the tmux-owned provider terminal for a worker."""
+    try:
+        with _open(repo, project_id) as arc:
+            console.print(_runtime_panel(arc.worker_runtime.stop_terminal(session_id)))
+    except Exception as exc:
+        raise typer.BadParameter(str(exc)) from exc
+
+
+@session_app.command("preview-start")
+def preview_start(
+    session_id: str,
+    command: str = typer.Option(
+        ...,
+        help="Command template containing {host} and {port}, e.g. 'npm run dev -- --host {host} --port {port}'",
+    ),
+    port: int = typer.Option(..., min=1, max=65535),
+    host: str = typer.Option("127.0.0.1", help="Loopback host used by the preview server"),
+    repo: Path = typer.Option(Path(".")),
+    project_id: Optional[str] = typer.Option(None),
+) -> None:
+    """Start a persistent localhost preview process inside the worker worktree."""
+    try:
+        with _open(repo, project_id) as arc:
+            doctor = arc.worker_runtime.doctor()
+            if doctor["status"] != "READY":
+                raise typer.BadParameter(
+                    f"Persistent runtime is {doctor['status']}: {doctor['detail']}"
+                )
+            state = arc.worker_runtime.start_preview(
+                session_id,
+                command_template=command,
+                port=port,
+                host=host,
+            )
+            console.print(_runtime_panel(state))
+            console.print("[dim]The process is tmux-owned and survives this ARC CLI process exiting.[/dim]")
+    except typer.BadParameter:
+        raise
+    except Exception as exc:
+        raise typer.BadParameter(str(exc)) from exc
+
+
+@session_app.command("preview-status")
+def preview_status(
+    session_id: str,
+    repo: Path = typer.Option(Path(".")),
+    project_id: Optional[str] = typer.Option(None),
+) -> None:
+    """Inspect worker preview liveness/readiness and recent server output."""
+    try:
+        with _open(repo, project_id) as arc:
+            state = arc.worker_runtime.status(session_id, "preview")
+            console.print(_runtime_panel(state))
+            if state.log_tail:
+                console.print(Panel(state.log_tail[-12000:], title="Preview log tail", border_style="dim"))
+    except Exception as exc:
+        raise typer.BadParameter(str(exc)) from exc
+
+
+@session_app.command("preview-stop")
+def preview_stop(
+    session_id: str,
+    repo: Path = typer.Option(Path(".")),
+    project_id: Optional[str] = typer.Option(None),
+) -> None:
+    """Stop the persistent worker preview process."""
+    try:
+        with _open(repo, project_id) as arc:
+            console.print(_runtime_panel(arc.worker_runtime.stop_preview(session_id)))
     except Exception as exc:
         raise typer.BadParameter(str(exc)) from exc
 

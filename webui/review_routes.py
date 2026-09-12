@@ -1,4 +1,4 @@
-"""FastAPI routes for ARC's external GitHub review loop."""
+"""FastAPI routes for ARC's external GitHub review loop and live worker runtimes."""
 
 from __future__ import annotations
 
@@ -6,6 +6,8 @@ from typing import Any
 
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel, Field
+
+from webui.runtime_routes import register_runtime_routes
 
 
 class PublishReviewRequest(BaseModel):
@@ -23,7 +25,7 @@ class SuperviseReviewRequest(BaseModel):
 
 
 def register_review_routes(app: FastAPI, service: Any) -> None:
-    """Attach review endpoints to an ARC Workspace app.
+    """Attach external review plus worker-runtime endpoints to ARC Workspace.
 
     `service` is intentionally duck-typed to avoid coupling this module to the
     workspace server implementation. It must expose `open()` and `session_locks`.
@@ -105,3 +107,7 @@ def register_review_routes(app: FastAPI, service: Any) -> None:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
         finally:
             arc.close()
+
+    # ARC Workspace mounts all non-authoritative external/runtime projections
+    # together. Tasks/events/Git candidates/gate outcomes remain authoritative.
+    register_runtime_routes(app, service)

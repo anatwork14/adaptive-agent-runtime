@@ -1,18 +1,32 @@
 # ARC Interactive Workspace
 
-ARC 0.7 exposes three layers above the same authoritative runtime:
+ARC 0.8 exposes four coordinated surfaces above the same authoritative runtime:
 
 ```text
 arc            → conversation-first terminal supervisor
 arc ui         → session-centric browser workspace
 arc supervise  → GitHub PR / CI / review supervisor
+arc terminal   → tmux-backed persistent provider PTY
 ```
 
-All three operate on the same task DAG, event log, provider profiles, ContextPackets, isolated Git worktrees, budgets, leases, and integration gate.
+All operate on the same task DAG, event log, provider profiles, ContextPackets, isolated Git worktrees, budgets, leases, and integration gate.
 
 ## Product model
 
-ARC keeps **Task**, **WorkerSession**, and external **ReviewStatus** separate.
+ARC keeps authoritative work separate from operational projections.
+
+```text
+AUTHORITATIVE / CORRECTNESS                  OPERATIONAL / REBUILDABLE
+Task DAG                                     WorkerSession conversation
+ARC event log                                GitHub ReviewStatus projection
+Git candidate                                tmux runtime liveness
+IntegrationGate outcome                      preview readiness/output
+Git repository state                         derived memory/context indexes
+```
+
+A green PR, live preview, running terminal, or successful agent turn does not complete a task. Integration still requires the normal ARC gate.
+
+## Task and WorkerSession
 
 A task is authoritative work:
 
@@ -26,7 +40,7 @@ Task
 └── lifecycle state
 ```
 
-A worker session is the persistent supervised draft environment for one task:
+A worker session is the supervised draft environment for one task:
 
 ```text
 WorkerSession
@@ -35,30 +49,13 @@ WorkerSession
 ├── immutable initial ContextPacket
 ├── isolated worktree + branch
 ├── conversation turns
-├── changed files
-├── current draft diff
-├── terminal handoff state
+├── changed files + draft diff
+├── optional GitHub review projection
+├── optional live terminal / preview runtimes
 └── submit/gate result
 ```
 
-GitHub review state is an external projection:
-
-```text
-ReviewStatus
-├── PR number + URL
-├── check states
-├── review decision
-├── inline/general review feedback
-├── snapshot digest
-├── actionable-feedback digest
-└── applied-feedback digest
-```
-
-The task remains authoritative. A conversation, pull request, green GitHub check, or approval does not make ARC work complete. Only a candidate that passes ARC's integration gate becomes integrated project state.
-
 ## Start the interactive CLI
-
-After initializing the repository and signing into provider CLIs:
 
 ```bash
 arc init .
@@ -66,15 +63,15 @@ arc login
 arc
 ```
 
-Plain text at project scope is treated as an objective:
+At project scope, plain text becomes an objective:
 
 ```text
 > add passwordless authentication, tests, and docs
 ```
 
-ARC uses the current planner baseline to materialize tasks and reports likely routes. You can then run the fleet or take direct control of one worker.
+ARC materializes tasks and reports routes. You can execute the READY fleet or open a persistent worker directly.
 
-Useful commands:
+Useful controls:
 
 ```text
 /help
@@ -86,13 +83,13 @@ Useful commands:
 /run
 ```
 
-Once a worker is focused, ordinary text becomes the worker's next instruction:
+With a focused worker, ordinary text becomes the next instruction:
 
 ```text
 > keep the public API backward compatible and add tests for expired tokens
 ```
 
-Inspect before integration:
+Inspect its draft:
 
 ```text
 /files
@@ -103,27 +100,19 @@ Inspect before integration:
 
 ARC delegates GitHub authentication to the existing `gh` CLI. It does not copy or persist GitHub tokens.
 
-Check the integration first:
-
-```bash
-gh auth status
-```
-
-From the focused interactive worker:
+Publish the focused worker:
 
 ```text
 /publish
 ```
 
-or script it directly:
+or:
 
 ```bash
 arc session publish S_12345678
 ```
 
-ARC commits the current draft if necessary, pushes the worker branch, and creates a pull request. Later calls push updates to the same PR.
-
-Synchronize checks and reviews:
+Synchronize GitHub checks/reviews:
 
 ```text
 /review
@@ -135,9 +124,7 @@ or:
 arc session review S_12345678
 ```
 
-When GitHub reports a failing check or requested review change, ARC records normalized external state in its own event stream. Actionable feedback is visible in the same worker session.
-
-Apply the latest new feedback to the owning worker:
+Apply the latest new actionable feedback to the same worker:
 
 ```text
 /fix-review
@@ -149,30 +136,17 @@ or:
 arc session review S_12345678 --apply
 ```
 
-For ongoing synchronization:
+Supervise all linked workers:
 
 ```bash
 arc supervise
-```
-
-To automatically route new actionable feedback into linked workers:
-
-```bash
 arc supervise --auto-apply
-```
-
-Run one synchronization pass for scripts/cron/systemd:
-
-```bash
-arc supervise --once
 arc supervise --once --auto-apply
 ```
 
-The supervisor only acts on PR-linked active worker sessions.
+GitHub remains a non-authoritative review surface. ARC records normalized review state as replayable events and uses separate snapshot/feedback digests so unrelated check-state churn cannot resend identical reviewer instructions.
 
 ### Review events
-
-GitHub remains non-authoritative. ARC records the external projection as events:
 
 ```text
 session.pr_published
@@ -184,22 +158,17 @@ session.review_feedback_cleared
 session.review_sync_failed
 ```
 
-Snapshot state and actionable feedback use separate digests. This prevents the same reviewer instruction from being sent back to an agent merely because an unrelated check/merge state changed.
-
 ## Exact candidate after PR iteration
 
-A PR-backed worker may accumulate several commits:
+A reviewed worker may accumulate several public commits:
 
 ```text
-worker branch
-  A  initial implementation
-  B  CI fix
-  C  reviewer-requested fix
+A initial implementation
+B CI fix
+C requested-change fix
 ```
 
-ARC's integration gate deliberately verifies exactly one immutable candidate. ARC therefore does **not** force-squash or rewrite the public review branch.
-
-At submit time, when the worker branch contains multiple unique commits, ARC creates an unattached synthetic squash candidate:
+ARC does not rewrite that public review history. At submit time, a multi-commit worker branch is represented by an unattached synthetic candidate whose tree equals current worker HEAD and whose parent is the worker/integration merge-base.
 
 ```text
 review branch A-B-C  ──tree──► synthetic candidate S
@@ -207,13 +176,9 @@ review branch A-B-C  ──tree──► synthetic candidate S
                                   tree   = current worker HEAD
 ```
 
-`S` represents the complete worker branch delta in one immutable commit. The gate cherry-picks and verifies `S`; the published PR history remains untouched.
-
-A clean branch with no worker-authored commits still fails closed as a no-op.
+The IntegrationGate validates and integrates `S`, preserving the one-candidate correctness boundary. A true no-op still fails closed.
 
 ## Scriptable worker lifecycle
-
-The same operations are available without the interactive shell:
 
 ```bash
 arc session open T001 --agent builder
@@ -223,39 +188,95 @@ arc session send S_12345678 "add the edge-case tests"
 arc session files S_12345678
 arc session diff S_12345678
 arc session publish S_12345678
-arc session review S_12345678
 arc session review S_12345678 --apply
 arc session submit S_12345678
 ```
 
-If ARC itself is restarted, the worker state is reconstructed from authoritative events and the draft worktree remains on disk:
+If ARC itself restarts, the worker is reconstructed from events while its isolated worktree remains on disk:
 
 ```bash
 arc session resume S_12345678
 ```
 
-A stopped worker discards its draft workspace and returns an unfinished dispatched task to the READY frontier:
+Explicit stop discards the draft worktree and returns unfinished dispatched work to the scheduler:
 
 ```bash
 arc session stop S_12345678
 ```
 
-## Native agent terminal
+## Provider terminal modes
 
-ARC can hand the worker's existing worktree to the provider's native terminal UI:
+ARC now offers two terminal modes.
+
+### Synchronous native handoff
 
 ```bash
 arc attach S_12345678
 ```
 
-For example, a Codex-backed session opens Codex in that worker worktree. Claude, Antigravity and OpenCode use their corresponding native CLIs.
+The provider owns the current terminal until it exits. ARC then re-inspects the draft workspace.
 
-Important boundary:
+### Persistent PTY supervision
 
-- ARC does not copy provider credentials.
-- ARC does not treat the provider process/PID as durable state.
-- ARC records terminal attach lifecycle events and re-inspects the worktree when the provider exits.
-- Draft changes remain unintegrated until `arc session submit`.
+ARC 0.8 can delegate a provider PTY to tmux:
+
+```bash
+arc terminal S_12345678
+```
+
+Start without attaching:
+
+```bash
+arc terminal S_12345678 --start-only
+```
+
+Inspect or stop:
+
+```bash
+arc session terminal-status S_12345678
+arc session terminal-stop S_12345678
+```
+
+The distinction is important:
+
+```text
+ARC event log        durable/replayable metadata
+WorkerSession        durable/replayable worker identity
+Git worktree         durable draft workspace
+PID                   NOT authoritative
+live PTY              owned by tmux
+```
+
+A newly launched ARC process can rediscover a still-running tmux session from its deterministic runtime identity plus ARC runtime events. ARC never claims that a raw PID is durable state.
+
+See [PERSISTENT_RUNTIMES.md](PERSISTENT_RUNTIMES.md).
+
+## Worker application preview
+
+A worker can run a localhost dev server inside its isolated worktree:
+
+```bash
+arc session preview-start S_12345678 \
+  --command "npm run dev -- --host {host} --port {port}" \
+  --port 3000
+```
+
+or:
+
+```bash
+arc session preview-start S_12345678 \
+  --command "python -m http.server {port} --bind {host}" \
+  --port 3000
+```
+
+Inspect/stop:
+
+```bash
+arc session preview-status S_12345678
+arc session preview-stop S_12345678
+```
+
+ARC requires `{host}` and `{port}` placeholders so it controls the bind endpoint. Preview hosts are restricted to loopback (`127.0.0.1`, `localhost`, or `::1`). Public binds such as `0.0.0.0` are rejected.
 
 ## Browser Workspace
 
@@ -265,70 +286,88 @@ Launch:
 arc ui
 ```
 
-Default:
+Default control-plane origin:
 
 ```text
 http://127.0.0.1:8788
 ```
 
-The UI is inspired by modern local agent-supervision workspaces: a project orchestrator at the top, a live worker board in the center, and a detailed worker inspector on the right. ARC uses its own runtime semantics and visual language.
+The Workspace has a project orchestrator, worker board, and detailed worker inspector.
 
 ### Board columns
 
 **Working**
-- READY tasks that can be opened or orchestrated;
-- open/running worker sessions.
+- READY tasks;
+- active worker sessions.
 
 **Needs you**
 - failed/blocked tasks;
 - failed/rejected/needs-input workers.
 
 **In review**
-- submitted session candidates moving through review/gate state.
+- submitted/reviewing session candidates.
 
 **Resolved**
-- accepted worker sessions and completed tasks.
+- accepted workers and completed tasks.
 
 ### Worker inspector
 
-For a persistent session the inspector exposes:
+A persistent worker exposes:
 
-- **Chat** — send the next worker instruction;
-- **Files** — uncommitted changed file surface;
-- **Diff** — current uncommitted draft;
-- **Review** — PR link, checks, requested changes, pending feedback, publish/sync/apply controls;
-- **Context** — the immutable initial ContextPacket;
-- **Events** — authoritative task/session/review trail;
-- **Terminal** — trusted `arc attach SESSION` command.
+- **Chat** — continue the worker conversation;
+- **Files** — uncommitted changed files;
+- **Diff** — current draft diff;
+- **Preview** — launch/stop a loopback dev server, inspect output, embed/open the app;
+- **Review** — PR, CI, requested changes, pending feedback, publish/sync/apply;
+- **Context** — immutable initial ContextPacket;
+- **Events** — authoritative task/session/review/runtime trail;
+- **Terminal** — start/stop persistent tmux PTY, inspect output, copy attach command.
 
-Actions remain explicit:
+The preview is loaded directly from its own localhost port rather than proxied through ARC:
 
 ```text
-Open worker
-Publish PR / Push update
-Sync review
-Apply feedback
-Submit
-Stop
+ARC Workspace   http://127.0.0.1:8788
+worker preview  http://127.0.0.1:3000
 ```
 
-The browser never interprets chat output or a green GitHub PR as a successful ARC patch. Submission still creates an immutable Git candidate and invokes the normal ARC gate.
+Different ports mean different browser origins. Untrusted application content does not become part of ARC's control-plane origin.
+
+## Runtime lifecycle invariant
+
+ARC must not intentionally remove a worker worktree while an ARC-managed terminal or preview still owns it.
+
+Submit/stop therefore follows:
+
+```text
+stop preview
+    ↓
+stop persistent terminal
+    ↓
+submit/gate OR stop worker
+    ↓
+remove worktree when lifecycle permits
+```
+
+Runtime start/stop API operations also use the Workspace's per-worker action lock to avoid racing another supervised action on the same worker.
 
 ## Persistence model
 
-Session durability comes from two places:
+ARC 0.8 distinguishes several forms of persistence:
 
 ```text
-append-only ARC events  +  persistent isolated Git worktree
+append-only ARC events       authoritative/replayable
+isolated Git worktree        persistent draft
+GitHub PR linkage            replayable external projection
+review digests               replayable external projection
+tmux runtime                 live operational state
+runtime metadata events      replayable operational history
 ```
 
-Review-loop continuity also comes from ARC events. `arc supervise` is a foreground supervisor process; if that process stops, the PR linkage and last normalized review state remain replayable and synchronization can resume later.
+If ARC exits while tmux remains alive, a new ARC process can rediscover the live runtime. If tmux itself disappears, project truth is unaffected; ARC reports the historical runtime as no longer live.
 
-ARC deliberately does **not** claim that a vendor terminal process survives application restart. Process handles are ephemeral OS resources. After a restart, ARC reconstructs the worker and can launch another provider turn against the same draft worktree.
+## Session/runtime events
 
-This makes recovery explicit instead of pretending that PIDs are durable project state.
-
-## Session events
+Worker lifecycle events include:
 
 ```text
 session.created
@@ -339,6 +378,9 @@ session.resumed
 session.needs_input
 session.terminal_started
 session.terminal_stopped
+session.runtime_started
+session.runtime_stopped
+session.terminal_attached
 session.pr_published
 session.pr_updated
 session.review_synced
@@ -351,64 +393,69 @@ session.failed
 session.stopped
 ```
 
-The transcript and review projection are useful operational context, while task/gate/Git facts determine project correctness.
+Transcripts, review state, previews, PTYs and runtime output are operational context. Task/Git/gate facts determine project correctness.
 
-## Relationship to fleet orchestration
+## Relationship to autonomous orchestration
 
-Interactive sessions and autonomous fleet execution coexist.
+Interactive sessions and fleet execution coexist.
 
-Opening a worker dispatches the task out of the READY frontier so `arc orchestrate` cannot race the interactive worker on the same task.
+Opening a worker dispatches its task out of the READY frontier, preventing `arc orchestrate` from racing the interactive worker.
 
-For autonomous execution:
+Autonomous execution:
 
 ```bash
 arc orchestrate
 ```
 
-For supervised execution:
+Supervised execution:
 
 ```bash
 arc session open T001
 arc session send ...
+arc session preview-start ...
 arc session publish ...
 arc session review ... --apply
 arc session submit ...
 ```
 
-Both routes converge on the same integration gate.
+Both converge on the same integration gate.
 
 ## Security
 
-`arc ui` is localhost-only by default. It currently has no ARC-user authentication or RBAC.
+`arc ui` remains localhost-only by default and does not yet provide ARC-user authentication/RBAC.
 
-Do not expose it to an untrusted network. `--allow-remote` only disables the loopback guard; it does not add authentication.
+Provider authentication stays owned by the provider CLI. GitHub authentication stays owned by `gh`. ARC does not copy those credentials into `.arc/` or browser payloads.
 
-Provider-native authentication remains owned by each provider CLI. GitHub authentication remains owned by `gh`.
-
-ARC does not put provider or GitHub credentials into `.arc/`, session events, or browser payloads.
+Runtime event persistence redacts obvious secret-valued command arguments. Preview binding is loopback-only. The preview is not reverse-proxied through the ARC control-plane origin.
 
 ## Current boundaries
 
-Implemented through v0.7:
+Implemented through v0.8:
 
-- persistent worker metadata and transcript;
-- persistent worktree across ARC restart;
-- repeated agent turns in the same worktree;
-- native terminal handoff;
+- persistent worker metadata/transcript/worktree;
+- multi-turn worker conversations;
+- worker recovery after ARC restart;
 - files/diff/context/event inspection;
-- explicit submit through ARC's transactional gate;
-- interactive terminal shell;
-- session-centric local browser workspace;
+- synchronous provider terminal handoff;
+- tmux-backed persistent provider PTY;
+- runtime rediscovery after ARC application restart;
+- per-worker loopback application preview;
+- preview/terminal log-tail inspection;
+- runtime cleanup before worktree deletion;
+- interactive terminal supervisor;
+- session-centric browser Workspace;
 - GitHub PR publishing/updating through existing `gh` auth;
 - normalized CI/review/inline-comment ingestion;
-- actionable review feedback routed to the owning worker;
-- foreground multi-worker review supervision;
-- digest-based external-state and feedback deduplication;
-- exact synthetic squash candidate for multi-commit reviewed branches.
+- actionable feedback routed to the owning worker;
+- foreground review supervision;
+- exact synthetic candidate for multi-commit reviewed branches;
+- explicit transactional integration gate.
 
-Still open after v0.7:
+Remaining product/research work is now outside the original v0.6 product gaps:
 
-- per-worker browser/application preview;
-- stronger daemon/PTY supervision for long-lived provider processes;
-- remote multi-user auth/RBAC;
-- desktop packaging.
+- authenticated remote/multi-user Workspace mode;
+- desktop packaging;
+- stronger provider credential/container isolation;
+- learned planner/router policies;
+- repository-scale iso-cost evaluation;
+- semantic embedding provider / richer adaptive memory experiments.

@@ -44,6 +44,7 @@ jobs:
           node --check webui/static/mission.js
           node --check webui/static/orchestration.js
           node --check webui/static/workspace.js
+          node --check webui/static/workspace-runtime.js
 
       - name: Tests
         run: python -m pytest -q
