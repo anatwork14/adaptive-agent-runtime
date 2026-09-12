@@ -24,6 +24,7 @@ from application.config import ConfigStore
 
 SCHEMA = "arc-empirical-runtime-lock-v5"
 DEFAULT_ARC_REPO = Path(__file__).resolve().parents[3]
+CAMPAIGN_CONTRACT = Path(__file__).with_name("campaign_contract.json")
 
 
 def _canonical(payload: Any) -> bytes:
@@ -70,8 +71,23 @@ def _provider_cli_version(argv: list[str]) -> str:
     return version[0].strip()
 
 
+def _sandbox_image_name() -> str:
+    configured = os.environ.get("ARC_SANDBOX_IMAGE")
+    if configured:
+        return configured
+    try:
+        contract = json.loads(CAMPAIGN_CONTRACT.read_text(encoding="utf-8"))
+        image = str(contract["grading_sandbox"]["image"])
+    except Exception as exc:
+        raise SystemExit(
+            "ARC_SANDBOX_IMAGE is unset and campaign grading image cannot be resolved"
+        ) from exc
+    os.environ["ARC_SANDBOX_IMAGE"] = image
+    return image
+
+
 def _sandbox_runtime() -> dict[str, str]:
-    image = os.environ.get("ARC_SANDBOX_IMAGE", "arc-runner:latest")
+    image = _sandbox_image_name()
     docker = shutil.which("docker")
     if docker is None:
         raise SystemExit("docker is not installed; cannot freeze grading sandbox")
