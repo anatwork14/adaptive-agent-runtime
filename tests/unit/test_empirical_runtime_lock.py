@@ -37,6 +37,17 @@ def _git(repo: Path, *args: str) -> str:
     return proc.stdout.strip()
 
 
+def _init_git_repo(repo: Path, filename: str = "app.py") -> str:
+    repo.mkdir()
+    _git(repo, "init")
+    _git(repo, "config", "user.email", "arc@example.test")
+    _git(repo, "config", "user.name", "ARC Test")
+    (repo / filename).write_text("VALUE = 1\n", encoding="utf-8")
+    _git(repo, "add", filename)
+    _git(repo, "commit", "-m", "base")
+    return _git(repo, "rev-parse", "HEAD")
+
+
 def _write_fake_provider(path: Path, version: str) -> None:
     path.write_text(
         "#!/usr/bin/env python3\n"
@@ -51,16 +62,13 @@ def _write_fake_provider(path: Path, version: str) -> None:
     path.chmod(0o755)
 
 
-def test_runtime_lock_freezes_provider_cli_version_and_detects_drift(tmp_path) -> None:
+def test_runtime_lock_detects_provider_and_arc_engine_drift(tmp_path) -> None:
     module = _runtime_lock_module()
     repo = tmp_path / "repo"
-    repo.mkdir()
-    _git(repo, "init")
-    _git(repo, "config", "user.email", "arc@example.test")
-    _git(repo, "config", "user.name", "ARC Test")
-    (repo / "app.py").write_text("VALUE = 1\n", encoding="utf-8")
-    _git(repo, "add", "app.py")
-    _git(repo, "commit", "-m", "base")
+    _init_git_repo(repo)
+
+    arc_repo = tmp_path / "arc-engine"
+    frozen_arc_commit = _init_git_repo(arc_repo, "engine.py")
 
     provider = tmp_path / "fake-codex"
     _write_fake_provider(provider, "fake-codex 1.0.0")
@@ -77,12 +85,20 @@ def test_runtime_lock_freezes_provider_cli_version_and_detects_drift(tmp_path) -
     store.save(config)
 
     lock_path = tmp_path / "runtime-lock.json"
-    module.freeze(repo, "builder", lock_path, ROOT)
+    module.freeze(repo, "builder", lock_path, arc_repo)
     payload = json.loads(lock_path.read_text(encoding="utf-8"))
-    assert payload["schema_version"] == "arc-empirical-runtime-lock-v2"
+    assert payload["schema_version"] == "arc-empirical-runtime-lock-v3"
     assert payload["provider_cli_version"] == "fake-codex 1.0.0"
-    module.verify(repo, "builder", lock_path)
+    assert payload["arc_commit"] == frozen_arc_commit
+    module.verify(repo, "builder", lock_path, arc_repo)
 
     _write_fake_provider(provider, "fake-codex 2.0.0")
     with pytest.raises(SystemExit, match="provider_cli_version"):
-        module.verify(repo, "builder", lock_path)
+        module.verify(repo, "builder", lock_path, arc_repo)
+
+    _write_fake_provider(provider, "fake-codex 1.0.0")
+    (arc_repo / "engine.py").write_text("VALUE = 2\n", encoding="utf-8")
+    _git(arc_repo, "add", "engine.py")
+    _git(arc_repo, "commit", "-m", "engine drift")
+    with pytest.raises(SystemExit, match="arc_commit"):
+        module.verify(repo, "builder", lock_path, arc_repo)
