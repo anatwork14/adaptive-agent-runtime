@@ -8,9 +8,13 @@ without pretending an OS PID is durable project state.
 
 from __future__ import annotations
 
+import json
+import os
 import shlex
 import shutil
 import subprocess
+import sys
+import tempfile
 from collections.abc import Mapping
 from pathlib import Path
 from typing import Any
@@ -71,6 +75,26 @@ class TmuxController:
     def has_session(self, name: str) -> bool:
         return self._run(["has-session", "-t", name], check=False).returncode == 0
 
+    @staticmethod
+    def _environment_handoff(environment: Mapping[str, str]) -> Path:
+        """Write a mode-0600, single-use environment handoff outside the repo."""
+        fd, raw_path = tempfile.mkstemp(prefix="arc-runtime-env-", suffix=".json")
+        path = Path(raw_path)
+        try:
+            os.fchmod(fd, 0o600)
+            with os.fdopen(fd, "w", encoding="utf-8") as handle:
+                json.dump({str(k): str(v) for k, v in environment.items()}, handle)
+                handle.flush()
+                os.fsync(handle.fileno())
+        except Exception:
+            try:
+                os.close(fd)
+            except OSError:
+                pass
+            path.unlink(missing_ok=True)
+            raise
+        return path
+
     def start(
         self,
         *,
@@ -87,26 +111,40 @@ class TmuxController:
         if not workspace.exists():
             raise TmuxError(f"runtime working directory does not exist: {workspace}")
 
-        # tmux accepts one shell-command string. When ARC supplies an explicit
-        # environment, start through `env -i` so an existing tmux server cannot
-        # silently reintroduce unrelated variables/secrets from its own process.
         runtime_command = list(command)
+        handoff: Path | None = None
         if environment is not None:
-            assignments = [f"{key}={environment[key]}" for key in sorted(environment)]
-            runtime_command = ["env", "-i", *assignments, *runtime_command]
+            # Do not embed KEY=value pairs in the tmux command line. They could
+            # otherwise be visible in process arguments or tmux metadata. A
+            # tiny ARC helper consumes and unlinks the mode-0600 handoff before
+            # execve() replaces it with the real worker process.
+            handoff = self._environment_handoff(environment)
+            runtime_command = [
+                sys.executable,
+                "-m",
+                "runtime.tmux_bootstrap",
+                str(handoff),
+                "--",
+                *runtime_command,
+            ]
 
         shell_command = shlex.join(runtime_command)
-        self._run(
-            [
-                "new-session",
-                "-d",
-                "-s",
-                name,
-                "-c",
-                str(workspace),
-                shell_command,
-            ]
-        )
+        try:
+            self._run(
+                [
+                    "new-session",
+                    "-d",
+                    "-s",
+                    name,
+                    "-c",
+                    str(workspace),
+                    shell_command,
+                ]
+            )
+        except Exception:
+            if handoff is not None:
+                handoff.unlink(missing_ok=True)
+            raise
 
     def attach(self, name: str) -> int:
         if not self.has_session(name):
