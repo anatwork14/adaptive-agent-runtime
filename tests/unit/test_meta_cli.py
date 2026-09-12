@@ -7,10 +7,12 @@ from cli.bootstrap import app
 
 runner = CliRunner()
 _ANSI_ESCAPE = re.compile(r"\x1b\[[0-?]*[ -/]*[@-~]")
+_BOX_CHARS = str.maketrans({char: " " for char in "│╭╮╰╯─"})
 
 
 def _plain_output(text: str) -> str:
-    return _ANSI_ESCAPE.sub("", text)
+    unstyled = _ANSI_ESCAPE.sub("", text).translate(_BOX_CHARS)
+    return " ".join(unstyled.split())
 
 
 def test_benchmark_help_registers_cross_repository_meta_commands() -> None:
