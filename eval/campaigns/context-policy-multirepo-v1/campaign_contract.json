@@ -12,7 +12,7 @@
       "refactor"
     ],
     "env_allow": [],
-    "command_override": "codex exec --full-auto --model gpt-5.3-codex --config model_reasoning_effort=\"high\" -"
+    "command_override": "codex exec --full-auto --model gpt-5.3-codex --config 'model_reasoning_effort=\"high\"' -"
   },
   "shared_protocol": {
     "context_token_budget": 12000,
