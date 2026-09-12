@@ -1,0 +1,45 @@
+benchmark_id: context-policy-click-v1
+baseline: B7
+execution_mode: sequence
+seed: 20260912
+agent_profile: builder
+model: gpt-5.3-codex
+repo_commit: 6aabf099bfdd4c1e75fe8d0e0d4241372b988ab1
+context_token_budget: 12000
+hard_task_usd: 2.0
+faults: []
+project_constraints:
+  - Preserve backward compatibility outside the specified API addition.
+  - Do not add third-party runtime dependencies.
+  - Do not weaken or delete existing tests.
+notes: Proposed adaptive-context treatment for the Click progressive maintenance sequence.
+tasks:
+  - task_id: T001
+    goal: Add opt-in sensitive metadata to Click parameters, initially exercised through options, without changing ordinary parsing, help, callback, or invocation behavior.
+    files: [src/click/core.py, tests/test_options.py, tests/test_info_dict.py]
+    symbols: [Parameter, Option, to_info_dict]
+    acceptance: [A sensitive flag is opt-in and defaults false., Option introspection exposes the sensitivity bit., Marking an option sensitive does not change its runtime value or visible help behavior., Existing visible tests pass.]
+    risk: 0.45
+    token_budget: 12000
+    hidden_test_pattern: test_hidden_click_t001_*.py
+    metadata: {category: progressive-api-maintenance}
+  - task_id: T002
+    dependencies: [T001]
+    goal: Add a deterministic Context.parameter_snapshot API that reports current parameter values and ParameterSource while redacting values marked sensitive by T001 unless raw values are explicitly requested.
+    files: [src/click/core.py, tests/test_context.py, tests/test_info_dict.py]
+    symbols: [Context, ParameterSource, Parameter]
+    acceptance: [Snapshot records name, value, source name or null, and sensitivity., Sensitive values are represented as the literal <redacted> by default., Explicit raw mode returns the true value without mutating the context., ParameterSource distinctions remain intact and existing visible tests pass.]
+    risk: 0.60
+    token_budget: 12000
+    hidden_test_pattern: test_hidden_click_t002_*.py
+    metadata: {category: progressive-api-maintenance}
+  - task_id: T003
+    dependencies: [T002]
+    goal: Generalize the sensitive metadata contract cleanly to base Parameter so Click arguments and options share one implementation and Context.parameter_snapshot redacts both consistently.
+    files: [src/click/core.py, src/click/decorators.py, tests/test_arguments.py, tests/test_options.py, tests/test_context.py, tests/test_info_dict.py]
+    symbols: [Parameter, Argument, Option, Context]
+    acceptance: [Arguments accept the same opt-in sensitive contract as options., The sensitivity state is owned once at the appropriate base abstraction., Introspection and parameter snapshots handle arguments and options consistently., T001 and T002 behavior remains compatible and existing visible tests pass.]
+    risk: 0.65
+    token_budget: 12000
+    hidden_test_pattern: test_hidden_click_t003_*.py
+    metadata: {category: progressive-api-maintenance}

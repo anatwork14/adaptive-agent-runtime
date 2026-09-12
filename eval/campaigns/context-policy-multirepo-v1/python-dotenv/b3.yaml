@@ -1,0 +1,42 @@
+benchmark_id: context-policy-python-dotenv-v1
+baseline: B3
+execution_mode: sequence
+seed: 20260912
+agent_profile: builder
+model: gpt-5.3-codex
+repo_commit: a00cb2eed0704cd6d2071b2004c37e95ccc86ee5
+context_token_budget: 12000
+hard_task_usd: 2.0
+faults: []
+project_constraints: [Preserve existing dotenv parsing and interpolation semantics., Do not add third-party runtime dependencies., Do not weaken or delete existing tests.]
+notes: Static structured-context treatment for the python-dotenv progressive maintenance sequence.
+tasks:
+  - task_id: T001
+    goal: Expose immutable source provenance for valid dotenv bindings as public entries containing key raw value and 1-based source line while preserving all existing parsing semantics.
+    files: [src/dotenv/parser.py, src/dotenv/main.py, src/dotenv/__init__.py, tests]
+    symbols: [Binding, Original, DotEnv]
+    acceptance: [Public immutable entries expose key raw value and 1-based source line., Comments blank lines and error-only bindings do not appear as keyed entries., Existing dotenv parsing behavior is unchanged., Existing visible tests pass.]
+    risk: 0.45
+    token_budget: 12000
+    hidden_test_pattern: test_hidden_dotenv_t001_*.py
+    metadata: {category: progressive-parser-maintenance}
+  - task_id: T002
+    dependencies: [T001]
+    goal: Add a top-level metadata-returning dotenv API that applies the same interpolation and override semantics as dotenv_values while retaining the winning source line for each resolved key.
+    files: [src/dotenv/main.py, src/dotenv/__init__.py, src/dotenv/variables.py, tests]
+    symbols: [DotEnv, dotenv_values, resolve_variables]
+    acceptance: [Resolved values match dotenv_values under equivalent arguments., Duplicate keys retain the winning binding source line., Keys with no value remain distinct from empty strings., T001 behavior and existing visible tests remain compatible.]
+    risk: 0.60
+    token_budget: 12000
+    hidden_test_pattern: test_hidden_dotenv_t002_*.py
+    metadata: {category: progressive-parser-maintenance}
+  - task_id: T003
+    dependencies: [T002]
+    goal: Extend dotenv list with a deterministic JSON metadata format that exposes each key value and source line by reusing the T002 API while leaving every existing list format unchanged.
+    files: [src/dotenv/cli.py, src/dotenv/main.py, src/dotenv/__init__.py, tests]
+    symbols: [list_values, dotenv_values]
+    acceptance: [The new metadata format emits valid deterministic sorted JSON with value and line for each key., The CLI reuses the metadata API rather than reparsing independently., simple json shell and export formats keep their previous behavior., T001 and T002 behavior plus existing visible tests remain compatible.]
+    risk: 0.50
+    token_budget: 12000
+    hidden_test_pattern: test_hidden_dotenv_t003_*.py
+    metadata: {category: progressive-parser-maintenance}
