@@ -36,12 +36,16 @@ def test_loopback_policy_handles_ipv4_ipv6_and_browser_origins() -> None:
     assert is_loopback_host("localhost")
     assert not is_loopback_host("0.0.0.0")
     assert not is_loopback_host("::")
+    # DNS aliases are deliberately not trusted even if they might resolve to
+    # loopback at some point in time. This keeps the Origin policy fail-closed.
+    assert not is_loopback_host("loopback.example")
 
     assert is_loopback_origin(None)
     assert is_loopback_origin("http://127.0.0.1:8788")
     assert is_loopback_origin("http://localhost:8788")
     assert is_loopback_origin("http://[::1]:8788")
     assert not is_loopback_origin("https://evil.example")
+    assert not is_loopback_origin("http://loopback.example:8788")
     assert not is_loopback_origin("null")
 
 
