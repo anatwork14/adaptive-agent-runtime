@@ -88,17 +88,41 @@ CUSTOM_TOOL_HOME=/some/private/value
 
 Environment names are validated and deduplicated when the profile is loaded.
 
+Use the CLI to inspect or replace a profile allowlist:
+
+```bash
+arc env-policy builder
+arc env-policy builder --allow INTERNAL_REGISTRY_HOST --allow CUSTOM_TOOL_HOME
+arc env-policy builder --clear
+```
+
+The command displays names only, never values.
+
 ## Persistent tmux runtimes
 
 A tmux server may outlive the ARC process that created it. That creates a subtle risk: the tmux server itself can retain an older, broader environment.
 
-ARC 0.9 therefore launches persistent terminal/preview commands through a clean boundary:
+Simply putting sanitized `KEY=value` pairs into the tmux command line would create another leak because process arguments or tmux metadata could expose those values. ARC therefore uses a private single-use handoff:
 
 ```text
-env -i KEY=value KEY=value ... actual-command
+ARC
+ │
+ ├─ build least-privilege environment
+ │
+ ├─ write mode-0600 temporary JSON handoff
+ │       │
+ │       └─ values are NOT placed in tmux argv
+ │
+ └─ tmux → python -m runtime.tmux_bootstrap <handoff> -- actual-command
+                    │
+                    ├─ read handoff
+                    ├─ unlink handoff
+                    └─ execve(actual-command, explicit environment)
 ```
 
-The worker receives the ARC-built environment rather than whatever happens to be stored in the long-lived tmux server.
+The final worker receives the ARC-built environment rather than whatever happens to be stored in the long-lived tmux server. The handoff file is deleted before the long-lived worker process replaces the bootstrap helper.
+
+If tmux session creation fails, ARC removes the handoff itself.
 
 ## Provider terminal
 
