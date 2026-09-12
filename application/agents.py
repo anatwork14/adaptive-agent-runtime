@@ -58,25 +58,37 @@ def _cached_auth_status(provider: str) -> ProviderAuthStatus:
 
 
 def build_agent(profile: AgentProfile):
-    """Instantiate a concrete adapter from a named profile."""
+    """Instantiate a concrete adapter from a named profile.
+
+    Command overrides are passed directly to the adapter. ARC never mutates the
+    parent process environment merely to configure one worker, which prevents a
+    profile-local override from leaking into concurrently constructed agents.
+    """
     if not profile.enabled:
         raise ValueError(f"Agent profile {profile.name!r} is disabled")
-
-    if profile.command_override:
-        env_name = _PROVIDER_COMMAND_ENV.get(profile.provider)
-        if env_name:
-            os.environ[env_name] = profile.command_override
 
     if profile.provider == "mock":
         return MockAgentAdapter(profile.name)
     if profile.provider == "codex":
-        return CodexAgentAdapter(model_name=profile.model)
+        return CodexAgentAdapter(
+            model_name=profile.model,
+            command_override=profile.command_override,
+            env_allow=profile.env_allow,
+        )
     if profile.provider == "claude":
-        return ClaudeAgentAdapter(model_name=profile.model)
+        return ClaudeAgentAdapter(
+            model_name=profile.model,
+            command_override=profile.command_override,
+            env_allow=profile.env_allow,
+        )
     if profile.provider == "antigravity":
-        return AntigravityAgentAdapter(model_name=profile.model)
+        return AntigravityAgentAdapter(model_name=profile.model, env_allow=profile.env_allow)
     if profile.provider == "opencode":
-        return OpenCodeAgentAdapter(model_name=profile.model)
+        return OpenCodeAgentAdapter(
+            model_name=profile.model,
+            command_override=profile.command_override,
+            env_allow=profile.env_allow,
+        )
     if profile.provider == "openrouter":
         return OpenRouterAgentAdapter(model_name=profile.model or "openai/gpt-4o-mini")
     raise ValueError(f"Unsupported provider: {profile.provider}")
