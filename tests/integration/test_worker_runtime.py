@@ -144,6 +144,20 @@ def test_submit_stops_live_runtimes_before_worktree_cleanup(tmp_path: Path, monk
         assert runtime_stops
         assert max(runtime_stops) < accepted
 
+        # Runtime inspection remains replayable even after accepted submission
+        # removes the draft workspace. The historical metadata survives while
+        # liveness correctly projects to stopped.
+        terminal_after = arc.worker_runtime.status(session.session_id, "terminal")
+        preview_after = arc.worker_runtime.status(session.session_id, "preview")
+        assert not terminal_after.running
+        assert not preview_after.running
+        assert terminal_after.started_event is not None
+        assert terminal_after.stopped_event is not None
+        assert preview_after.started_event is not None
+        assert preview_after.stopped_event is not None
+        assert terminal_after.workspace == str(workspace)
+        assert preview_after.workspace == str(workspace)
+
 
 def test_preview_rejects_non_loopback_or_uncontrolled_bindings(tmp_path: Path, monkeypatch) -> None:
     repo = _git_repo(tmp_path)
