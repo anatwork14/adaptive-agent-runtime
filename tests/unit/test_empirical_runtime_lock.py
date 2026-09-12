@@ -1,5 +1,6 @@
 import importlib.util
 import json
+import os
 import subprocess
 from pathlib import Path
 
@@ -62,7 +63,28 @@ def _write_fake_provider(path: Path, version: str) -> None:
     path.chmod(0o755)
 
 
-def test_runtime_lock_detects_provider_arc_commit_and_dirty_tree_drift(tmp_path) -> None:
+def _write_fake_docker(path: Path, image_id: str, version: str = "Docker version fake-1") -> None:
+    path.write_text(
+        "#!/usr/bin/env python3\n"
+        "import sys\n"
+        f"IMAGE_ID = {image_id!r}\n"
+        f"VERSION = {version!r}\n"
+        "args = sys.argv[1:]\n"
+        "if args == ['--version']:\n"
+        "    print(VERSION)\n"
+        "    raise SystemExit(0)\n"
+        "if len(args) >= 3 and args[:2] == ['image', 'inspect']:\n"
+        "    print(IMAGE_ID)\n"
+        "    raise SystemExit(0)\n"
+        "raise SystemExit(2)\n",
+        encoding="utf-8",
+    )
+    path.chmod(0o755)
+
+
+def test_runtime_lock_detects_provider_sandbox_arc_and_dirty_tree_drift(
+    tmp_path, monkeypatch
+) -> None:
     module = _runtime_lock_module()
     repo = tmp_path / "repo"
     _init_git_repo(repo)
@@ -72,6 +94,11 @@ def test_runtime_lock_detects_provider_arc_commit_and_dirty_tree_drift(tmp_path)
 
     provider = tmp_path / "fake-codex"
     _write_fake_provider(provider, "fake-codex 1.0.0")
+    docker = tmp_path / "docker"
+    _write_fake_docker(docker, "sha256:grading-image-v1")
+    monkeypatch.setenv("PATH", f"{tmp_path}{os.pathsep}{os.environ.get('PATH', '')}")
+    monkeypatch.setenv("ARC_SANDBOX_IMAGE", "arc-context-policy-v1:py311")
+
     store = ConfigStore(repo)
     config = store.load("runtime-lock-test")
     config.agents["builder"] = AgentProfile(
@@ -87,11 +114,19 @@ def test_runtime_lock_detects_provider_arc_commit_and_dirty_tree_drift(tmp_path)
     lock_path = tmp_path / "runtime-lock.json"
     module.freeze(repo, "builder", lock_path, arc_repo)
     payload = json.loads(lock_path.read_text(encoding="utf-8"))
-    assert payload["schema_version"] == "arc-empirical-runtime-lock-v4"
+    assert payload["schema_version"] == "arc-empirical-runtime-lock-v5"
     assert payload["provider_cli_version"] == "fake-codex 1.0.0"
+    assert payload["sandbox_image"] == "arc-context-policy-v1:py311"
+    assert payload["sandbox_image_id"] == "sha256:grading-image-v1"
+    assert payload["docker_cli_version"] == "Docker version fake-1"
     assert payload["arc_commit"] == frozen_arc_commit
     assert payload["arc_worktree_clean"] is True
     module.verify(repo, "builder", lock_path, arc_repo)
+
+    _write_fake_docker(docker, "sha256:grading-image-v2")
+    with pytest.raises(SystemExit, match="sandbox_image_id"):
+        module.verify(repo, "builder", lock_path, arc_repo)
+    _write_fake_docker(docker, "sha256:grading-image-v1")
 
     (arc_repo / "engine.py").write_text("VALUE = 99\n", encoding="utf-8")
     with pytest.raises(SystemExit, match="worktree must be clean"):
