@@ -6,6 +6,7 @@ import json
 import os
 import shlex
 import subprocess
+from pathlib import Path
 
 import pytest
 from pydantic import ValidationError
@@ -13,7 +14,7 @@ from pydantic import ValidationError
 from application.agents import build_agent
 from application.config import AgentProfile
 from runtime.environment import build_execution_environment, redact_command
-from runtime.tmux import TmuxController
+from runtime.tmux import TmuxController, TmuxError
 from runtime.tmux_bootstrap import _load_environment
 
 
@@ -91,11 +92,19 @@ def test_command_trace_redacts_obvious_secret_arguments() -> None:
 def test_tmux_start_uses_private_environment_handoff(tmp_path, monkeypatch) -> None:
     controller = TmuxController("tmux")
     calls: list[list[str]] = []
+    consumed: dict[str, object] = {}
 
     def fake_run(args, *, check=True, interactive=False):
         calls.append(list(args))
         if args and args[0] == "has-session":
             return subprocess.CompletedProcess(args, 1, stdout="", stderr="")
+        if args and args[0] == "new-session":
+            argv = shlex.split(args[-1])
+            handoff_path = Path(argv[3])
+            consumed["path"] = handoff_path
+            consumed["mode"] = handoff_path.stat().st_mode & 0o777
+            consumed["payload"] = json.loads(handoff_path.read_text(encoding="utf-8"))
+            handoff_path.unlink()
         return subprocess.CompletedProcess(args, 0, stdout="", stderr="")
 
     monkeypatch.setattr(controller, "_run", fake_run)
@@ -114,13 +123,47 @@ def test_tmux_start_uses_private_environment_handoff(tmp_path, monkeypatch) -> N
     argv = shlex.split(shell_command)
     assert argv[1:3] == ["-m", "runtime.tmux_bootstrap"]
     assert "--" in argv
-    handoff = next(arg for arg in argv if arg.startswith("/tmp/arc-runtime-env-"))
-    handoff_path = __import__("pathlib").Path(handoff)
-    assert handoff_path.exists()
-    assert handoff_path.stat().st_mode & 0o777 == 0o600
-    payload = json.loads(handoff_path.read_text(encoding="utf-8"))
+    assert consumed["mode"] == 0o600
+    payload = consumed["payload"]
+    assert isinstance(payload, dict)
     assert payload["API_KEY"] == secret
-    handoff_path.unlink()
+    assert not Path(consumed["path"]).exists()
+
+
+def test_tmux_start_fails_closed_if_bootstrap_does_not_consume_handoff(
+    tmp_path, monkeypatch
+) -> None:
+    controller = TmuxController("tmux")
+    state = {"started": False, "killed": False, "handoff": None}
+
+    def fake_run(args, *, check=True, interactive=False):
+        if args and args[0] == "has-session":
+            code = 0 if state["started"] and not state["killed"] else 1
+            return subprocess.CompletedProcess(args, code, stdout="", stderr="")
+        if args and args[0] == "new-session":
+            state["started"] = True
+            argv = shlex.split(args[-1])
+            state["handoff"] = Path(argv[3])
+        if args and args[0] == "kill-session":
+            state["killed"] = True
+        return subprocess.CompletedProcess(args, 0, stdout="", stderr="")
+
+    ticks = iter([0.0, 10.0])
+    monkeypatch.setattr(controller, "_run", fake_run)
+    monkeypatch.setattr("runtime.tmux.time.monotonic", lambda: next(ticks))
+    monkeypatch.setattr("runtime.tmux.time.sleep", lambda _: None)
+
+    with pytest.raises(TmuxError, match="did not consume"):
+        controller.start(
+            name="arc-terminal-stalled",
+            cwd=tmp_path,
+            command=["python", "-V"],
+            environment={"PATH": "/usr/bin:/bin", "API_KEY": "secret"},
+        )
+
+    assert state["killed"] is True
+    assert isinstance(state["handoff"], Path)
+    assert not state["handoff"].exists()
 
 
 def test_tmux_bootstrap_deletes_handoff_after_read(tmp_path) -> None:
