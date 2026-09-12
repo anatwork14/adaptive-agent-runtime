@@ -1,6 +1,6 @@
 # ARC — Adaptive Agent Runtime
 
-> **A persistent multi-agent coding supervisor with reliable context, closed-loop review, isolated workers, durable local runtimes, least-privilege execution, and transactional integration.**
+> **A persistent multi-agent coding supervisor with reliable context, supervised live turns, closed-loop review, isolated workers, durable local runtimes, least-privilege execution, and transactional integration.**
 
 [![CI](https://github.com/anatwork14/adaptive-agent-runtime/actions/workflows/ci.yml/badge.svg)](https://github.com/anatwork14/adaptive-agent-runtime/actions/workflows/ci.yml)
 [![Python 3.11+](https://img.shields.io/badge/python-3.11%2B-3776ab.svg)](https://www.python.org/)
@@ -15,6 +15,7 @@
   <strong><a href="https://anatwork14.github.io/adaptive-agent-runtime/">Website</a></strong>
   · <strong><a href="docs/GETTING_STARTED.md">Getting started</a></strong>
   · <strong><a href="docs/INTERACTIVE_WORKSPACE.md">Interactive workspace</a></strong>
+  · <strong><a href="docs/LIVE_TURNS.md">Live turns</a></strong>
   · <strong><a href="docs/PERSISTENT_RUNTIMES.md">Persistent runtimes</a></strong>
   · <strong><a href="docs/EXECUTION_SECURITY.md">Execution security</a></strong>
   · <strong><a href="docs/CLOSED_LOOP_REVIEWS.md">Closed-loop reviews</a></strong>
@@ -27,11 +28,13 @@ The core rule is:
 
 > **Adaptive memory is never authoritative.**
 
-The same rule extends to external review and live processes. Authoritative project state lives in ARC's append-only event stream plus Git state. Memory, GitHub review state, runtime liveness, preview readiness, and UI projections are rebuildable or externally observable operational context.
+The same rule extends to external review and live processes. Authoritative project state lives in ARC's append-only event stream plus Git state. Memory, provider output, GitHub review state, runtime liveness, preview readiness, and UI projections are rebuildable or externally observable operational context.
 
-**ARC 0.9 hardens the execution boundary built in 0.8.** Worker/provider subprocesses no longer inherit the whole ARC host environment. ARC constructs provider-scoped environments, lets profiles opt in extra variable names without storing values, starts previews without provider credentials, keeps profile command overrides process-local, and uses a private single-use handoff so tmux does not receive secret values in worker argv. Every path still converges on ARC's exact-candidate IntegrationGate before project state becomes complete.
+**ARC 0.10 adds supervised live provider turns to the browser Workspace.** A provider turn receives a stable `TURN_*` identity, streams redacted stdout/stderr through replayable ARC events and the existing WebSocket, can be cancelled explicitly, and shares the same per-worker action lock as review/runtime/submit operations. Provider processes remain disposable operational state: the durable continuity boundary is still ARC events plus the isolated worker worktree, and every completion path still converges on the exact-candidate IntegrationGate.
 
-**Status:** experimental / pre-alpha. Persistent workers, orchestration, event replay, GitHub review synchronization, tmux runtime supervision, localhost worker previews, least-privilege environment propagation, Git isolation, and the transactional gate are implemented and covered by deterministic tests. Real provider wrappers remain experimental. Provider processes are still host-mode and do not yet have full filesystem/network sandboxing. Remote multi-user security, learned planning/routing, semantic retrieval, desktop packaging, and repository-scale evaluation remain active work.
+ARC 0.9 established least-privilege provider environments, provider-scoped credentials, preview credential exclusion, and a private single-use tmux environment handoff. ARC 0.9.1 then made both browser control planes strictly loopback-only and added browser Origin/WebSocket protections. ARC 0.10 preserves both boundaries and redacts live provider output before it becomes durable.
+
+**Status:** experimental / pre-alpha. Persistent workers, supervised live turns, orchestration, event replay, GitHub review synchronization, tmux runtime supervision, localhost worker previews, least-privilege environment propagation, strict local browser control planes, Git isolation, and the transactional gate are implemented and covered by deterministic tests. Real provider wrappers remain experimental. Provider processes are still host-mode and do not yet have full filesystem/network sandboxing. Authenticated remote/multi-user mode, learned planning/routing, semantic retrieval, desktop packaging, and repository-scale evaluation remain active work.
 
 ---
 
@@ -111,7 +114,7 @@ Run:
 arc
 ```
 
-The default experience is an interactive supervisor:
+The default terminal experience remains an interactive supervisor:
 
 ```text
 ARC — persistent multi-agent coding supervisor
@@ -170,6 +173,8 @@ Core interactive controls:
 /exit
 ```
 
+The browser Workspace adds asynchronous supervised turns: sending a Chat instruction returns immediately, provider output streams into the worker inspector, and the operator can cancel the active turn without treating cancellation as success.
+
 ---
 
 ## Persistent worker model
@@ -185,6 +190,7 @@ WorkerSession
   ├── immutable ContextPacket
   ├── isolated persistent Git worktree
   ├── multi-turn conversation
+  ├── supervised live provider turns
   ├── changed files + diff
   ├── optional GitHub ReviewStatus
   ├── optional tmux provider PTY
@@ -200,7 +206,7 @@ WorkerSession
  authoritative Git + ARC events
 ```
 
-A conversation is not a patch. A green PR is not ARC completion. A running preview is not correctness. A terminal process is not authoritative state. Only an exact candidate accepted by ARC's gate completes project work.
+A conversation is not a patch. Provider output is not a patch. A cancelled turn is not completion. A green PR is not ARC completion. A running preview is not correctness. A terminal process is not authoritative state. Only an exact candidate accepted by ARC's gate completes project work.
 
 ### Session persistence
 
@@ -209,20 +215,23 @@ ARC persists or can reconstruct:
 - worker/session identity;
 - selected agent/provider/model;
 - immutable initial ContextPacket;
-- conversation turns;
+- conversation turns and `TURN_*` lifecycle events;
+- redacted live-turn output events;
 - worktree path and branch;
 - changed-file observations;
 - PR/review projection events;
 - runtime start/stop metadata;
 - submit/gate outcome.
 
-The event log and worktree survive ARC restarts. A tmux runtime may also remain alive, but its raw PID is never persisted as project truth.
+The event log and worktree survive ARC restarts. Browser-started provider subprocesses do not become durable simply because their output is replayable. A tmux runtime may remain alive across ARC restart, but its raw PID is never persisted as project truth.
 
 ```bash
 arc session list
 arc session resume S_a1b2c3d4
 arc session send S_a1b2c3d4 "continue by fixing the failing integration test"
 ```
+
+See [docs/LIVE_TURNS.md](docs/LIVE_TURNS.md) for the browser live-turn lifecycle and explicit restart semantics.
 
 ### Scriptable worker lifecycle
 
@@ -406,7 +415,7 @@ Launch:
 arc ui
 ```
 
-Default:
+The control plane is strictly local-only:
 
 ```text
 http://127.0.0.1:8788
@@ -417,18 +426,18 @@ The worker-centric Workspace contains:
 - project orchestrator prompt;
 - Working / Needs you / In review / Resolved board;
 - provider readiness;
-- **Chat** — continue the worker;
+- **Chat** — start supervised `TURN_*` work, stream redacted provider stdout/stderr, and cancel the active turn;
 - **Files** — changed-file surface;
 - **Diff** — current draft;
 - **Preview** — start/stop localhost app, output tail, embedded preview, open-in-new-tab;
 - **Review** — PR/check/feedback state and publish/sync/apply controls;
 - **Context** — immutable ContextPacket;
-- **Events** — authoritative task/session/review/runtime trace;
+- **Events** — authoritative task/session/review/runtime trace plus replayable live-turn output;
 - **Terminal** — persistent tmux state, log tail, Start/Stop, attach command;
 - explicit Submit / Stop controls;
-- WebSocket event refresh.
+- WebSocket event refresh and live-turn output streaming.
 
-Preview application content is loaded directly from its own localhost origin rather than through the ARC API server.
+Preview application content is loaded directly from its own localhost origin rather than through the ARC API server. `arc ui` and `arc web` reject non-loopback binds and validate browser HTTP/WebSocket Origins; authenticated remote mode is not implemented.
 
 ---
 
@@ -436,19 +445,21 @@ Preview application content is loaded directly from its own localhost origin rat
 
 An ARC-managed live process must not intentionally outlive the worktree it owns.
 
-Submit and stop therefore follow:
+A Workspace worker stop therefore follows:
 
 ```text
-stop preview
+cancel active supervised turn
     ↓
-stop persistent terminal
+wait for provider subprocess exit
     ↓
-submit/gate OR stop worker
+stop preview / persistent terminal when applicable
+    ↓
+stop worker or submit/gate
     ↓
 remove worktree when lifecycle permits
 ```
 
-Workspace runtime mutations use the same per-worker action lock as other supervised actions so a runtime start/stop cannot race a simultaneous worker action.
+Supervised turns, review/runtime mutations, and submit share the worker action lock so conflicting operations cannot race the same draft worktree. Cancellation itself can cross that lock in order to terminate the process that owns it.
 
 Runtime status remains inspectable from events even after an accepted/stopped worker has had its draft worktree removed.
 
@@ -523,7 +534,7 @@ The deterministic mock is a deliberate smoke-test baseline. ARC does not silentl
 Flagship conversation-first supervisor.
 
 ### `arc ui`
-Worker/session browser Workspace with review, preview, and runtime controls.
+Worker/session browser Workspace with supervised live turns, review, preview, and runtime controls.
 
 ### `arc supervise`
 Closed-loop GitHub review supervisor.
@@ -553,7 +564,7 @@ Lower-level task/provider orchestration browser.
 | OpenRouter | `openrouter` | environment gateway | gateway only |
 | Mock | `mock` | none | deterministic tests/smoke |
 
-Provider adapters never silently fabricate a successful patch. ARC measures repository changes and uses Git objects as its integration boundary. ARC 0.9 also prevents one provider from receiving another provider's environment credentials by default.
+Provider adapters never silently fabricate a successful patch. ARC measures repository changes and uses Git objects as its integration boundary. ARC prevents one provider from receiving another provider's environment credentials by default. Browser-started subprocess turns now stream through ARC's provider-neutral event model rather than provider-specific browser APIs.
 
 ---
 
@@ -565,6 +576,9 @@ Worker/review/runtime events include:
 session.created
 session.message
 session.turn_started
+session.turn_output
+session.turn_cancel_requested
+session.turn_cancelled
 session.turn_finished
 session.resumed
 session.terminal_started
@@ -586,9 +600,9 @@ session.failed
 session.stopped
 ```
 
-Runtime events store sanitized command metadata and environment-variable **names**, never values. Obvious secret-valued command arguments are redacted before persistence.
+Runtime events store sanitized command metadata and environment-variable **names**, never values. Obvious secret-valued command arguments are redacted before persistence. In 0.10, streamed provider stdout/stderr is also redacted before it enters `session.turn_output`, the browser WebSocket, final turn summaries, or stderr failure summaries.
 
-Chat, adaptive memory, review state, terminal output, and preview readiness are operational context. Task/Git/gate facts determine correctness.
+Chat, provider output, adaptive memory, review state, terminal output, and preview readiness are operational context. Task/Git/gate facts determine correctness.
 
 ---
 
@@ -652,15 +666,17 @@ arc web
         │                          │                           │
         └────────────────── SessionArcApplication ─────────────┘
                                    │
-             ┌─────────────────────┼──────────────────────┐
-             │                     │                      │
-       WorkerSession          ReviewLoop             WorkerRuntime
-             │                     │                      │
-             │                 GitHub PR            tmux backend
-             │                                        │       │
-             │                                   provider   preview
-             │                                      PTY      server
-             └─────────────────────┬──────────────────────┘
+            ┌──────────────────────┼──────────────────────┐
+            │                      │                      │
+      WorkerSession           ReviewLoop             WorkerRuntime
+            │                      │                      │
+            ├── LiveTurnSupervisor│                 tmux backend
+            │      │               │                    │       │
+            │      ▼               │               provider   preview
+            │  disposable          │                  PTY      server
+            │  provider turn       │
+            │      │               │
+            └──────┴───────────────┴──────────────────────┘
                                    ▼
                          authoritative Task DAG
                                    │
@@ -675,7 +691,7 @@ arc web
                          authoritative Git state
 ```
 
-If deleting an index, summary, transcript projection, review cache, or tmux session would erase what **actually happened**, that information was stored in the wrong place.
+If deleting an index, summary, transcript projection, review cache, runtime process, or tmux session would erase what **actually happened**, that information was stored in the wrong place.
 
 ---
 
@@ -688,6 +704,10 @@ If deleting an index, summary, transcript projection, review cache, or tmux sess
 | Persistent `WorkerSession` event model | ✅ |
 | Persistent isolated worker worktrees | ✅ |
 | Multi-turn worker conversation | ✅ |
+| Supervised browser live provider turns | ✅ v0.10 |
+| Incremental redacted stdout/stderr events | ✅ v0.10 |
+| Explicit provider-turn cancellation | ✅ v0.10 |
+| Safe cancel-before-worker-stop cleanup | ✅ v0.10 |
 | Session resume after ARC restart | ✅ |
 | Changed-files + draft diff inspection | ✅ |
 | Synchronous native provider-terminal handoff | ✅ |
@@ -699,6 +719,8 @@ If deleting an index, summary, transcript projection, review cache, or tmux sess
 | Provider-scoped default environment credentials | ✅ v0.9 |
 | Value-free profile environment allowlist | ✅ v0.9 |
 | Private single-use tmux environment handoff | ✅ v0.9 |
+| Strict loopback-only browser control planes | ✅ v0.9.1 |
+| Browser HTTP/WebSocket Origin protection | ✅ v0.9.1 |
 | Conversation-first `arc` shell | ✅ |
 | Session-centric `arc ui` Workspace | ✅ |
 | GitHub PR create/update through existing `gh` auth | ✅ v0.7 |
@@ -718,7 +740,7 @@ If deleting an index, summary, transcript projection, review cache, or tmux sess
 | Hard-budget ContextPacket compiler | ✅ |
 | Docker-backed command/test sandbox | ✅ |
 | Provider filesystem/network sandbox | 🚧 future |
-| Remote ARC auth / RBAC / multi-user mode | 🚧 future |
+| Authenticated remote ARC / RBAC / multi-user mode | 🚧 future |
 | Learned/LLM planner | 🚧 research |
 | Learned/bandit routing | 🚧 research |
 | Semantic embedding provider | 🚧 research |
@@ -737,7 +759,7 @@ adaptive-agent-runtime/
 ├── adapters/       # Codex/Claude/Antigravity/OpenCode + Mock
 ├── cli/            # product CLI and automation commands
 ├── tui/            # interactive shell + Mission Control
-├── webui/          # ARC Workspace + runtime/review APIs + lower-level browser control
+├── webui/          # Workspace, live-turn supervisor, runtime/review APIs, browser control
 ├── context/        # retrieval, allocation, compiler, staleness
 ├── memory/         # lifecycle, provenance, supersession, consolidation
 ├── runtime/        # orchestrator, env policy, tmux, gate, leases, recovery, replay, budgets
@@ -762,6 +784,8 @@ ARC supports falsifiable questions around reliable context, orchestration, and l
 
 > Can replayable review feedback loops and persistent supervised workspaces improve autonomous issue resolution without increasing unsafe test weakening, stale-context failures, or integration regressions?
 
+> Can streamed, replayable turn observations improve human supervision and cancellation latency without making provider processes authoritative or weakening secret isolation?
+
 Primary evaluation targets include:
 
 ```text
@@ -772,6 +796,8 @@ tokens + USD per resolved task
 retry / rejection rate
 review iterations per resolution
 feedback-to-fix latency
+turn-output latency
+cancel-to-process-exit latency
 context staleness
 handoff degradation
 restart/session continuity
@@ -791,6 +817,12 @@ CI runs on Python 3.11 and 3.12 and checks:
 - dependency/overlap orchestration behavior;
 - provider auth probes without real secrets;
 - worker creation, turns, restart/resume, stop, submit and gate integration;
+- streamed subprocess output arrives before provider exit;
+- provider-turn cancellation terminates long-running children;
+- credential-like provider output is redacted before durable events/summaries;
+- asynchronous Workspace turn start/cancel/status flows;
+- active live turns block conflicting submit actions;
+- worker stop cancels its supervised turn before worktree removal;
 - GitHub review normalization, routing, and deduplication with fake external responses;
 - multi-commit review branch → exact synthetic candidate integration;
 - fake-tmux terminal/preview start/status/stop;
@@ -802,7 +834,8 @@ CI runs on Python 3.11 and 3.12 and checks:
 - preview credential exclusion;
 - private tmux environment handoff and handoff deletion;
 - environment-policy CLI persistence without value persistence;
-- Workspace runtime/review API behavior;
+- strict local browser bind + HTTP/WebSocket Origin security;
+- Workspace runtime/review/live-turn API behavior;
 - FastAPI/WebSocket flows.
 
 Run locally:
@@ -818,17 +851,19 @@ python -m build
 
 ARC executes code produced by AI agents. Treat that as untrusted-code execution.
 
-Provider credentials remain in provider-owned credential stores/keyrings. GitHub credentials remain owned by `gh`. ARC does not copy those tokens into `.arc/`, events, or browser payloads.
+Provider credentials remain in provider-owned credential stores/keyrings. GitHub credentials remain owned by `gh`. ARC does not copy those tokens into `.arc/`, browser payloads, or unsanitized runtime events.
 
-ARC-managed coding-agent subprocesses now receive explicit least-privilege environments instead of the full host environment. Provider defaults are scoped by provider, profile extensions store names only, preview servers receive no automatic provider credentials, and tmux receives secret values through a private single-use handoff rather than worker argv. Runtime traces record environment names only.
+ARC-managed coding-agent subprocesses receive explicit least-privilege environments instead of the full host environment. Provider defaults are scoped by provider, profile extensions store names only, preview servers receive no automatic provider credentials, and tmux receives secret values through a private single-use handoff rather than worker argv. Runtime traces record environment names only.
+
+ARC 0.10 applies an additional persistence boundary to provider output: credential-like values from the provider environment and common provider token forms are redacted before streamed stdout/stderr is appended to `session.turn_output`, emitted to the Workspace WebSocket, or retained in provider summaries. This is defense in depth, not complete DLP.
 
 The command/test execution path can use Docker isolation with network disabled, dropped capabilities, resource limits, and a read-only root filesystem. Provider coding CLIs remain experimental host-mode: environment isolation reduces ambient authority but does not prevent a provider process from accessing other files, networks, sockets, or provider-owned credential files available to the launching user.
 
-Persistent tmux runtimes are local developer processes, not a sandbox. Preview servers are restricted to loopback and are not reverse-proxied through ARC. Preview application content therefore remains on a separate browser origin from the Workspace control plane.
+Persistent tmux runtimes and browser-started provider turns are local developer processes, not sandboxes. Preview servers are restricted to loopback and are not reverse-proxied through ARC. Preview application content therefore remains on a separate browser origin from the Workspace control plane.
 
-`arc ui` and `arc web` are local developer control surfaces, not authenticated multi-user services. Keep their default loopback bindings unless you place an appropriate trusted security boundary in front of them.
+`arc ui` and `arc web` are **strictly loopback-only unauthenticated developer control planes**. The legacy `--allow-remote` argument does not bypass this restriction. Both surfaces validate browser HTTP/WebSocket Origins. Authenticated remote/multi-user mode requires a separate identity/RBAC/transport design and is not currently implemented.
 
-See [docs/EXECUTION_SECURITY.md](docs/EXECUTION_SECURITY.md) for the exact 0.9 boundary and non-goals.
+See [SECURITY.md](SECURITY.md), [docs/LOCAL_CONTROL_PLANE_SECURITY.md](docs/LOCAL_CONTROL_PLANE_SECURITY.md), [docs/EXECUTION_SECURITY.md](docs/EXECUTION_SECURITY.md), and [docs/LIVE_TURNS.md](docs/LIVE_TURNS.md) for the exact boundaries and non-goals.
 
 ---
 
