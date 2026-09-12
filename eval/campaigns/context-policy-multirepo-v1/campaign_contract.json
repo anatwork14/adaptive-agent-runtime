@@ -42,7 +42,7 @@
       "benchmark_id": "context-policy-click-v1",
       "repo": "pallets/click",
       "commit": "6aabf099bfdd4c1e75fe8d0e0d4241372b988ab1",
-      "hidden_tree_sha256": "6d28fff3d4d70b655c0294cf80175d75a403b9cde6762ec9b2f7bc149906f3d3"
+      "hidden_tree_sha256": "4e9241310067b13e36f9ecce3913dbf0bd936bab6486a42300d032575141a3ef"
     },
     "httpx": {
       "study_id": "httpx-context-policy-v1",
