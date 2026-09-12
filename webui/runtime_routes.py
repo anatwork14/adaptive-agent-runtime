@@ -35,51 +35,64 @@ def register_runtime_routes(app: FastAPI, service: Any) -> None:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
 
     @app.post("/api/sessions/{session_id}/terminal/start")
-    def terminal_start(session_id: str) -> dict[str, Any]:
-        try:
-            with service.open() as arc:
-                doctor = arc.worker_runtime.doctor()
-                if doctor["status"] != "READY":
-                    raise RuntimeError(
-                        f"Persistent runtime is {doctor['status']}: {doctor['detail']}"
-                    )
-                return arc.worker_runtime.start_terminal(session_id).model_dump(mode="json")
-        except Exception as exc:
-            raise HTTPException(status_code=400, detail=str(exc)) from exc
-
-    @app.post("/api/sessions/{session_id}/terminal/stop")
-    def terminal_stop(session_id: str) -> dict[str, Any]:
-        try:
-            with service.open() as arc:
-                return arc.worker_runtime.stop_terminal(session_id).model_dump(mode="json")
-        except Exception as exc:
-            raise HTTPException(status_code=400, detail=str(exc)) from exc
-
-    @app.post("/api/sessions/{session_id}/preview/start")
-    def preview_start(session_id: str, payload: PreviewStartRequest) -> dict[str, Any]:
+    async def terminal_start(session_id: str) -> dict[str, Any]:
         lock = service.session_locks[session_id]
         if lock.locked():
             raise HTTPException(status_code=409, detail="worker is already processing an action")
-        try:
-            with service.open() as arc:
-                doctor = arc.worker_runtime.doctor()
-                if doctor["status"] != "READY":
-                    raise RuntimeError(
-                        f"Persistent runtime is {doctor['status']}: {doctor['detail']}"
-                    )
-                return arc.worker_runtime.start_preview(
-                    session_id,
-                    command_template=payload.command,
-                    port=payload.port,
-                    host=payload.host,
-                ).model_dump(mode="json")
-        except Exception as exc:
-            raise HTTPException(status_code=400, detail=str(exc)) from exc
+        async with lock:
+            try:
+                with service.open() as arc:
+                    doctor = arc.worker_runtime.doctor()
+                    if doctor["status"] != "READY":
+                        raise RuntimeError(
+                            f"Persistent runtime is {doctor['status']}: {doctor['detail']}"
+                        )
+                    return arc.worker_runtime.start_terminal(session_id).model_dump(mode="json")
+            except Exception as exc:
+                raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    @app.post("/api/sessions/{session_id}/terminal/stop")
+    async def terminal_stop(session_id: str) -> dict[str, Any]:
+        lock = service.session_locks[session_id]
+        if lock.locked():
+            raise HTTPException(status_code=409, detail="worker is already processing an action")
+        async with lock:
+            try:
+                with service.open() as arc:
+                    return arc.worker_runtime.stop_terminal(session_id).model_dump(mode="json")
+            except Exception as exc:
+                raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    @app.post("/api/sessions/{session_id}/preview/start")
+    async def preview_start(session_id: str, payload: PreviewStartRequest) -> dict[str, Any]:
+        lock = service.session_locks[session_id]
+        if lock.locked():
+            raise HTTPException(status_code=409, detail="worker is already processing an action")
+        async with lock:
+            try:
+                with service.open() as arc:
+                    doctor = arc.worker_runtime.doctor()
+                    if doctor["status"] != "READY":
+                        raise RuntimeError(
+                            f"Persistent runtime is {doctor['status']}: {doctor['detail']}"
+                        )
+                    return arc.worker_runtime.start_preview(
+                        session_id,
+                        command_template=payload.command,
+                        port=payload.port,
+                        host=payload.host,
+                    ).model_dump(mode="json")
+            except Exception as exc:
+                raise HTTPException(status_code=400, detail=str(exc)) from exc
 
     @app.post("/api/sessions/{session_id}/preview/stop")
-    def preview_stop(session_id: str) -> dict[str, Any]:
-        try:
-            with service.open() as arc:
-                return arc.worker_runtime.stop_preview(session_id).model_dump(mode="json")
-        except Exception as exc:
-            raise HTTPException(status_code=400, detail=str(exc)) from exc
+    async def preview_stop(session_id: str) -> dict[str, Any]:
+        lock = service.session_locks[session_id]
+        if lock.locked():
+            raise HTTPException(status_code=409, detail="worker is already processing an action")
+        async with lock:
+            try:
+                with service.open() as arc:
+                    return arc.worker_runtime.stop_preview(session_id).model_dump(mode="json")
+            except Exception as exc:
+                raise HTTPException(status_code=400, detail=str(exc)) from exc
