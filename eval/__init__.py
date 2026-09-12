@@ -28,6 +28,13 @@ from eval.runners.experiment import (
     ExperimentSummary,
     TaskMetric,
 )
+from eval.runners.paired import (
+    BaselineRunResult,
+    BlindedAgentAdapter,
+    IsolatedPairedBenchmarkResult,
+    IsolatedPairedBenchmarkRunner,
+    blind_context_for_provider,
+)
 from eval.telemetry import TraceTelemetry, collect_trace_telemetry
 
 __all__ = [
@@ -57,4 +64,9 @@ __all__ = [
     "PairedComparison",
     "validate_comparable_manifests",
     "compare_paired_measurements",
+    "BaselineRunResult",
+    "IsolatedPairedBenchmarkResult",
+    "IsolatedPairedBenchmarkRunner",
+    "BlindedAgentAdapter",
+    "blind_context_for_provider",
 ]

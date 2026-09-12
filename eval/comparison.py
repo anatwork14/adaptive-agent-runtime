@@ -23,7 +23,13 @@ class PairedComparison:
 
 
 def validate_comparable_manifests(a: BenchmarkManifest, b: BenchmarkManifest) -> None:
-    """Fail closed when a baseline comparison changes more than the policy under test."""
+    """Fail closed when a baseline comparison changes more than the policy under test.
+
+    ``benchmark_id`` is deliberately not part of the treatment contract. It is a
+    result namespace and older ARC studies used baseline-specific IDs. The
+    isolated paired runner imposes a shared benchmark ID separately because it
+    writes all treatment artifacts under one paired-run namespace.
+    """
     errors: list[str] = []
     if a.execution_mode != b.execution_mode:
         errors.append("execution_mode differs")
@@ -39,6 +45,8 @@ def validate_comparable_manifests(a: BenchmarkManifest, b: BenchmarkManifest) ->
         errors.append("model differs")
     if a.seed != b.seed:
         errors.append("seed differs")
+    if a.project_constraints != b.project_constraints:
+        errors.append("project_constraints differ")
     if [fault.model_dump(mode="json") for fault in a.faults] != [
         fault.model_dump(mode="json") for fault in b.faults
     ]:
@@ -52,7 +60,18 @@ def validate_comparable_manifests(a: BenchmarkManifest, b: BenchmarkManifest) ->
         errors.append("ordered task IDs differ")
     else:
         for left, right in zip(a.tasks, b.tasks):
-            fields = ("goal", "files", "acceptance", "risk", "token_budget", "hidden_test_pattern")
+            fields = (
+                "goal",
+                "task_type",
+                "required_capabilities",
+                "dependencies",
+                "files",
+                "symbols",
+                "acceptance",
+                "risk",
+                "token_budget",
+                "hidden_test_pattern",
+            )
             for field in fields:
                 if getattr(left, field) != getattr(right, field):
                     errors.append(f"task {left.task_id} field {field} differs")
