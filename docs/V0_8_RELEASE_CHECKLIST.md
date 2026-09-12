@@ -15,8 +15,9 @@
 - [x] browser JavaScript syntax check
 - [x] package version 0.8.0
 - [x] README and runtime documentation
-- [ ] exact final PR CI green on Python 3.11 + 3.12
-- [ ] squash merge to `main`
-- [ ] post-merge `main` CI green
+- [x] exact final PR CI green on Python 3.11 + 3.12 (`d199a8445cc39de7f740bb5a9cb284483871badd`)
+- [x] squash merge to `main` (`30a3bf9245e2664f636d1fb0f152dbe87b2ac974`)
+- [x] post-merge `main` CI green on Python 3.11 + 3.12
+- [x] GitHub Pages deployment green from the v0.8 merge revision
 
-The last three items are release gates and must not be marked complete until GitHub verifies the exact merged revision.
+ARC 0.8 passed all release gates. The original interactive-supervision gaps targeted by this milestone are complete; follow-up work belongs to security hardening, packaging, learned policies, and repository-scale evaluation.
