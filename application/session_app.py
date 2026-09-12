@@ -11,7 +11,7 @@ from application.agents import build_agent
 from application.app import ArcApplication
 from application.config import AgentProfile
 from application.reviews import ReviewLoopManager
-from application.sessions import WorkerSessionManager
+from application.runtime_sessions import RuntimeWorkerSessionManager
 from application.worker_runtime import WorkerRuntimeManager
 
 
@@ -24,8 +24,8 @@ class SessionArcApplication(ArcApplication):
         return self.repo
 
     @property
-    def sessions(self) -> WorkerSessionManager:
-        return WorkerSessionManager(self)
+    def sessions(self) -> RuntimeWorkerSessionManager:
+        return RuntimeWorkerSessionManager(self)
 
     @property
     def reviews(self) -> ReviewLoopManager:
