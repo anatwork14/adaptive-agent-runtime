@@ -122,8 +122,11 @@ def test_isolated_triplet_resets_git_state_memory_and_provider_metadata(tmp_path
     assert source_head_after == source_head_before
     assert (repo / "shared.txt").read_text(encoding="utf-8") == "base\n"
 
-    # Workspaces are disposable; audit records survive.
-    assert not any(path.is_dir() and path.name.startswith("w") for path in workspace_root.rglob("w*"))
+    # Workspaces and their ARC runtime scaffolding are disposable; only audit
+    # artifacts survive under output_root.
+    run_workspace_root = workspace_root / "smoke-001"
+    assert not list(run_workspace_root.glob("w[0-9][0-9]-*"))
+    assert not (run_workspace_root / ".arc-runtime").exists()
     for baseline in ("b3", "b5", "b7"):
         baseline_dir = result.artifact_dir / baseline
         assert (baseline_dir / "state.db").exists()

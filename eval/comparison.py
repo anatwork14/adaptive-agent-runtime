@@ -23,10 +23,14 @@ class PairedComparison:
 
 
 def validate_comparable_manifests(a: BenchmarkManifest, b: BenchmarkManifest) -> None:
-    """Fail closed when a baseline comparison changes more than the policy under test."""
+    """Fail closed when a baseline comparison changes more than the policy under test.
+
+    ``benchmark_id`` is deliberately not part of the treatment contract. It is a
+    result namespace and older ARC studies used baseline-specific IDs. The
+    isolated paired runner imposes a shared benchmark ID separately because it
+    writes all treatment artifacts under one paired-run namespace.
+    """
     errors: list[str] = []
-    if a.benchmark_id != b.benchmark_id:
-        errors.append("benchmark_id differs")
     if a.execution_mode != b.execution_mode:
         errors.append("execution_mode differs")
     if a.repo_commit != b.repo_commit:

@@ -209,6 +209,21 @@ class IsolatedPairedBenchmarkRunner:
         if workspace.exists():
             shutil.rmtree(workspace, ignore_errors=True)
 
+        # Orchestrator task worktrees/gate worktrees live beside the benchmark
+        # integration worktree under `.arc-runtime/<workspace-name>`. Removing
+        # the integration worktree alone would leave empty runtime scaffolding
+        # that can be mistaken for cross-treatment state. Audit artifacts live
+        # elsewhere and remain untouched.
+        runtime_root = workspace.parent / ".arc-runtime" / workspace.name
+        if runtime_root.exists():
+            shutil.rmtree(runtime_root, ignore_errors=True)
+        shared_runtime_root = workspace.parent / ".arc-runtime"
+        if shared_runtime_root.exists():
+            try:
+                shared_runtime_root.rmdir()
+            except OSError:
+                pass
+
     @staticmethod
     def _materialize_manifest(orchestrator: Orchestrator, manifest: BenchmarkManifest) -> None:
         orchestrator.init_project(
