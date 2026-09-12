@@ -15,3 +15,5 @@ ARC 0.7 projects GitHub review state into the authoritative ARC event log withou
 The review snapshot records check names/statuses/conclusions, review decision, merge-state status, PR identity and digests. Credentials are never written into these events.
 
 The snapshot digest identifies normalized external state. The feedback digest identifies actionable instructions independently so non-actionable GitHub state churn does not repeatedly trigger the same worker turn.
+
+See [`CLOSED_LOOP_REVIEWS.md`](CLOSED_LOOP_REVIEWS.md) for the operator workflow and multi-commit candidate model.
