@@ -15,12 +15,12 @@ project_constraints:
 notes: Proposed adaptive-context treatment for the Click progressive maintenance sequence.
 tasks:
   - task_id: T001
-    goal: Add opt-in sensitive metadata to Click parameters, initially exercised through options, without changing ordinary parsing, help, callback, or invocation behavior.
+    goal: Add an opt-in sensitive boolean contract to Click parameters, initially exercised through options, without changing ordinary parsing, help, callback, or invocation behavior.
     files: [src/click/core.py, tests/test_options.py, tests/test_info_dict.py]
     symbols: [Parameter, Option, to_info_dict]
     acceptance:
-      - A sensitive flag is opt-in and defaults false.
-      - Option introspection exposes the sensitivity bit.
+      - Parameter and Option accept sensitive with default false; decorator plumbing can forward it.
+      - Option to_info_dict exposes a boolean sensitive field.
       - Marking an option sensitive does not change its runtime value or visible help behavior.
       - Existing visible tests pass.
     risk: 0.45
@@ -29,26 +29,26 @@ tasks:
     metadata: {category: progressive-api-maintenance}
   - task_id: T002
     dependencies: [T001]
-    goal: Add a deterministic Context.parameter_snapshot API that reports current parameter values and ParameterSource while redacting values marked sensitive by T001 unless raw values are explicitly requested.
+    goal: Add Context.parameter_snapshot with keyword argument redact_sensitive defaulting true; it returns deterministic records for current parameters and their ParameterSource while reusing the sensitivity contract from T001.
     files: [src/click/core.py, tests/test_context.py, tests/test_info_dict.py]
     symbols: [Context, ParameterSource, Parameter]
     acceptance:
-      - Snapshot records name, value, source name or null, and sensitivity.
-      - Sensitive values are represented as the literal <redacted> by default.
-      - Explicit raw mode returns the true value without mutating the context.
-      - ParameterSource distinctions remain intact and existing visible tests pass.
+      - Context.parameter_snapshot accepts keyword-only redact_sensitive with default true and returns a list of records.
+      - Each record contains name value source and sensitive; source is ParameterSource.name or null.
+      - Sensitive values are the literal <redacted> by default; redact_sensitive=false returns raw values.
+      - Snapshotting does not mutate context or parameters and existing visible tests pass.
     risk: 0.60
     token_budget: 12000
     hidden_test_pattern: test_hidden_click_t002_*.py
     metadata: {category: progressive-api-maintenance}
   - task_id: T003
     dependencies: [T002]
-    goal: Generalize the sensitive metadata contract cleanly to base Parameter so Click arguments and options share one implementation and Context.parameter_snapshot redacts both consistently.
+    goal: Generalize the sensitive metadata contract cleanly across base Parameter so Argument(..., sensitive=True) and options share one implementation and Context.parameter_snapshot redacts both consistently.
     files: [src/click/core.py, src/click/decorators.py, tests/test_arguments.py, tests/test_options.py, tests/test_context.py, tests/test_info_dict.py]
     symbols: [Parameter, Argument, Option, Context]
     acceptance:
-      - Arguments accept the same opt-in sensitive contract as options.
-      - The sensitivity state is owned once at the appropriate base abstraction.
+      - Argument construction and decorator-created arguments accept sensitive with default false.
+      - The sensitivity state is owned once at the appropriate base Parameter abstraction.
       - Introspection and parameter snapshots handle arguments and options consistently.
       - T001 and T002 behavior remains compatible and existing visible tests pass.
     risk: 0.65

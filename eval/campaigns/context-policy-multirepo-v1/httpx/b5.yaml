@@ -12,30 +12,30 @@ project_constraints: [Preserve existing public request and response semantics., 
 notes: Fixed vector-top-k treatment for the HTTPX progressive maintenance sequence.
 tasks:
   - task_id: T001
-    goal: Add a reusable non-mutating sensitive-header redaction primitive that preserves header order and duplicate multiplicity while redacting standard credential and cookie headers case-insensitively.
+    goal: Add Headers.redacted() returning a new Headers collection that redacts standard credential and cookie headers case-insensitively while preserving order and duplicate multiplicity.
     files: [httpx/_models.py, tests/models/test_headers.py]
     symbols: [Headers]
-    acceptance: [Authorization Proxy-Authorization Cookie and Set-Cookie are redacted case-insensitively., Redaction returns an independent header collection and does not mutate the input., Non-sensitive headers plus order and duplicate multiplicity are preserved., Existing visible tests pass.]
+    acceptance: [Headers.redacted returns an independent Headers object without mutating input., Authorization Proxy-Authorization Cookie and Set-Cookie values are replaced by the literal <redacted> case-insensitively., Non-sensitive names values order and duplicate multiplicity are preserved., Existing visible tests pass.]
     risk: 0.45
     token_budget: 12000
     hidden_test_pattern: test_hidden_httpx_t001_*.py
     metadata: {category: progressive-security-maintenance}
   - task_id: T002
     dependencies: [T001]
-    goal: Route verbose request-header rendering through the T001 redaction policy by default and add one explicit unsafe opt-out that restores raw verbose request headers.
+    goal: Route verbose request-header rendering through Headers.redacted() by default and add the explicit CLI flag --show-sensitive to restore raw verbose request headers.
     files: [httpx/_main.py, httpx/_models.py, tests/test_main.py, tests/models/test_headers.py]
     symbols: [format_request_headers, print_request_headers, Headers]
-    acceptance: [Default verbose request output does not reveal sensitive request-header values., The explicit unsafe opt-out restores previous raw rendering., HTTP/1.1 and HTTP/2 formatting is otherwise preserved., CLI help describes the safe default and unsafe opt-out and existing visible tests pass.]
+    acceptance: [Default verbose request output does not reveal sensitive request-header values., --show-sensitive restores the previous raw verbose request-header rendering., HTTP/1.1 and HTTP/2 formatting is otherwise preserved., CLI help describes the safe default and unsafe opt-out and existing visible tests pass.]
     risk: 0.60
     token_budget: 12000
     hidden_test_pattern: test_hidden_httpx_t002_*.py
     metadata: {category: progressive-security-maintenance}
   - task_id: T003
     dependencies: [T002]
-    goal: Apply the exact same verbose-header sensitivity policy and unsafe opt-out to response headers without changing response body rendering or unrelated response behavior.
+    goal: Apply the same Headers.redacted and --show-sensitive policy to verbose response headers without changing response body rendering or unrelated response behavior.
     files: [httpx/_main.py, httpx/_models.py, tests/test_main.py, tests/models/test_headers.py]
     symbols: [format_response_headers, print_response_headers, Headers]
-    acceptance: [Default verbose response output redacts sensitive response values including Set-Cookie., The same explicit unsafe opt-out restores raw response-header rendering., Duplicate header ordering and non-sensitive formatting are preserved., T001 and T002 behavior plus existing visible tests remain compatible.]
+    acceptance: [Default verbose response output redacts sensitive response values including Set-Cookie., --show-sensitive restores raw response-header rendering., Duplicate header ordering and non-sensitive formatting are preserved., T001 and T002 behavior plus existing visible tests remain compatible.]
     risk: 0.55
     token_budget: 12000
     hidden_test_pattern: test_hidden_httpx_t003_*.py
