@@ -82,9 +82,6 @@ def collect_trace_telemetry(events: Iterable[Event], gate_result: GateResult) ->
             raw_sha = payload.get("candidate_commit_sha")
             candidate_commit_sha = str(raw_sha) if raw_sha else candidate_commit_sha
 
-    if candidate_commit_sha is None:
-        candidate_commit_sha = getattr(gate_result, "merged_commit_sha", None)
-
     return TraceTelemetry(
         context_id=context_id,
         context_digest=context_digest,
