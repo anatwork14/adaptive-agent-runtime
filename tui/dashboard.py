@@ -18,10 +18,11 @@ class ArcDashboard(App[None]):
     """Interactive terminal mission control over the shared ARC application layer."""
 
     TITLE = "ARC Mission Control"
-    SUB_TITLE = "Adaptive Agent Runtime"
+    SUB_TITLE = "Multi-Agent Orchestration"
     BINDINGS = [
         ("q", "quit", "Quit"),
         ("r", "refresh", "Refresh"),
+        ("a", "orchestrate", "Run fleet"),
         ("g", "run_selected", "Run task"),
         ("y", "retry_selected", "Retry"),
         ("x", "cancel_selected", "Cancel"),
@@ -100,6 +101,7 @@ class ArcDashboard(App[None]):
         self.selected_task_id: str | None = None
         self.last_event_id = 0
         self._task_columns_added = False
+        self._fleet_running = False
 
     def compose(self) -> ComposeResult:
         yield Header(show_clock=True)
@@ -190,10 +192,12 @@ class ArcDashboard(App[None]):
         for profile in self.arc.list_agents():
             row = doctor_by_name[profile.name]
             marker = "●" if profile.name == self.arc.config.default_agent else "○"
-            color = "green" if row.status == "READY" else "yellow" if row.status == "GATEWAY_ONLY" else "red"
+            color = "green" if row.status == "READY" else "yellow" if row.status in {"GATEWAY_ONLY", "AUTH_REQUIRED"} else "red"
+            caps = ",".join(profile.capabilities[:4]) or "-"
             lines.append(
                 f"{marker} [bold cyan]{profile.name}[/bold cyan]  {profile.provider}"
-                f"\n   [{color}]{row.status}[/{color}]  role={profile.role}  model={profile.model or '-'}"
+                f"\n   [{color}]{row.status}[/{color}]  role={profile.role}  max={profile.max_concurrency}"
+                f"\n   caps={caps}"
             )
         self.query_one("#agents", Static).update("\n\n".join(lines) or "No agents configured")
 
@@ -207,10 +211,13 @@ class ArcDashboard(App[None]):
             for task in snap["tasks"]
             if task.status in {TaskStatus.DISPATCHED, TaskStatus.SUBMITTED}
         )
+        orchestration = snap.get("orchestration", {})
         text = (
             f"[bold]Project[/bold]   {snap['project_id']}\n"
             f"[bold]State[/bold]     v{snap['version']}\n"
             f"[bold]Tasks[/bold]     {len(snap['tasks'])}  ready={ready} active={active}\n"
+            f"[bold]Fleet[/bold]     policy={orchestration.get('routing_policy', '-')} max={orchestration.get('max_parallel', '-')}"
+            f"{'  [yellow]RUNNING[/yellow]' if self._fleet_running else ''}\n"
             f"[bold]Memory[/bold]    {len(memories)} active\n"
             f"[bold]Budget[/bold]    ${budget.consumed_usd:.2f} / ${budget.hard_project_ceiling_usd:.2f}\n"
             f"[bold]Tokens[/bold]    {budget.consumed_tokens:,}\n"
@@ -229,19 +236,26 @@ class ArcDashboard(App[None]):
             detail.update("[red]Selected task disappeared from projection.[/red]")
             return
         recent = self.arc.task_events(task.task_id, limit=7)
-        event_lines = "\n".join(
-            f"  [dim]#{event.id}[/dim] {event.kind}" for event in recent
-        ) or "  -"
+        event_lines = "\n".join(f"  [dim]#{event.id}[/dim] {event.kind}" for event in recent) or "  -"
+        route_text = ""
+        if task.status == TaskStatus.READY:
+            try:
+                route = self.arc.route_task(task.task_id)
+                route_text = f"route={route.agent_name} score={route.score:.2f} policy={route.policy}\n"
+            except Exception as exc:
+                route_text = f"route=[yellow]deferred[/yellow] ({exc})\n"
         text = (
             f"[bold cyan]{task.task_id}[/bold cyan]  {self._status_markup(task.status.value)}\n"
             f"[bold]{task.goal}[/bold]\n\n"
+            f"type={task.task_type}  capabilities={','.join(task.required_capabilities) or '-'}\n"
+            f"{route_text}"
             f"agent={task.assigned_agent or '-'}  attempt={task.attempt_count}  risk={task.risk:.2f}\n"
             f"dependencies={', '.join(task.dependencies) or '-'}\n"
             f"files={', '.join(task.files_declared) or '-'}\n"
             f"token ceiling={task.token_budget:,}\n"
             f"acceptance={'; '.join(task.acceptance_criteria) or '-'}\n\n"
             f"[bold]Recent authoritative events[/bold]\n{event_lines}\n\n"
-            f"[dim]g run default agent • y retry • x cancel • r refresh[/dim]"
+            f"[dim]a run fleet • g run selected • y retry • x cancel • r refresh[/dim]"
         )
         detail.update(text)
 
@@ -256,11 +270,13 @@ class ArcDashboard(App[None]):
         log = self.query_one("#events", RichLog)
         color = (
             "green"
-            if event.kind in {"gate.accepted", "task.merged"}
+            if event.kind in {"gate.accepted", "task.merged", "orchestration.task_finished"}
             else "red"
-            if event.kind in {"task.failed", "gate.rejected", "task.abandoned"}
+            if event.kind in {"task.failed", "gate.rejected", "task.abandoned", "orchestration.task_failed"}
             else "yellow"
-            if event.kind.startswith("gate.")
+            if event.kind.startswith("gate.") or event.kind == "orchestration.deferred"
+            else "magenta"
+            if event.kind.startswith("orchestration.")
             else "cyan"
         )
         log.write(
@@ -278,6 +294,26 @@ class ArcDashboard(App[None]):
         self.refresh_dashboard()
         self.notify("ARC state refreshed", timeout=1)
 
+    async def action_orchestrate(self) -> None:
+        if self.arc is None or self._fleet_running:
+            return
+        self._fleet_running = True
+        self.refresh_dashboard()
+        try:
+            self.notify("ARC fleet routing READY tasks…", timeout=2)
+            result = await self.arc.orchestrate()
+            severity = "information" if result.successful else "warning"
+            self.notify(
+                f"{result.run_id}: accepted={len(result.accepted)} failed={len(result.failed) + len(result.rejected)}",
+                severity=severity,
+                timeout=4,
+            )
+        except Exception as exc:
+            self.notify(str(exc), severity="error", timeout=5)
+        finally:
+            self._fleet_running = False
+            self.refresh_dashboard()
+
     async def action_run_selected(self) -> None:
         if self.arc is None or not self.selected_task_id:
             return
@@ -288,11 +324,9 @@ class ArcDashboard(App[None]):
             self.notify(f"{task.task_id} is {task.status.value}, not READY", severity="warning")
             return
         try:
-            self.notify(
-                f"Running {task.task_id} with {self.arc.config.default_agent}",
-                timeout=2,
-            )
-            result = await self.arc.run_task(task.task_id)
+            route = self.arc.route_task(task.task_id)
+            self.notify(f"Running {task.task_id} with {route.agent_name}", timeout=2)
+            result = await self.arc.run_task(task.task_id, agent_name=route.agent_name)
             self.notify(f"Gate result: {result.status.value}", timeout=3)
             self.refresh_dashboard()
         except Exception as exc:
