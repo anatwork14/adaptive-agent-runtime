@@ -1,6 +1,6 @@
 # ARC — Adaptive Agent Runtime
 
-> **Reliable multi-agent orchestration and context control for long-horizon coding agents.**
+> **A persistent multi-agent coding supervisor with reliable context, isolated workers, and transactional integration.**
 
 [![CI](https://github.com/anatwork14/adaptive-agent-runtime/actions/workflows/ci.yml/badge.svg)](https://github.com/anatwork14/adaptive-agent-runtime/actions/workflows/ci.yml)
 [![Python 3.11+](https://img.shields.io/badge/python-3.11%2B-3776ab.svg)](https://www.python.org/)
@@ -12,24 +12,24 @@
 </p>
 
 <p align="center">
-  <strong><a href="https://anatwork14.github.io/adaptive-agent-runtime/">Interactive website</a></strong>
+  <strong><a href="https://anatwork14.github.io/adaptive-agent-runtime/">Website</a></strong>
   · <strong><a href="docs/GETTING_STARTED.md">Getting started</a></strong>
+  · <strong><a href="docs/INTERACTIVE_WORKSPACE.md">Interactive workspace</a></strong>
   · <strong><a href="docs/ORCHESTRATION.md">Orchestration</a></strong>
   · <strong><a href="docs/OPERATOR_GUIDE.md">Operator guide</a></strong>
-  · <strong><a href="docs/WEB_MISSION_CONTROL.md">Web Mission Control</a></strong>
 </p>
 
-ARC is a research-oriented runtime **and operator application** for coordinating coding agents without treating chat history, summaries, or vector memory as project truth.
+ARC coordinates Codex, Claude Code, Antigravity, OpenCode, and deterministic local workers while keeping project truth outside chat history.
 
 The core rule is:
 
 > **Adaptive memory is never authoritative.**
 
-Authoritative project state lives in an append-only event stream plus Git state. Memory is a rebuildable, versioned projection used to compile the smallest useful context for each task.
+Authoritative project state lives in an append-only event stream plus Git state. Memory is a rebuildable, versioned projection used to compile bounded context for each task and worker.
 
-**ARC 0.5 adds real multi-agent orchestration:** a replayable planner baseline, capability/cost/load-aware routing, concurrent isolated agent work, explicit file leases, and a serialized integration gate. CLI, TUI, browser UI, and WebSocket consumers all observe the same authoritative orchestration trace.
+**ARC 0.6 makes the application conversation-first.** Plain `arc` opens a persistent coding-agent supervisor. Each focused task can own a long-lived worker session with an isolated worktree, conversation, changed files, diff, immutable context, event trail, and native provider-terminal handoff. `arc ui` opens the matching session-centric browser workspace.
 
-**Status:** experimental / pre-alpha. The orchestration substrate is functional and tested with the deterministic mock executor. Real Codex/Claude/Antigravity/OpenCode wrappers remain experimental; provider sandboxing, learned planning/routing, remote multi-user security, semantic retrieval, and repository-scale research evaluation remain active work.
+**Status:** experimental / pre-alpha. Persistent worker sessions, orchestration, isolation, replay, and the transactional gate are implemented and tested with the deterministic mock executor. Real provider wrappers remain experimental; provider sandboxing, remote multi-user security, PR/CI integrations, browser previews, learned planning/routing, and repository-scale evaluation remain active work.
 
 ---
 
@@ -45,10 +45,22 @@ source .venv/bin/activate
 pip install -e ".[dev]"
 ```
 
-Initialize a clean target repository and connect coding-agent accounts:
+Initialize a target repository:
 
 ```bash
+cd /path/to/your/project
 arc init . --project-id demo
+```
+
+Connect provider accounts through their native login flows:
+
+```bash
+arc login
+```
+
+or directly:
+
+```bash
 arc login codex --profile builder --default
 arc login claude --profile reviewer
 arc login antigravity --profile researcher
@@ -56,59 +68,176 @@ arc auth status
 arc agent doctor
 ```
 
-ARC delegates sign-in to each provider's native account flow. Provider OAuth tokens remain in provider-owned credential/keyring stores; ARC only stores non-secret routing/profile metadata.
+ARC does not copy provider OAuth tokens into `.arc/`. Credentials stay in the vendor CLI/keyring that owns them.
 
-### Run one task
+### Use ARC like a coding-agent CLI
 
-```bash
-arc task create "Implement authentication middleware" \
-  --file src/auth.py \
-  --accept "tests pass"
-
-arc route T001
-arc run T001 --agent builder
-```
-
-### Run a multi-agent mission
+Run:
 
 ```bash
-arc mission plan "Add authentication with tests and docs" \
-  --file src/auth.py \
-  --file tests/test_auth.py \
-  --file docs/auth.md \
-  --accept "tests pass" \
-  --run
+arc
 ```
 
-Or execute an existing READY frontier:
-
-```bash
-arc orchestrate
-```
-
-Open terminal Mission Control:
-
-```bash
-arc dashboard
-```
-
-Open browser Agent Orchestration Control:
-
-```bash
-arc web --open
-```
-
-Default browser address:
+The default experience is now an interactive supervisor:
 
 ```text
-http://127.0.0.1:8787
+ARC — persistent multi-agent coding supervisor
+
+> add OAuth login, integration tests, and documentation
+
+ARC planned 3 tasks:
+  T001  implement OAuth backend      → builder
+  T002  add integration tests        → builder
+  T003  update authentication docs   → reviewer
+
+Type /run to execute the READY fleet,
+or /open T001 to supervise one worker interactively.
+
+> /open T001
+Worker opened S_a1b2c3d4 → T001 / builder
+
+> preserve the current session API and add refresh-token rotation
+builder is working in T001…
+...
+
+> /diff
+...
+
+> /submit
+ACCEPTED  gate=...
 ```
+
+Important shell controls:
+
+```text
+/help
+/status
+/tasks
+/sessions
+/open TASK [AGENT]
+/focus SESSION|TASK
+/send SESSION TEXT
+/files [SESSION]
+/diff [SESSION]
+/submit [SESSION]
+/stop [SESSION]
+/run
+/attach [SESSION]
+/exit
+```
+
+### Open the visual workspace
+
+```bash
+arc ui
+```
+
+Default address:
+
+```text
+http://127.0.0.1:8788
+```
+
+The Workspace is worker/session-centric:
+
+```text
+┌─────────────┬──────────────────────────────────────┬──────────────────────┐
+│ ARC         │ PROJECT ORCHESTRATOR                 │ WORKER INSPECTOR     │
+│             │                                      │                      │
+│ Board       │ What should the team accomplish?     │ Chat                 │
+│ Workers     │ [ Plan & delegate                 ]  │ Files                │
+│ Agents      │                                      │ Diff                 │
+│ Trace       │ Working | Needs you | Review | Done  │ Context              │
+│             │                                      │ Events               │
+│ Providers   │ worker cards                         │ Terminal             │
+└─────────────┴──────────────────────────────────────┴──────────────────────┘
+```
+
+Open any READY task as a persistent worker, continue its conversation, inspect the draft, and explicitly submit it through ARC's gate.
 
 ---
 
-## ARC 0.5 orchestration
+## Persistent workers
 
-The correctness boundary is:
+ARC 0.6 adds a durable `WorkerSession` above the authoritative task DAG:
+
+```text
+Task
+  │
+  ▼
+WorkerSession
+  ├── agent profile
+  ├── immutable ContextPacket
+  ├── isolated Git worktree
+  ├── conversation transcript
+  ├── changed-file surface
+  ├── current diff
+  ├── native terminal handoff
+  └── authoritative session events
+          │
+          ▼
+      explicit submit
+          │
+          ▼
+ transactional integration gate
+```
+
+A task remains the authoritative unit of work. The session is its supervised draft workspace.
+
+### Session persistence model
+
+ARC persists:
+
+- worker/session identity;
+- selected agent/provider/model;
+- immutable initial ContextPacket;
+- conversation turns;
+- worktree path and branch;
+- changed-file snapshots;
+- submit/gate outcome;
+- terminal attach state as events.
+
+The worktree and event log survive ARC restarts. Provider processes are **not** treated as durable state. After restarting ARC, resume the session against the same worktree:
+
+```bash
+arc session list
+arc session resume S_a1b2c3d4
+arc session send S_a1b2c3d4 "continue by fixing the failing test"
+```
+
+This avoids pretending a PID or terminal process is authoritative state.
+
+### Scriptable session commands
+
+```bash
+arc session open T001 --agent builder
+arc session list
+arc session show S_a1b2c3d4
+arc session send S_a1b2c3d4 "add edge-case tests"
+arc session files S_a1b2c3d4
+arc session diff S_a1b2c3d4
+arc session resume S_a1b2c3d4
+arc session submit S_a1b2c3d4
+arc session stop S_a1b2c3d4
+```
+
+### Native provider UI
+
+To work directly in Codex / Claude / Antigravity / OpenCode while preserving ARC's worker workspace:
+
+```bash
+arc attach S_a1b2c3d4
+```
+
+ARC runs the provider's native terminal interface in that worker's isolated worktree, then records the resulting changed-file surface when the provider exits. Authentication and provider-native terminal behavior remain vendor-owned.
+
+ARC still requires explicit `session submit` before draft changes cross the transactional integration gate.
+
+---
+
+## Multi-agent orchestration
+
+ARC retains the v0.5 correctness boundary:
 
 > **Parallelize agent work. Serialize authoritative integration.**
 
@@ -142,64 +271,120 @@ The correctness boundary is:
                     exact-candidate verify
                             │
                        accept/reject
-                            │
-                            ▼
-                    integration branch
 ```
 
-### Planner baseline
+Run a reproducible mission plan:
 
-`DeterministicPlanner` is intentionally simple and replayable, not presented as an LLM planner. Declared source surfaces become implementation work; test/docs surfaces become dependent tasks. Its output becomes normal authoritative tasks plus an `orchestration.plan_created` event.
-
-That gives ARC a reproducible baseline before learned/LLM planning is introduced.
-
-### Explainable routing
-
-Agent profiles now carry:
-
-```yaml
-capabilities:
-  - implementation
-  - test
-max_concurrency: 2
-cost_weight: 1.0
-quality_weight: 1.2
+```bash
+arc mission plan "Add authentication with tests and docs" \
+  --file src/auth.py \
+  --file tests/test_auth.py \
+  --file docs/auth.md \
+  --accept "tests pass" \
+  --run
 ```
 
-ARC routes using:
+Or run the reachable READY frontier:
 
-- required capabilities;
-- task type / role match;
-- provider readiness;
-- per-agent concurrency load;
-- quality and cost weights;
-- routing policy (`balanced`, `quality`, `cost`).
+```bash
+arc orchestrate
+```
 
-Inspect a decision:
+Inspect routing:
 
 ```bash
 arc route T001 --policy quality
 ```
 
-Tune a profile:
+Routing considers required capabilities, task type, provider readiness, concurrency load, operator quality/cost weights, and the selected policy (`balanced`, `quality`, `cost`).
+
+The deterministic mock executor is an intentional smoke-test fallback. If a capable real provider is configured but unavailable/auth-required/saturated, ARC defers rather than silently pretending success with mock.
+
+See [docs/ORCHESTRATION.md](docs/ORCHESTRATION.md).
+
+---
+
+## Interfaces
+
+ARC now has a clear interface hierarchy.
+
+### 1. `arc` — flagship interactive CLI
+
+Conversation-first planning and persistent worker supervision.
+
+### 2. `arc ui` — flagship visual workspace
+
+Session-centric local web app with:
+
+- project orchestrator prompt;
+- Working / Needs you / In review / Resolved board;
+- persistent worker cards;
+- Chat tab;
+- changed files;
+- live diff;
+- immutable ContextPacket inspection;
+- authoritative worker/task events;
+- native terminal attach instructions;
+- explicit Open worker / Submit / Stop actions;
+- provider readiness;
+- live WebSocket event refresh.
+
+### 3. `arc dashboard` — terminal mission control
+
+Task-DAG and fleet-oriented Textual dashboard.
+
+### 4. `arc web` — lower-level orchestration control
+
+The earlier v0.5 task/provider dashboard remains available at port `8787` for route/context/fleet inspection.
+
+Both browser surfaces are localhost-only by default because ARC does not yet provide ARC-user authentication/RBAC.
+
+---
+
+## Provider authentication and execution
+
+| Provider | ARC provider | Native auth | Execution |
+|---|---|---|---|
+| OpenAI Codex | `codex` | ChatGPT / OpenAI OAuth | 🧪 experimental |
+| Claude Code | `claude` | Anthropic OAuth | 🧪 experimental |
+| Google Antigravity | `antigravity` | Google OAuth / secure keyring | 🧪 experimental |
+| OpenCode | `opencode` | CLI-managed | 🧪 experimental |
+| OpenRouter | `openrouter` | environment gateway | gateway only |
+| Mock | `mock` | none | deterministic tests/smoke |
+
+Useful commands:
 
 ```bash
-arc agent tune builder \
-  --capability implementation \
-  --capability test \
-  --max-concurrency 2 \
-  --quality-weight 1.3
+arc login
+arc auth status
+arc agent doctor
+arc agent tune builder --capability implementation --max-concurrency 2
 ```
 
-The deterministic mock executor is an intentional smoke-test fallback, not a substitute for broken providers. Automatic routing chooses mock only when **no capable real executor profile is configured for the task**. If a capable real provider is configured but unavailable, authentication-required, or saturated, ARC defers and surfaces that state instead of silently running mock. Explicit `--agent mock` remains available for intentional smoke tests.
+Provider adapters never silently fabricate a patch. ARC measures actual worktree changes and uses Git candidate commits as the integration input.
 
-### Conflict control
+---
 
-Before dispatch ARC acquires exclusive leases for all declared files. Tasks with overlapping declared surfaces are not put in the same parallel batch. A conflicting task is deferred to a later round rather than becoming a second writer to the same surface.
+## Event-sourced session and orchestration trace
 
-### Event-visible decisions
+Persistent-worker events include:
 
-Orchestration is observable and replayable:
+```text
+session.created
+session.message
+session.turn_started
+session.turn_finished
+session.resumed
+session.terminal_started
+session.terminal_stopped
+session.submitted
+session.accepted
+session.rejected
+session.failed
+session.stopped
+```
+
+Orchestration events include:
 
 ```text
 orchestration.plan_created
@@ -212,98 +397,27 @@ orchestration.task_failed
 orchestration.run_finished
 ```
 
-See [docs/ORCHESTRATION.md](docs/ORCHESTRATION.md) for the full contract.
-
----
-
-## Provider authentication and execution
-
-| Provider | ARC provider | Native auth | Execution adapter |
-|---|---|---|---|
-| OpenAI Codex | `codex` | ChatGPT / OpenAI OAuth | 🧪 experimental |
-| Claude Code | `claude` | Anthropic OAuth | 🧪 experimental |
-| Google Antigravity | `antigravity` | Google OAuth / secure keyring | 🧪 experimental |
-| OpenCode | `opencode` | CLI-managed | 🧪 experimental |
-| OpenRouter | `openrouter` | environment gateway | gateway only |
-
-Useful commands:
-
-```bash
-arc login
-arc login codex --profile builder --default
-arc auth status
-arc agent doctor
-```
-
-ARC never copies provider credentials into `.arc/` or the browser UI.
-
-Provider adapters never silently fall back to a mock success. ARC measures actual worktree changes and rejects empty/fabricated repository edits.
-
----
-
-## Mission Control
-
-### Terminal
-
-```bash
-arc dashboard
-```
-
-ARC 0.5 controls:
-
-```text
-a  route and run READY fleet
-g  route and run selected READY task
-y  retry selected failed/blocked task
-x  cancel selected task
-r  refresh
-q  quit
-```
-
-The TUI shows task DAG state, provider readiness, routing metadata, recommended routes, budget/memory/lease state, and authoritative events.
-
-### Browser
-
-```bash
-arc web --open
-```
-
-Browser Agent Orchestration Control provides:
-
-- ARC Root + provider orchestrator cards;
-- provider/profile readiness;
-- provider-grouped running/idle teams;
-- live task ledger;
-- **Plan objective**;
-- **Run ready** fleet orchestration;
-- **Explain route**;
-- ContextPacket inspection;
-- budget/state/token/memory/lease telemetry;
-- live authoritative WebSocket events;
-- local API docs at `/api/docs`.
-
-The browser does not simulate orchestration: the UI reacts to actual runtime events.
-
-Relevant v0.5 APIs:
-
-```text
-POST /api/missions/plan
-GET  /api/tasks/{task_id}/route
-POST /api/orchestration/run
-```
-
-The browser has no remote-user authentication yet, so `arc web` is loopback-only by default. `--allow-remote` is an explicit network-boundary override, not an authentication mechanism.
+Session conversations are useful operational history, but task/gate/Git facts remain authoritative for whether work is actually integrated.
 
 ---
 
 ## CLI surface
 
 ```text
-arc init
+# primary product interfaces
+arc
+arc ui
+arc shell
+arc attach SESSION
+arc session open | list | show | send | files | diff | resume | submit | stop
+
+# auth
 arc login [PROVIDER]
 arc logout PROVIDER
 arc auth status [PROVIDER]
 
+# task/orchestration automation
+arc init
 arc status
 arc events
 arc replay
@@ -311,43 +425,57 @@ arc run TASK
 arc route TASK
 arc orchestrate
 arc watch TASK
-arc dashboard
-arc web
-
 arc mission plan
 arc task create | list | show | run | retry | cancel
+
+# configuration/inspection
 arc agent list | add | remove | doctor | tune
 arc config show | default-agent
 arc context build | inspect
 arc memory list | why | consolidate | rebuild-index
 arc gate inspect
+
+# lower-level mission-control interfaces
+arc dashboard
+arc web
 ```
 
 ---
 
-## One application boundary
-
-CLI, TUI, browser UI, and APIs share one service layer:
+## Application architecture
 
 ```text
-                              ArcApplication
-                                    │
-                ┌───────────────────┼───────────────────┐
-                │                   │                   │
-             Planner              Router        task/context/memory
-                │                   │                   │
-                └──────────── OrchestrationEngine ─────┘
-                                    │
-                         concurrent agent phase
-                                    │
-                                    ▼
-                              Orchestrator
-                      explicit single integration writer
-                                    │
-                       event state + Git integration
+                                ARC
+                                 │
+             ┌───────────────────┴───────────────────┐
+             │                                       │
+      interactive shell                         ARC Workspace
+          `arc`                                    `arc ui`
+             │                                       │
+             └───────────────────┬───────────────────┘
+                                 ▼
+                       SessionArcApplication
+                                 │
+                  ┌──────────────┼───────────────┐
+                  │              │               │
+            WorkerSession    Planner/Router   Context/Memory
+                  │              │               │
+                  └──────────────┼───────────────┘
+                                 ▼
+                        authoritative Task DAG
+                                 │
+                    isolated agent/worktree phase
+                                 │
+                                 ▼
+                         candidate commit
+                                 │
+                                 ▼
+                   serialized IntegrationGate
+                                 │
+                       authoritative Git state
 ```
 
-The UI does not own a separate task database, routing state, or memory representation.
+The UI does not own a separate task/session truth database. Worker sessions reconstruct from the same append-only project event stream.
 
 ---
 
@@ -358,7 +486,7 @@ ARC separates authoritative truth from adaptive context optimization:
 ```text
 AUTHORITATIVE STATE                    ADAPTIVE MEMORY
 append-only events                     derived projection
-task DAG + routing trace               provenance
+task DAG + session trace               provenance
 leases + budgets                       validity/supersession
 candidate commits                      failure/procedure memory
 gate outcomes                          retrieval indexes
@@ -372,7 +500,7 @@ gate outcomes                          retrieval indexes
                 immutable ContextPacket
                           │
                           ▼
-                isolated agent worktree
+             persistent isolated worktree
                           │
                           ▼
                   candidate commit
@@ -383,46 +511,45 @@ gate outcomes                          retrieval indexes
 
 If deleting ARC's derived memory/indexes would erase what **actually happened**, that information was stored in the wrong place.
 
-The integration gate verifies the exact candidate in a fresh worktree and integrates that same candidate only after verification succeeds.
-
-During concurrent orchestration, accepted-task memory processing is task-scoped so one worker's event stream cannot accidentally materialize another worker's reasoning into durable memory.
-
 ---
 
 ## Current implementation status
 
 | Component | Status |
 |---|---|
-| SQLite WAL authoritative event store | ✅ implemented |
-| Deterministic project/task replay | ✅ implemented |
-| Shared `ArcApplication` service layer | ✅ implemented |
-| Deterministic mission planner baseline | ✅ implemented |
-| Capability/cost/load-aware router | ✅ implemented |
-| Concurrent independent agent execution | ✅ implemented |
-| Explicit serialized integration lock | ✅ implemented |
-| All-declared-file leases + fencing | ✅ implemented |
-| Overlap deferral across orchestration batches | ✅ implemented |
-| Replayable orchestration decision events | ✅ implemented |
-| CLI `mission plan` / `route` / `orchestrate` | ✅ implemented |
-| TUI fleet orchestration | ✅ implemented |
-| Browser plan/run/route controls | ✅ implemented |
-| Native provider login orchestration | ✅ implemented |
-| Auth-aware agent doctor | ✅ implemented |
-| Codex / Claude / Antigravity / OpenCode execution adapters | 🧪 experimental |
-| Versioned memory + provenance | ✅ implemented |
-| Hard-budget context compiler | ✅ implemented |
-| Real repository code evidence + hashes | ✅ implemented |
-| Git worktree task isolation | ✅ implemented |
-| Transactional exact-candidate integration gate | ✅ implemented |
-| Docker-backed command/test sandbox | ✅ implemented |
-| LLM/learned planner | 🚧 future research |
-| Learned/bandit routing | 🚧 future research |
-| Dynamic rate-limit/provider-latency scheduling | 🚧 future work |
-| Provider CLI credential/container boundary | 🚧 not complete |
-| Browser authentication / remote multi-user mode | 🚧 not complete |
-| Real semantic embedding provider | 🚧 not complete |
-| OpenRouter tool-using coding loop | 🚧 not complete |
-| Repository-scale iso-cost orchestration benchmark | 🚧 not complete |
+| SQLite WAL authoritative event store | ✅ |
+| Deterministic task/project replay | ✅ |
+| Shared application service layer | ✅ |
+| Persistent `WorkerSession` event model | ✅ v0.6 |
+| Persistent isolated worker worktrees | ✅ v0.6 |
+| Multi-turn worker conversation | ✅ v0.6 |
+| Session resume after ARC restart | ✅ v0.6 |
+| Changed-files + draft diff inspection | ✅ v0.6 |
+| Native provider-terminal handoff | ✅ v0.6 |
+| Conversation-first `arc` shell | ✅ v0.6 |
+| Session-centric `arc ui` workspace | ✅ v0.6 |
+| Deterministic mission planner baseline | ✅ |
+| Capability/cost/load-aware router | ✅ |
+| Concurrent independent agent execution | ✅ |
+| Serialized integration gate | ✅ |
+| All-declared-file leases + fencing | ✅ |
+| Replayable orchestration decisions | ✅ |
+| Native provider login orchestration | ✅ |
+| Codex / Claude / Antigravity / OpenCode adapters | 🧪 experimental |
+| Versioned memory + provenance | ✅ |
+| Hard-budget ContextPacket compiler | ✅ |
+| Git worktree isolation | ✅ |
+| Docker-backed command/test sandbox | ✅ |
+| GitHub PR / CI / review feedback loop | 🚧 next |
+| Isolated browser preview per worker | 🚧 next |
+| Long-lived provider PTY multiplexing | 🚧 future |
+| Learned/LLM planner | 🚧 research |
+| Learned/bandit routing | 🚧 research |
+| Provider CLI credential/container boundary | 🚧 |
+| Remote ARC auth / RBAC / multi-user mode | 🚧 |
+| Semantic embedding provider | 🚧 |
+| OpenRouter tool-using coding loop | 🚧 |
+| Repository-scale iso-cost benchmark | 🚧 |
 
 ---
 
@@ -430,15 +557,15 @@ During concurrent orchestration, accepted-task memory processing is task-scoped 
 
 ```text
 adaptive-agent-runtime/
-├── application/    # app boundary, planner, router, orchestration, auth/config/events
+├── application/    # app boundary, sessions, planning, routing, auth/config/events
 ├── adapters/       # Codex/Claude/Antigravity/OpenCode + deterministic Mock
-├── cli/            # Typer operator CLI
-├── tui/            # Textual Mission Control + login picker
-├── webui/          # FastAPI + browser Agent Orchestration Control
+├── cli/            # Typer commands + v0.6 product launcher
+├── tui/            # interactive shell, Mission Control, login picker
+├── webui/          # FastAPI + ARC Workspace + legacy orchestration dashboard
 ├── context/        # retrieval, allocation, compiler, staleness
 ├── memory/         # lifecycle, provenance, supersession, consolidation
 ├── runtime/        # orchestrator, gate, leases, recovery, replay, budgets
-├── state/          # authoritative event store + deterministic projections
+├── state/          # authoritative event store + projections
 ├── isolation/      # Git worktrees and execution boundaries
 ├── verification/   # checks, reviewer, test runner
 ├── indexes/        # FTS, deterministic vector baseline, symbols, relations
@@ -451,7 +578,7 @@ adaptive-agent-runtime/
 
 ## Research framing
 
-ARC now supports two related falsifiable questions:
+ARC supports two related falsifiable questions:
 
 > Can versioned, provenance-aware context control improve long-horizon coding reliability or reduce cost relative to transcript/static/vector-memory handoff at matched cost?
 
@@ -459,7 +586,7 @@ and:
 
 > Can adaptive task decomposition/routing/scheduling improve resolved rate, latency, or cost over deterministic orchestration policies without weakening integration correctness?
 
-ARC 0.5 deliberately records deterministic planner/router baselines so future LLM, contextual-bandit, or learned policies can be evaluated against stable controls.
+Persistent sessions add another measurable axis: handoff/restart continuity can be evaluated without treating a provider process or full transcript as authoritative state.
 
 Primary evaluation targets include:
 
@@ -471,27 +598,26 @@ tokens + USD per resolved task
 retry / rejection rate
 context staleness
 handoff degradation
+restart/session continuity
 ```
 
 ---
 
 ## CI and testing
 
-The CI matrix runs on Python 3.11 and 3.12 and checks:
+CI runs on Python 3.11 and 3.12 and checks:
 
-- install/build of the packaged application;
+- package install/build;
 - correctness-focused Ruff rules;
-- public-homepage and all Mission Control JavaScript syntax;
+- public homepage + Mission Control + Workspace JavaScript syntax;
 - full pytest suite;
-- real Git worktree/candidate/gate integration using the deterministic mock;
-- dependency-round orchestration;
-- independent same-batch execution;
-- overlapping-surface deferral;
-- route/planner policy behavior;
-- CLI/TUI/Web orchestration surfaces;
+- real Git worktree/candidate/gate integration using deterministic mock;
+- multi-agent dependency/overlap behavior;
 - provider auth probes without real secrets;
-- FastAPI/WebSocket flows;
-- localhost web safety behavior.
+- persistent worker creation, turns, restart/resume, stop, submit and gate integration;
+- Textual shell mounting;
+- FastAPI Workspace session lifecycle;
+- WebSocket event streaming.
 
 Run locally:
 
@@ -506,23 +632,23 @@ python -m build
 
 ARC executes code produced by AI agents. Treat that as untrusted-code execution.
 
-Provider credentials remain in provider-owned credential stores and secure keyrings. ARC does not copy those tokens into `.arc/` or the browser UI.
+Provider credentials remain in provider-owned credential stores and secure keyrings. ARC does not copy those tokens into `.arc/` or either browser UI.
 
-The command/test execution path can use Docker isolation with network disabled, dropped capabilities, resource limits, and a read-only root filesystem. Provider coding CLIs are still experimental host-mode because safely brokering provider authentication into isolated containers requires additional design.
+The command/test execution path can use Docker isolation with network disabled, dropped capabilities, resource limits, and a read-only root filesystem. Provider coding CLIs remain experimental host-mode because safely brokering provider authentication into isolated containers requires additional design.
 
-`arc web` is a local developer control surface, not an authenticated multi-user service. Keep the default loopback binding unless you put an appropriate trusted security boundary in front of it.
+`arc ui` and `arc web` are local developer control surfaces, not authenticated multi-user services. Keep their default loopback bindings unless you put an appropriate trusted security boundary in front of them.
 
 ---
 
 ## Public website
 
-Interactive project homepage:
+Project homepage:
 
 ```text
 https://anatwork14.github.io/adaptive-agent-runtime/
 ```
 
-GitHub Pages deploys from `docs/` using `.github/workflows/pages.yml`. This public documentation site is separate from the local `arc web` control plane.
+GitHub Pages deploys from `docs/`. The public documentation website is separate from the local `arc ui` and `arc web` applications.
 
 ---
 

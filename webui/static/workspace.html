@@ -1,0 +1,81 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="theme-color" content="#080b10">
+  <title>ARC Workspace</title>
+  <link rel="stylesheet" href="/static/workspace.css">
+</head>
+<body>
+  <div class="noise" aria-hidden="true"></div>
+  <div class="app-shell">
+    <aside class="rail">
+      <div class="brand"><div class="brand-mark">A</div><div><b>ARC</b><span>Workspace</span></div></div>
+      <div class="project-block"><span>PROJECT</span><b id="projectName">—</b><small id="stateVersion">state v—</small></div>
+      <nav>
+        <button class="nav-item active" data-view="board"><i>◫</i><span>Board</span></button>
+        <button class="nav-item" data-view="workers"><i>◎</i><span>Workers</span></button>
+        <button class="nav-item" data-view="agents"><i>◇</i><span>Agents</span></button>
+        <button class="nav-item" data-view="trace"><i>≋</i><span>Trace</span></button>
+      </nav>
+      <div class="provider-list" id="providerList"></div>
+      <div class="rail-foot"><span id="connectionDot" class="dot"></span><span id="connection">CONNECTING</span></div>
+    </aside>
+
+    <main class="main">
+      <header class="topbar">
+        <div><span class="eyebrow">PROJECT ORCHESTRATOR</span><h1>Agent workspace</h1></div>
+        <div class="top-actions"><button id="newTaskBtn">+ Task</button><button id="runFleetBtn" class="primary">▶ Run ready</button><button id="refreshBtn">Refresh</button></div>
+      </header>
+
+      <section class="orchestrator-box">
+        <div class="orchestrator-icon">A</div>
+        <div class="orchestrator-copy"><b>What should the agent team accomplish?</b><span>ARC will plan the outcome into focused tasks. Open any task as a persistent worker when you want direct supervision.</span></div>
+        <textarea id="objectiveInput" rows="2" placeholder="Example: Add OAuth login, integration tests, and update the docs"></textarea>
+        <button id="planBtn" class="primary">Plan & delegate</button>
+      </section>
+
+      <section class="metrics" id="metrics"></section>
+
+      <section class="board" id="board">
+        <div class="column" data-column="working"><div class="column-head"><div><span class="status-dot working"></span><b>Working</b></div><span class="count" id="workingCount">0</span></div><div class="cards" id="workingCards"></div></div>
+        <div class="column" data-column="needs"><div class="column-head"><div><span class="status-dot needs"></span><b>Needs you</b></div><span class="count" id="needsCount">0</span></div><div class="cards" id="needsCards"></div></div>
+        <div class="column" data-column="review"><div class="column-head"><div><span class="status-dot review"></span><b>In review</b></div><span class="count" id="reviewCount">0</span></div><div class="cards" id="reviewCards"></div></div>
+        <div class="column" data-column="done"><div class="column-head"><div><span class="status-dot done"></span><b>Resolved</b></div><span class="count" id="doneCount">0</span></div><div class="cards" id="doneCards"></div></div>
+      </section>
+
+      <section class="trace-view" id="traceView" hidden>
+        <div class="section-title"><div><span class="eyebrow">AUTHORITATIVE STATE</span><h2>Event trace</h2></div><span id="eventCursor">#0</span></div>
+        <div id="traceRows" class="trace-rows"></div>
+      </section>
+    </main>
+
+    <aside class="inspector" id="inspector">
+      <div class="inspector-empty" id="inspectorEmpty"><div class="empty-icon">⌁</div><b>Select a worker or task</b><span>Conversation, draft files, diff, immutable context and events stay attached here.</span></div>
+      <div id="inspectorBody" hidden>
+        <div class="inspector-head"><div><span class="eyebrow" id="inspectKind">WORKER</span><h2 id="inspectTitle">—</h2><p id="inspectSubtitle">—</p></div><button id="closeInspector">×</button></div>
+        <div class="inspector-status"><span id="inspectStatus" class="pill">—</span><span id="inspectAgent">—</span><span id="inspectBranch">—</span></div>
+        <div class="tabs">
+          <button class="tab active" data-tab="chat">Chat</button><button class="tab" data-tab="files">Files</button><button class="tab" data-tab="diff">Diff</button><button class="tab" data-tab="context">Context</button><button class="tab" data-tab="events">Events</button><button class="tab" data-tab="terminal">Terminal</button>
+        </div>
+        <div class="tab-content" id="tabChat">
+          <div id="chatMessages" class="chat-messages"></div>
+          <form id="chatForm" class="chat-form"><textarea name="message" rows="3" placeholder="Tell this worker what to do next"></textarea><button class="primary">Send</button></form>
+        </div>
+        <div class="tab-content" id="tabFiles" hidden><div id="fileList" class="file-list"></div></div>
+        <div class="tab-content" id="tabDiff" hidden><pre id="diffView" class="code-view"></pre></div>
+        <div class="tab-content" id="tabContext" hidden><pre id="contextView" class="code-view"></pre></div>
+        <div class="tab-content" id="tabEvents" hidden><div id="workerEvents" class="worker-events"></div></div>
+        <div class="tab-content" id="tabTerminal" hidden><div class="terminal-card"><div class="terminal-top"><span></span><span></span><span></span><b>Native provider terminal</b></div><pre id="terminalCommand">arc attach …</pre><p>ARC keeps provider-native terminal behavior in your trusted terminal. Running this command attaches the selected worker's existing isolated worktree to Codex, Claude, Antigravity, or OpenCode.</p><button id="copyTerminal">Copy attach command</button></div></div>
+        <div class="inspector-actions"><button id="openWorkerBtn" class="primary">Open worker</button><button id="submitWorkerBtn">Submit</button><button id="stopWorkerBtn" class="danger">Stop</button></div>
+      </div>
+    </aside>
+  </div>
+
+  <dialog id="taskDialog"><form id="taskForm" method="dialog"><div class="dialog-head"><div><span class="eyebrow">NEW TASK</span><b>Create focused work</b></div><button value="cancel" formmethod="dialog">×</button></div><label>Goal<textarea name="goal" required></textarea></label><label>Files<input name="files" placeholder="src/auth.py, tests/test_auth.py"></label><div class="two"><label>Risk<input name="risk" type="number" min="0" max="1" step="0.05" value="0.5"></label><label>Token ceiling<input name="token_budget" type="number" min="1000" value="24000"></label></div><label>Acceptance<textarea name="acceptance" placeholder="tests pass; API remains compatible"></textarea></label><div class="dialog-actions"><button value="cancel" formmethod="dialog">Cancel</button><button value="default" class="primary">Create</button></div></form></dialog>
+
+  <div id="toast" class="toast" aria-live="polite"></div>
+  <script type="module" src="/static/workspace.js"></script>
+</body>
+</html>

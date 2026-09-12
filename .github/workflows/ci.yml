@@ -43,6 +43,7 @@ jobs:
           node --check docs/arc-site.js
           node --check webui/static/mission.js
           node --check webui/static/orchestration.js
+          node --check webui/static/workspace.js
 
       - name: Tests
         run: python -m pytest -q
