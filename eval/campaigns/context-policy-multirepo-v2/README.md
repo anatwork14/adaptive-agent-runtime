@@ -18,6 +18,14 @@ bounded-tail persistence, conservative failure classification, lifecycle
 telemetry, deterministic fake-provider tests, and passive/active provider
 qualification.
 
+The target-environment qualification selected repository-specific visible-test
+harnesses. Click uses its locked `uv`/`tox` test environment; HTTPX uses its
+declared requirements in Python 3.11 with the fixed macOS Trio teardown-warning
+filter; and python-dotenv uses its declared requirements in Python 3.10 with
+the candidate venv and GNU `printenv` first on `PATH`. The exact identifiers,
+commands, import-path proofs, and platform caveats are recorded in
+`V2_TARGET_ENVIRONMENT_QUALIFICATION.md` and in the contract.
+
 ## Freeze prerequisites
 
 Before freezing, complete all checks in `campaign_contract.json` and record the

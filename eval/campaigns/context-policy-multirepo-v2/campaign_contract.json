@@ -14,13 +14,49 @@
       "refactor"
     ],
     "env_allow": [],
-    "command_override": "codex exec --full-auto --model gpt-5.5 --config 'model_reasoning_effort=\"high\"' --json -"
+    "command_override": "codex exec --full-auto --model gpt-5.5 --config 'model_reasoning_effort=\"high\"' --json -",
+    "effective_argv": [
+      "codex",
+      "exec",
+      "--full-auto",
+      "--model",
+      "gpt-5.5",
+      "--config",
+      "model_reasoning_effort=\"high\"",
+      "--json",
+      "-"
+    ],
+    "effective_argv_sha256": "da95d05df4e997d3a722d2e974af2b6ccc04ecee53474dd2dbb077ddbfbd6f5e"
   },
   "provider_runtime": {
     "cli": "codex",
     "version": "codex-cli 0.133.0-alpha.1",
     "output_mode": "documented_jsonl",
-    "version_policy": "diagnose and explicitly freeze before V2 execution; no upgrade during campaign"
+    "version_policy": "diagnose and explicitly freeze before V2 execution; no upgrade during campaign",
+    "environment_allowlist": {
+      "profile_extra_keys": [],
+      "observed_keys": [
+        "COLORTERM",
+        "HOME",
+        "LANG",
+        "LC_ALL",
+        "LC_CTYPE",
+        "LOGNAME",
+        "PATH",
+        "SHELL",
+        "TERM",
+        "TMPDIR",
+        "USER"
+      ],
+      "provider_permitted_keys": [
+        "CODEX_HOME",
+        "OPENAI_API_KEY",
+        "OPENAI_BASE_URL",
+        "OPENAI_ORGANIZATION",
+        "OPENAI_PROJECT"
+      ],
+      "values_persisted": false
+    }
   },
   "apparatus_qualification": {
     "passive_doctor": "arc provider doctor --profile builder",
@@ -40,12 +76,8 @@
     "context_token_budget": 12000,
     "hard_task_usd": 2.0,
     "hard_project_usd": 350.0,
-    "visible_test_cmd": [
-      "python",
-      "-m",
-      "pytest",
-      "-q"
-    ],
+    "visible_test_cmd": null,
+    "visible_test_harness_policy": "repository_specific_harnesses_are_frozen_under_repositories",
     "verification_level": "V1",
     "repeats": 6,
     "bootstrap_samples": 2000,
@@ -84,25 +116,39 @@
       "benchmark_id": "context-policy-click-v2",
       "repo": "pallets/click",
       "commit": "6aabf099bfdd4c1e75fe8d0e0d4241372b988ab1",
-      "hidden_tree_sha256": "4e9241310067b13e36f9ecce3913dbf0bd936bab6486a42300d032575141a3ef"
+      "hidden_tree_sha256": "4e9241310067b13e36f9ecce3913dbf0bd936bab6486a42300d032575141a3ef",
+      "environment_qualification_id": "click-macos-py310-uv-locked-tox-v1",
+      "visible_test_harness": ["uv", "run", "--locked", "--no-default-groups", "--group", "dev", "tox", "run", "-e", "py3.10"]
     },
     "httpx": {
       "study_id": "httpx-context-policy-v2",
       "benchmark_id": "context-policy-httpx-v2",
       "repo": "encode/httpx",
       "commit": "b5addb64f0161ff6bfe94c124ef76f6a1fba5254",
-      "hidden_tree_sha256": "771e5afa152bcc41676fe173aad7809485eb5cccdcaf312865b2f6dd2a798334"
+      "hidden_tree_sha256": "771e5afa152bcc41676fe173aad7809485eb5cccdcaf312865b2f6dd2a798334",
+      "environment_qualification_id": "httpx-macos-py311-requirements-resourcewarning-filter-v1",
+      "visible_test_harness": ["python", "-m", "pytest", "-q", "-W", "ignore::ResourceWarning"],
+      "visible_test_harness_note": "requirements.txt is installed in a disposable editable environment; the fixed macOS harness ignores the known Trio async-generator teardown ResourceWarning that otherwise fails pytest unraisable-warning capture"
     },
     "python-dotenv": {
       "study_id": "python-dotenv-context-policy-v2",
       "benchmark_id": "context-policy-python-dotenv-v2",
       "repo": "theskumar/python-dotenv",
       "commit": "a00cb2eed0704cd6d2071b2004c37e95ccc86ee5",
-      "hidden_tree_sha256": "950297bdebad5f5e2560ec8406e6f80ca289e6cc6672a3e9648a814a55284bb7"
+      "hidden_tree_sha256": "950297bdebad5f5e2560ec8406e6f80ca289e6cc6672a3e9648a814a55284bb7",
+      "environment_qualification_id": "python-dotenv-macos-py310-gnu-printenv-v1",
+      "visible_test_harness": ["python", "-m", "pytest", "-q"],
+      "visible_test_harness_environment": {
+        "path_prefix": ["candidate_venv/bin", "/opt/homebrew/opt/coreutils/libexec/gnubin"],
+        "requirements": "requirements.txt",
+        "editable_install": true
+      }
     }
   },
   "freeze_gate": {
     "arc_commit": "record_exact_commit_at_v2_freeze",
+    "final_candidate_commit": "record_exact_commit_after_qualification",
+    "provider_execution_started": false,
     "freeze_after_qualification": true,
     "freeze_review_required": true,
     "provider_execution_started_before_freeze": false
