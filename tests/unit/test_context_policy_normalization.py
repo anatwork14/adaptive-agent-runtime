@@ -227,3 +227,39 @@ def test_b7_dependency_scopes_successful_task_summaries_while_b5_keeps_topk_hist
 
     store.close()
     conn.close()
+
+
+
+def test_b7_episode_scope_preserves_root_fallback_and_dependency_matching() -> None:
+    summary = Memory(
+        memory_id="M_T1",
+        project_id="p1",
+        type=MemoryType.TASK_SUMMARY,
+        representation=MemoryRepresentation.SUMMARY,
+        content_json={"task_id": "T001"},
+        content_text="Task Summary [T001]: root history",
+        created_event=1,
+        valid_from_event=1,
+        state_version_at_write=1,
+        status=MemoryStatus.ACTIVE,
+        tags=["summary", "T001"],
+    )
+    root_request = ContextRequest(
+        context_request_id="CR_root",
+        project_id="p1",
+        task_id="T001",
+        agent_id="mock",
+        state_version=1,
+        goal="root task",
+        token_budget=12000,
+    )
+    dependent_request = root_request.model_copy(
+        update={"task_id": "T003", "dependencies": ["T002"]}
+    )
+    matching_request = root_request.model_copy(
+        update={"task_id": "T002", "dependencies": ["T001"]}
+    )
+
+    assert MemoryRetriever._eligible_for_generic_retrieval(summary, root_request)
+    assert not MemoryRetriever._eligible_for_generic_retrieval(summary, dependent_request)
+    assert MemoryRetriever._eligible_for_generic_retrieval(summary, matching_request)
