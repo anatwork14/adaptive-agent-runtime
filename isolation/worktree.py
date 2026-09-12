@@ -91,6 +91,15 @@ class WorktreeManager:
         return worktree_path
 
     def commit_candidate(self, task_id: str, message: str) -> str:
+        """Freeze the worker's exact candidate commit.
+
+        Normal workers leave an uncommitted draft, which ARC stages and commits.
+        Interactive/review workers may already have committed their draft (for
+        example before pushing a PR). In that case ARC accepts the current HEAD
+        only when it contains commits that are not reachable from the current
+        integration HEAD. A clean branch with no worker-authored commit still
+        fails closed as a no-op.
+        """
         worktree_path = self.worktree_root / task_id
         if not worktree_path.exists():
             raise WorktreeError(f"task worktree does not exist: {task_id}")
@@ -98,6 +107,14 @@ class WorktreeManager:
         self._run_git(["add", "-A"], cwd=worktree_path)
         staged = self._run_git(["diff", "--cached", "--quiet"], cwd=worktree_path, check=False)
         if staged.returncode == 0:
+            integration_head = self._run_git(["rev-parse", "HEAD"]).stdout.strip()
+            ahead = self._run_git(
+                ["rev-list", "--count", "HEAD", "--not", integration_head],
+                cwd=worktree_path,
+                check=False,
+            )
+            if ahead.returncode == 0 and int((ahead.stdout or "0").strip() or "0") > 0:
+                return self._run_git(["rev-parse", "HEAD"], cwd=worktree_path).stdout.strip()
             raise WorktreeError(f"task {task_id} produced no repository changes")
         if staged.returncode not in (0, 1):
             raise WorktreeError(f"cannot inspect staged changes for task {task_id}")
