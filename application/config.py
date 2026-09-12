@@ -7,7 +7,9 @@ from pathlib import Path
 from typing import Dict, List, Literal, Optional
 
 import yaml
-from pydantic import BaseModel, Field, model_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
+
+from runtime.environment import validate_environment_name
 
 ProviderName = Literal["mock", "codex", "claude", "antigravity", "opencode", "openrouter"]
 
@@ -30,11 +32,26 @@ class AgentProfile(BaseModel):
     role: str = "implementation"
     enabled: bool = True
     command_override: Optional[str] = None
+    # Names only. Values are read from the live host environment when a worker
+    # starts and are never serialized into ARC configuration/events.
+    env_allow: List[str] = Field(default_factory=list)
     capabilities: List[str] = Field(default_factory=list)
     max_concurrency: int = Field(default=1, ge=1, le=32)
     cost_weight: float = Field(default=1.0, ge=0.0)
     quality_weight: float = Field(default=1.0, ge=0.0)
     metadata: Dict[str, str] = Field(default_factory=dict)
+
+    @field_validator("env_allow")
+    @classmethod
+    def validate_env_allow(cls, names: List[str]) -> List[str]:
+        normalized: list[str] = []
+        seen: set[str] = set()
+        for name in names:
+            value = validate_environment_name(name)
+            if value not in seen:
+                normalized.append(value)
+                seen.add(value)
+        return normalized
 
     @model_validator(mode="after")
     def populate_default_capabilities(self) -> "AgentProfile":
