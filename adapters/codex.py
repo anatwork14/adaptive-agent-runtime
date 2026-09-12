@@ -1,5 +1,6 @@
 """Codex CLI coding-agent adapter."""
 
+import json
 from collections.abc import Iterable
 
 from adapters.cli_process import SubprocessCodingAgent
@@ -35,3 +36,32 @@ class CodexAgentAdapter(SubprocessCodingAgent):
             env_allow=env_allow,
         )
         self.model_name = model_name
+
+    def parse_output_events(self, stream: str, text: str) -> list[str]:
+        """Map documented ``codex exec --json`` JSONL events to safe boundaries.
+
+        Unknown event types and malformed lines are intentionally ignored. ARC
+        records only lifecycle names, never the provider event payload, because
+        provider output may contain task or repository content.
+        """
+        if stream != "stdout":
+            return []
+        try:
+            event = json.loads(text)
+        except json.JSONDecodeError:
+            return []
+        if not isinstance(event, dict):
+            return []
+
+        event_type = event.get("type")
+        if event_type == "turn.started":
+            return ["provider.request_started"]
+        if event_type == "turn.completed":
+            return ["provider.completed"]
+        if event_type in {"error", "turn.failed"}:
+            return ["provider.failed"]
+        if event_type in {"item.started", "item.completed"}:
+            item = event.get("item")
+            if isinstance(item, dict) and item.get("type") in {"agent_message", "assistant_message"}:
+                return ["provider.response_started"]
+        return []

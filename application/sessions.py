@@ -10,7 +10,6 @@ provider on the same session/worktree after a restart.
 from __future__ import annotations
 
 import asyncio
-import json
 import subprocess
 import uuid
 from enum import Enum
@@ -19,7 +18,7 @@ from typing import TYPE_CHECKING, Any, Literal, Optional
 
 from pydantic import BaseModel, Field
 
-from adapters.base import AgentBudget, AgentRunResult
+from adapters.base import AgentBudget, AgentRunResult, sanitize_failure_diagnostics
 from adapters.cli_process import SubprocessCodingAgent, render_context_prompt
 from context.compiler import ContextPacket
 from context.request import ContextRequest
@@ -428,6 +427,12 @@ class WorkerSessionManager:
                 task_id=session.task_id,
             )
 
+            self.app.orchestrator._persist_provider_telemetry(  # noqa: SLF001 - shared runtime boundary
+                task_id=session.task_id,
+                agent_id=session.agent_name,
+                result=result,
+            )
+
             changed = self.changed_files(session_id)
             if result.status == "cancelled":
                 self.app.event_store.append(
@@ -459,6 +464,15 @@ class WorkerSessionManager:
                 return self._require(session_id)
 
             if result.status != "completed":
+                diagnostics = sanitize_failure_diagnostics(result)
+                self.app.event_store.append(
+                    actor=session.agent_name,
+                    kind="provider.failed",
+                    project_id=self.app.project_id,
+                    task_id=session.task_id,
+                    correlation_id=session_id,
+                    payload=diagnostics,
+                )
                 raise RuntimeError(f"agent turn ended with status={result.status}: {result.summary}")
 
             summary = result.summary or f"{session.agent_name} completed the instruction"
@@ -505,13 +519,19 @@ class WorkerSessionManager:
             )
             raise
         except Exception as exc:
+            diagnostics = {
+                "reason": "session_turn_exception",
+                "agent_status": "failed",
+                "agent_summary": str(exc),
+                "failure_classification": "UNKNOWN_PROVIDER_FAILURE",
+            }
             self.app.event_store.append(
                 actor=session.agent_name,
                 kind="session.failed",
                 project_id=self.app.project_id,
                 task_id=session.task_id,
                 correlation_id=session_id,
-                payload={"session_id": session_id, "turn_id": turn_id, "error": str(exc)},
+                payload={"session_id": session_id, "turn_id": turn_id, "error": str(exc), **diagnostics},
             )
             raise
         return self._require(session_id)

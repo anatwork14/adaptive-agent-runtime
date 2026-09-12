@@ -97,6 +97,9 @@ async def test_provider_turn_can_be_cancelled_without_waiting_for_timeout(tmp_pa
 
     assert result.status == "cancelled"
     assert "cancelled" in result.summary.lower()
+    assert result.failure_classification == "CLI_CANCELLED"
+    assert result.provider_outcome == "cancelled"
+    assert result.provider_returncode is not None
     assert result.tool_trace[-1]["action"] == "cli_cancelled"
 
 
@@ -143,6 +146,7 @@ async def test_provider_cancellation_terminates_descendant_processes(tmp_path: P
     cancel.set()
     result = await asyncio.wait_for(task, timeout=5)
     assert result.status == "cancelled"
+    assert result.failure_classification == "CLI_CANCELLED"
 
     # The child intentionally ignores SIGTERM. ARC must wait through the grace
     # window, escalate the whole provider process group, and only then report

@@ -12,7 +12,7 @@ from collections.abc import Awaitable, Callable, Iterable
 from pathlib import Path
 from typing import List, Optional
 
-from adapters.base import AgentBudget, AgentRunResult
+from adapters.base import AgentBudget, AgentRunResult, classify_provider_failure
 from context.compiler import ContextPacket
 from runtime.environment import (
     build_execution_environment,
@@ -192,6 +192,15 @@ class SubprocessCodingAgent:
                 "ARC real adapters never silently fall back to a mock."
             )
 
+    def parse_output_events(self, stream: str, text: str) -> list[str]:
+        """Return observable provider lifecycle events from one output line.
+
+        Plain-text CLIs do not expose a reliable response boundary, so the base
+        implementation deliberately observes nothing. Provider adapters may
+        override this for a documented machine-readable mode.
+        """
+        return []
+
     async def run_prompt(
         self,
         *,
@@ -211,15 +220,56 @@ class SubprocessCodingAgent:
         without treating cancellation as a successful patch or provider failure.
         """
         command = self.build_command()
-        self.ensure_available(command)
-        environment = self.execution_environment()
         trace_command = redact_command(command)
+        lifecycle = {
+            "process_started": "unknown",
+            "request_started": "unknown",
+            "response_started": "unknown",
+            "completed": "unknown",
+            "failed": "unknown",
+        }
+        provider_events: list[dict[str, object]] = []
+
+        def record_event(name: str) -> None:
+            if any(item.get("event") == name for item in provider_events):
+                return
+            provider_events.append({"event": name, "observed": True})
+            lifecycle[name.removeprefix("provider.")] = "observed"
+
+        try:
+            self.ensure_available(command)
+        except AgentAdapterUnavailable as exc:
+            detail = redact_text_secrets(str(exc))
+            record_event("provider.failed")
+            return AgentRunResult(
+                status="failed",
+                summary=detail,
+                failure_classification="CLI_NOT_FOUND",
+                provider_outcome="not_found",
+                stderr_tail=detail[-4000:],
+                tool_trace=[
+                    {
+                        "action": "cli_spawn_failed",
+                        "command": trace_command,
+                        "environment_keys": [],
+                        "error": detail,
+                    }
+                ],
+                provider_lifecycle=lifecycle,
+                provider_events=provider_events,
+                memory_references=list(memory_references or []),
+            )
+
+        environment = self.execution_environment()
         trace_env = environment_key_manifest(environment)
 
         if cancel_event is not None and cancel_event.is_set():
+            record_event("provider.failed")
             return AgentRunResult(
                 status="cancelled",
                 summary=f"{self.name} turn cancelled before launch",
+                failure_classification="CLI_CANCELLED",
+                provider_outcome="cancelled",
                 memory_references=list(memory_references or []),
                 tool_trace=[
                     {
@@ -229,18 +279,64 @@ class SubprocessCodingAgent:
                         "phase": "pre_launch",
                     }
                 ],
+                provider_lifecycle=lifecycle,
+                provider_events=provider_events,
             )
 
-        process = await asyncio.create_subprocess_exec(
-            *command,
-            cwd=str(workspace),
-            stdin=asyncio.subprocess.PIPE,
-            stdout=asyncio.subprocess.PIPE,
-            stderr=asyncio.subprocess.PIPE,
-            env=environment,
-            limit=1024 * 1024,
-            **_process_spawn_kwargs(),
-        )
+        try:
+            process = await asyncio.create_subprocess_exec(
+                *command,
+                cwd=str(workspace),
+                stdin=asyncio.subprocess.PIPE,
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE,
+                env=environment,
+                limit=1024 * 1024,
+                **_process_spawn_kwargs(),
+            )
+        except FileNotFoundError as exc:
+            detail = redact_text_secrets(str(exc))
+            record_event("provider.failed")
+            return AgentRunResult(
+                status="failed",
+                summary=f"{self.name} could not be launched: {detail}",
+                failure_classification="CLI_NOT_FOUND",
+                provider_outcome="not_found",
+                stderr_tail=detail[-4000:],
+                tool_trace=[
+                    {
+                        "action": "cli_spawn_failed",
+                        "command": trace_command,
+                        "environment_keys": trace_env,
+                        "error": detail,
+                    }
+                ],
+                provider_lifecycle=lifecycle,
+                provider_events=provider_events,
+                memory_references=list(memory_references or []),
+            )
+        except OSError as exc:
+            detail = redact_text_secrets(str(exc))
+            record_event("provider.failed")
+            return AgentRunResult(
+                status="failed",
+                summary=f"{self.name} could not be launched: {detail}",
+                failure_classification="UNKNOWN_PROVIDER_FAILURE",
+                provider_outcome="launch_error",
+                stderr_tail=detail[-4000:],
+                tool_trace=[
+                    {
+                        "action": "cli_spawn_failed",
+                        "command": trace_command,
+                        "environment_keys": trace_env,
+                        "error": detail,
+                    }
+                ],
+                provider_lifecycle=lifecycle,
+                provider_events=provider_events,
+                memory_references=list(memory_references or []),
+            )
+        record_event("provider.process_started")
         stdout_tail = ""
         stderr_tail = ""
 
@@ -267,6 +363,8 @@ class SubprocessCodingAgent:
                     stdout_tail = (stdout_tail + safe_text)[-tail_limit:]
                 else:
                     stderr_tail = (stderr_tail + safe_text)[-tail_limit:]
+                for event_name in self.parse_output_events(stream, safe_text):
+                    record_event(event_name)
                 await _emit_stream(output_callback, stream, safe_text)
 
         stdout_task = asyncio.create_task(pump(process.stdout, "stdout", tail_limit=8000))
@@ -281,6 +379,7 @@ class SubprocessCodingAgent:
                 try:
                     process.stdin.write(prompt.encode("utf-8"))
                     await process.stdin.drain()
+                    record_event("provider.request_started")
                 except (BrokenPipeError, ConnectionResetError):
                     # A provider may reject its invocation or exit before ARC
                     # finishes writing the prompt. Classification still comes
@@ -316,9 +415,15 @@ class SubprocessCodingAgent:
             await asyncio.gather(stdout_task, stderr_task)
 
             if outcome == "cancelled":
+                record_event("provider.failed")
                 return AgentRunResult(
                     status="cancelled",
                     summary=f"{self.name} turn cancelled by operator",
+                    failure_classification="CLI_CANCELLED",
+                    provider_returncode=process.returncode,
+                    provider_outcome="cancelled",
+                    stdout_tail=stdout_tail,
+                    stderr_tail=stderr_tail,
                     memory_references=list(memory_references or []),
                     tool_trace=[
                         {
@@ -328,25 +433,50 @@ class SubprocessCodingAgent:
                             "returncode": process.returncode,
                         }
                     ],
+                    provider_lifecycle=lifecycle,
+                    provider_events=provider_events,
                 )
             if outcome == "timeout":
+                record_event("provider.failed")
                 return AgentRunResult(
                     status="failed",
                     summary=f"{self.name} timed out after {budget.timeout_seconds}s",
+                    failure_classification="CLI_TIMEOUT",
+                    provider_returncode=process.returncode,
+                    provider_outcome="timeout",
+                    stdout_tail=stdout_tail,
+                    stderr_tail=stderr_tail,
                     memory_references=list(memory_references or []),
                     tool_trace=[
                         {
                             "action": "cli_timeout",
                             "command": trace_command,
                             "environment_keys": trace_env,
+                            "returncode": process.returncode,
                         }
                     ],
+                    provider_lifecycle=lifecycle,
+                    provider_events=provider_events,
                 )
 
             if process.returncode != 0:
+                record_event("provider.failed")
+                classification = classify_provider_failure(
+                    status="failed",
+                    outcome="failed",
+                    returncode=process.returncode,
+                    summary=stderr_tail[-4000:],
+                    stdout_tail=stdout_tail,
+                    stderr_tail=stderr_tail,
+                )
                 return AgentRunResult(
                     status="failed",
                     summary=f"{self.name} exited with code {process.returncode}: {stderr_tail[-4000:]}",
+                    failure_classification=classification,
+                    provider_returncode=process.returncode,
+                    provider_outcome="failed",
+                    stdout_tail=stdout_tail,
+                    stderr_tail=stderr_tail,
                     memory_references=list(memory_references or []),
                     tool_trace=[
                         {
@@ -356,8 +486,33 @@ class SubprocessCodingAgent:
                             "returncode": process.returncode,
                         }
                     ],
+                    provider_lifecycle=lifecycle,
+                    provider_events=provider_events,
                 )
 
+            if any(item.get("event") == "provider.failed" for item in provider_events):
+                return AgentRunResult(
+                    status="failed",
+                    summary=f"{self.name} emitted a provider error event",
+                    failure_classification="PROVIDER_SERVICE_ERROR",
+                    provider_returncode=process.returncode,
+                    provider_outcome="failed",
+                    stdout_tail=stdout_tail,
+                    stderr_tail=stderr_tail,
+                    memory_references=list(memory_references or []),
+                    tool_trace=[
+                        {
+                            "action": "cli_run",
+                            "command": trace_command,
+                            "environment_keys": trace_env,
+                            "returncode": process.returncode,
+                        }
+                    ],
+                    provider_lifecycle=lifecycle,
+                    provider_events=provider_events,
+                )
+
+            record_event("provider.completed")
             return AgentRunResult(
                 status="completed",
                 patch_ref="WORKTREE",
@@ -374,6 +529,12 @@ class SubprocessCodingAgent:
                 ],
                 token_usage={},
                 cost_usd=0.0,
+                provider_returncode=process.returncode,
+                provider_outcome="completed",
+                stdout_tail=stdout_tail,
+                stderr_tail=stderr_tail,
+                provider_lifecycle=lifecycle,
+                provider_events=provider_events,
             )
         except asyncio.CancelledError:
             await _terminate_process(process)

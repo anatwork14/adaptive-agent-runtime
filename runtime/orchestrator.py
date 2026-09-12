@@ -5,7 +5,13 @@ import uuid
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
-from adapters.base import AgentAdapter, AgentBudget, AgentRunResult
+from adapters.base import (
+    AgentAdapter,
+    AgentBudget,
+    AgentRunResult,
+    sanitize_failure_diagnostics,
+)
+from adapters.cli_process import AgentAdapterUnavailable
 from context.compiler import ContextCompiler
 from context.policy import ContextPolicy, RuntimeContextPolicy
 from context.request import ContextRequest
@@ -120,6 +126,49 @@ class Orchestrator:
             acquired.append(lease)
         return acquired
 
+    def _persist_provider_telemetry(
+        self,
+        *,
+        task_id: str,
+        agent_id: str,
+        result: AgentRunResult,
+    ) -> None:
+        """Persist observable provider boundaries without storing raw output."""
+        if not result.provider_events and not result.provider_lifecycle:
+            return
+
+        for item in result.provider_events:
+            event_name = item.get("event")
+            if not isinstance(event_name, str) or not event_name.startswith("provider."):
+                continue
+            if event_name == "provider.failed":
+                # The failure event below carries the complete sanitized
+                # diagnostic payload, including the failed boundary.
+                continue
+            self.event_store.append(
+                actor=agent_id,
+                kind=event_name,
+                project_id=self.project_id,
+                task_id=task_id,
+                payload={
+                    "observed": True,
+                    "provider_outcome": result.provider_outcome,
+                    "provider_returncode": result.provider_returncode,
+                },
+            )
+
+        self.event_store.append(
+            actor=agent_id,
+            kind="provider.lifecycle",
+            project_id=self.project_id,
+            task_id=task_id,
+            payload={
+                "provider_lifecycle": result.provider_lifecycle,
+                "provider_outcome": result.provider_outcome,
+                "provider_returncode": result.provider_returncode,
+            },
+        )
+
     async def execute_task(
         self,
         task_id: str,
@@ -194,10 +243,29 @@ class Orchestrator:
                 max_usd=self.hard_task_usd,
                 max_tokens=task.token_budget,
             )
-            agent_result: AgentRunResult = await agent.run(
-                context=packet,
-                workspace=worktree_path,
-                budget=agent_budget,
+            try:
+                agent_result: AgentRunResult = await agent.run(
+                    context=packet,
+                    workspace=worktree_path,
+                    budget=agent_budget,
+                )
+            except AgentAdapterUnavailable as exc:
+                detail = str(exc)
+                classification = (
+                    "CLI_NOT_FOUND" if "not found" in detail.lower() else "CONFIGURATION_ERROR"
+                )
+                agent_result = AgentRunResult(
+                    status="failed",
+                    summary=detail,
+                    failure_classification=classification,
+                    provider_outcome="not_found" if classification == "CLI_NOT_FOUND" else "launch_error",
+                    stderr_tail=detail[-4000:],
+                )
+
+            self._persist_provider_telemetry(
+                task_id=task_id,
+                agent_id=agent_id,
+                result=agent_result,
             )
 
             self.budgets.record_consumption(
@@ -210,12 +278,20 @@ class Orchestrator:
             )
 
             if agent_result.status != "completed":
+                diagnostics = sanitize_failure_diagnostics(agent_result)
+                self.event_store.append(
+                    actor=agent_id,
+                    kind="provider.failed",
+                    project_id=self.project_id,
+                    task_id=task_id,
+                    payload=diagnostics,
+                )
                 self.event_store.append(
                     actor=agent_id,
                     kind="task.failed",
                     project_id=self.project_id,
                     task_id=task_id,
-                    payload={"reason": f"agent_status={agent_result.status}"},
+                    payload=diagnostics,
                 )
                 raise RuntimeError(
                     f"agent {agent_id} did not complete task {task_id}: {agent_result.status}"

@@ -4,7 +4,9 @@ from __future__ import annotations
 
 import asyncio
 import json
+import tempfile
 import time
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Optional
 
@@ -18,7 +20,8 @@ from rich.table import Table
 from rich.text import Text
 
 from application.app import ArcApplication
-from application.config import AgentProfile
+from application.config import AgentProfile, ConfigStore
+from application.provider_doctor import passive_provider_doctor, run_provider_probe
 from runtime.replay import ReplayEngine
 from state.models import TaskStatus
 
@@ -35,6 +38,7 @@ context_app = typer.Typer(help="Compile and inspect immutable Context Packets.",
 gate_app = typer.Typer(help="Inspect transactional integration-gate activity.", no_args_is_help=True)
 config_app = typer.Typer(help="Inspect repository-local ARC configuration.", no_args_is_help=True)
 eval_app = typer.Typer(help="Evaluation commands (research workbench).", no_args_is_help=True)
+provider_app = typer.Typer(help="Provider diagnostics outside scientific benchmark execution.", no_args_is_help=True)
 
 app.add_typer(task_app, name="task")
 app.add_typer(agent_app, name="agent")
@@ -43,6 +47,7 @@ app.add_typer(context_app, name="context")
 app.add_typer(gate_app, name="gate")
 app.add_typer(config_app, name="config")
 app.add_typer(eval_app, name="eval")
+app.add_typer(provider_app, name="provider")
 
 console = Console()
 
@@ -486,6 +491,56 @@ def agent_doctor(
                     row.detail,
                 )
             console.print(table)
+    except Exception as exc:
+        _fail(str(exc))
+
+
+@provider_app.command("doctor")
+def provider_doctor(
+    profile: Optional[str] = typer.Option(None, "--profile", help="Named profile; defaults to the configured default"),
+    active_probe: bool = typer.Option(
+        False,
+        "--active-probe",
+        help="Send one minimal non-benchmark request in a disposable workspace",
+    ),
+    output: Optional[Path] = typer.Option(
+        None,
+        "--output",
+        help="JSON result path; active probes default to a temporary external directory",
+    ),
+    repo: Path = typer.Option(Path("."), help="Repository root used only to load ARC profile configuration"),
+    project_id: Optional[str] = typer.Option(None, help="Project identifier"),
+) -> None:
+    """Run passive provider checks or an explicit non-benchmark smoke probe.
+
+    The active probe uses a disposable temporary git workspace and never loads
+    benchmark tasks, repository context, hidden tests, or benchmark results.
+    """
+    try:
+        config = ConfigStore(repo).load(project_id)
+        name = profile or config.default_agent
+        selected = config.agents.get(name)
+        if not selected:
+            raise typer.BadParameter(f"Agent profile {name!r} not found")
+
+        if active_probe:
+            if output is None:
+                stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+                output = Path(tempfile.gettempdir()) / "arc-provider-probes" / f"{name}-{stamp}.json"
+            report = run_provider_probe(selected, output_path=output)
+        else:
+            report = {
+                "schema": "arc-provider-doctor-v1",
+                "timestamp_utc": datetime.now(timezone.utc).isoformat(),
+                "active_probe": False,
+                "scientific_evidence": False,
+                "passive": passive_provider_doctor(selected).__dict__,
+            }
+        console.print(json.dumps(report, indent=2, sort_keys=True))
+        if active_probe and not report["active"].get("success", False):
+            raise typer.Exit(1)
+    except typer.Exit:
+        raise
     except Exception as exc:
         _fail(str(exc))
 
