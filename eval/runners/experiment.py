@@ -3,13 +3,14 @@
 from __future__ import annotations
 
 import math
+import subprocess
 import time
 from statistics import fmean
 from typing import List, Optional
 
 from adapters.base import AgentAdapter
 from eval.grading.hidden_tests import HiddenTestGrader
-from eval.models import EvaluationSummary, TaskMeasurement
+from eval.models import BenchmarkManifest, EvaluationSummary, TaskMeasurement
 from eval.telemetry import collect_trace_telemetry
 from runtime.orchestrator import Orchestrator
 from state.models import GateStatus
@@ -28,7 +29,6 @@ def _p95(values: list[float | None]) -> float | None:
     observed = sorted(float(value) for value in values if value is not None)
     if not observed:
         return None
-    # nearest-rank percentile, one-indexed in the statistical definition
     rank = max(1, math.ceil(0.95 * len(observed)))
     return observed[rank - 1]
 
@@ -95,6 +95,94 @@ class ExperimentRunner:
         self.grader = grader
         self.last_measurements: list[TaskMeasurement] = []
 
+    @staticmethod
+    def _repo_head(orchestrator: Orchestrator) -> str:
+        proc = subprocess.run(
+            ["git", "rev-parse", "HEAD"],
+            cwd=str(orchestrator.repo_path),
+            capture_output=True,
+            text=True,
+            check=True,
+        )
+        return proc.stdout.strip()
+
+    @staticmethod
+    def _validate_manifest_tasks(
+        orchestrator: Orchestrator,
+        manifest: BenchmarkManifest,
+    ) -> None:
+        for spec in manifest.tasks:
+            task = orchestrator.scheduler.get_task(spec.task_id)
+            if task is None:
+                raise ValueError(f"manifest task {spec.task_id} does not exist in ARC state")
+            mismatches: list[str] = []
+            if task.goal != spec.goal:
+                mismatches.append("goal")
+            if task.files_declared != spec.files:
+                mismatches.append("files")
+            if task.acceptance_criteria != spec.acceptance:
+                mismatches.append("acceptance")
+            if task.risk != spec.risk:
+                mismatches.append("risk")
+            if task.token_budget != spec.token_budget:
+                mismatches.append("token_budget")
+            if mismatches:
+                raise ValueError(
+                    f"manifest task {spec.task_id} does not match ARC task state: "
+                    + ", ".join(mismatches)
+                )
+
+    async def run_manifest(
+        self,
+        orchestrator: Orchestrator,
+        manifest: BenchmarkManifest,
+        agent: AgentAdapter,
+    ) -> ExperimentSummary:
+        """Execute a validated B7 manifest from its declared repository base.
+
+        Fault declarations are fail-closed for now: the existing FaultInjector is
+        available, but v0.11 does not silently invent an application schedule for
+        those interventions. Fault-enabled manifests become executable only when
+        the schedule is explicit in the shared baseline runner.
+        """
+        if manifest.baseline != "B7":
+            raise ValueError(
+                "v0.11 run_manifest supports B7 only; normalize B0/B2/B3/B5 behind "
+                "the shared gate/budget runner before comparing them"
+            )
+        if manifest.faults:
+            raise ValueError(
+                "fault-enabled manifests are not executable in v0.11 until a deterministic "
+                "fault schedule is wired into the shared runner"
+            )
+
+        head = self._repo_head(orchestrator)
+        if not head.startswith(manifest.repo_commit) and not manifest.repo_commit.startswith(head):
+            raise ValueError(
+                f"repository HEAD {head} does not match manifest repo_commit "
+                f"{manifest.repo_commit}"
+            )
+        self._validate_manifest_tasks(orchestrator, manifest)
+
+        patterns = {
+            task.task_id: task.hidden_test_pattern
+            for task in manifest.tasks
+            if task.hidden_test_pattern
+        }
+        return await self.run_benchmark(
+            orchestrator,
+            [task.task_id for task in manifest.tasks],
+            agent,
+            agent_id=manifest.agent_profile,
+            benchmark_id=manifest.benchmark_id,
+            baseline="B7",
+            repo_commit=head,
+            model=manifest.model,
+            seed=manifest.seed,
+            fault_kinds=[],
+            hidden_test_patterns=patterns,
+        )
+
     async def run_benchmark(
         self,
         orchestrator: Orchestrator,
@@ -108,6 +196,7 @@ class ExperimentRunner:
         model: str | None = None,
         seed: int = 0,
         fault_kinds: Optional[list[str]] = None,
+        hidden_test_patterns: Optional[dict[str, str]] = None,
     ) -> ExperimentSummary:
         if baseline != "B7":
             raise ValueError(
@@ -135,7 +224,8 @@ class ExperimentRunner:
             hidden_passed: bool | None = None
             hidden_count: int | None = None
             if self.grader is not None and gate_result.status == GateStatus.ACCEPTED:
-                grade = self.grader.grade(orchestrator.repo_path)
+                pattern = (hidden_test_patterns or {}).get(task_id, "test_hidden_*.py")
+                grade = self.grader.grade(orchestrator.repo_path, test_file_pattern=pattern)
                 hidden_passed = grade.passed
                 hidden_count = grade.total_hidden_tests
 
