@@ -284,12 +284,9 @@ class ContextCompiler:
                 }
             elif memory.type in (MemoryType.TASK_SUMMARY, MemoryType.EPISODE):
                 bucket, target = "episodes", episodes
-                entry = {
-                    "memory_id": memory.memory_id,
-                    "text": memory.content_text,
-                    "status": memory.status.value,
-                    "source_events": memory.source_events,
-                }
+                # Provider-visible episode context contains semantic content only.
+                # Audit provenance remains available through memory_ids/event telemetry.
+                entry = {"text": memory.content_text}
             else:
                 continue
 
