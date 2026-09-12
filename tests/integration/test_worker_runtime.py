@@ -28,12 +28,20 @@ class FakeTmux:
     def has_session(self, name: str) -> bool:
         return name in type(self).sessions
 
-    def start(self, *, name: str, cwd: str | Path, command: list[str]) -> None:
+    def start(
+        self,
+        *,
+        name: str,
+        cwd: str | Path,
+        command: list[str],
+        environment: dict[str, str] | None = None,
+    ) -> None:
         if name in type(self).sessions:
             raise RuntimeError(f"duplicate fake tmux session: {name}")
         type(self).sessions[name] = {
             "cwd": str(Path(cwd).resolve()),
             "command": list(command),
+            "environment": dict(environment or {}),
             "log": f"started {' '.join(command)}",
         }
 
@@ -157,6 +165,39 @@ def test_submit_stops_live_runtimes_before_worktree_cleanup(tmp_path: Path, monk
         assert preview_after.stopped_event is not None
         assert terminal_after.workspace == str(workspace)
         assert preview_after.workspace == str(workspace)
+
+
+def test_runtime_environment_is_least_privilege(tmp_path: Path, monkeypatch) -> None:
+    repo = _git_repo(tmp_path)
+    FakeTmux.sessions = {}
+    monkeypatch.setattr("application.worker_runtime.TmuxController", FakeTmux)
+    monkeypatch.setenv("ARC_TEST_ALLOWED_TOKEN", "allowed-value")
+    monkeypatch.setenv("UNRELATED_DATABASE_PASSWORD", "must-not-leak")
+
+    with SessionArcApplication(repo, "demo") as arc:
+        arc.initialize()
+        profile = arc.config.agents["mock"]
+        profile.command_override = "python -V"
+        profile.env_allow = ["ARC_TEST_ALLOWED_TOKEN"]
+        task = arc.create_task("Prove child environment isolation")
+        session = arc.sessions.create(task.task_id, agent_name="mock")
+
+        terminal = arc.worker_runtime.start_terminal(session.session_id)
+        terminal_env = FakeTmux.sessions[terminal.runtime_name]["environment"]
+        assert terminal_env["ARC_TEST_ALLOWED_TOKEN"] == "allowed-value"
+        assert "UNRELATED_DATABASE_PASSWORD" not in terminal_env
+        assert "ARC_TEST_ALLOWED_TOKEN" in terminal.environment_keys
+        assert "UNRELATED_DATABASE_PASSWORD" not in terminal.environment_keys
+
+        preview = arc.worker_runtime.start_preview(
+            session.session_id,
+            command_template="python -m http.server {port} --bind {host}",
+            port=_free_port(),
+        )
+        preview_env = FakeTmux.sessions[preview.runtime_name]["environment"]
+        assert "ARC_TEST_ALLOWED_TOKEN" not in preview_env
+        assert "UNRELATED_DATABASE_PASSWORD" not in preview_env
+        assert "ARC_TEST_ALLOWED_TOKEN" not in preview.environment_keys
 
 
 def test_preview_rejects_non_loopback_or_uncontrolled_bindings(tmp_path: Path, monkeypatch) -> None:
