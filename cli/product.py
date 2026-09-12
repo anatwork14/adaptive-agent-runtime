@@ -63,7 +63,7 @@ def workspace_ui(
     open_browser: bool = typer.Option(True, "--open/--no-open", help="Open the workspace in a browser"),
     allow_remote: bool = typer.Option(
         False,
-        help="Allow non-loopback binding. ARC Workspace has no ARC-user authentication yet.",
+        help="Deprecated compatibility flag; remote binding remains disabled until ARC has authenticated remote mode.",
     ),
 ) -> None:
     """Open the session-centric Agent Workspace UI."""
