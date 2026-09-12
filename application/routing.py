@@ -43,7 +43,7 @@ class AgentRouter:
         default_agent: str | None = None,
     ) -> RouteDecision:
         active_counts = active_counts or {}
-        candidates: list[RouteDecision] = []
+        candidates: list[tuple[AgentProfile, RouteDecision]] = []
         required = {item.lower() for item in task.required_capabilities}
         task_type = task.task_type.lower()
 
@@ -61,7 +61,6 @@ class AgentRouter:
 
             missing = required.difference(caps)
             if required and missing:
-                # Required capabilities are a hard constraint.
                 continue
             if required:
                 score += 4.0 * len(required)
@@ -93,12 +92,15 @@ class AgentRouter:
                 reasons.append("default-agent tie breaker")
 
             candidates.append(
-                RouteDecision(
-                    task_id=task.task_id,
-                    agent_name=profile.name,
-                    score=round(score, 4),
-                    policy=self.policy,
-                    reasons=tuple(reasons),
+                (
+                    profile,
+                    RouteDecision(
+                        task_id=task.task_id,
+                        agent_name=profile.name,
+                        score=round(score, 4),
+                        policy=self.policy,
+                        reasons=tuple(reasons),
+                    ),
                 )
             )
 
@@ -107,4 +109,24 @@ class AgentRouter:
                 f"No READY agent satisfies task {task.task_id} "
                 f"(type={task.task_type}, required={sorted(required)})"
             )
-        return sorted(candidates, key=lambda item: (-item.score, item.agent_name))[0]
+
+        # Mock is a deterministic smoke-test baseline, not an automatic worker.
+        # Prefer any eligible real coding agent and only fall back to mock when
+        # no real provider can currently satisfy the task.
+        real = [item for item in candidates if item[0].provider != "mock"]
+        pool = real or candidates
+        if not real:
+            pool = [
+                (
+                    profile,
+                    RouteDecision(
+                        task_id=decision.task_id,
+                        agent_name=decision.agent_name,
+                        score=decision.score,
+                        policy=decision.policy,
+                        reasons=decision.reasons + ("mock fallback: no real READY route",),
+                    ),
+                )
+                for profile, decision in pool
+            ]
+        return sorted(pool, key=lambda item: (-item[1].score, item[1].agent_name))[0][1]
