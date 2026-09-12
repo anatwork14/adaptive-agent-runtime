@@ -7,6 +7,7 @@
   <title>ARC Workspace</title>
   <link rel="stylesheet" href="/static/workspace.css">
   <link rel="stylesheet" href="/static/workspace-runtime.css">
+  <link rel="stylesheet" href="/static/workspace-turns.css">
 </head>
 <body>
   <div class="noise" aria-hidden="true"></div>
@@ -62,6 +63,13 @@
         </div>
         <div class="tab-content" id="tabChat">
           <div id="chatMessages" class="chat-messages"></div>
+          <div id="liveTurn" class="live-turn" hidden>
+            <div class="live-turn-head">
+              <div><span class="live-dot"></span><span class="eyebrow">SUPERVISED LIVE TURN</span><b id="liveTurnId">—</b></div>
+              <button id="cancelTurnBtn" class="danger">Cancel turn</button>
+            </div>
+            <pre id="turnOutput" class="turn-output">Waiting for provider output…</pre>
+          </div>
           <form id="chatForm" class="chat-form"><textarea name="message" rows="3" placeholder="Tell this worker what to do next"></textarea><button class="primary">Send</button></form>
         </div>
         <div class="tab-content" id="tabFiles" hidden><div id="fileList" class="file-list"></div></div>
