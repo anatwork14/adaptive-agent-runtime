@@ -51,13 +51,21 @@ class WorkerRuntimeManager:
     def doctor(self) -> dict[str, Any]:
         return self.tmux.doctor()
 
-    def _session(self, session_id: str):
+    def _session(self, session_id: str, *, require_workspace: bool = True):
         session = self.app.sessions.get(session_id)
         if not session:
             raise ValueError(f"Worker session {session_id} not found")
         workspace = Path(session.worktree_path)
-        if not workspace.exists():
+        if require_workspace and not workspace.exists():
             raise RuntimeError(f"Worker workspace is missing: {workspace}")
+        return session, workspace
+
+    def _require_active_session(self, session_id: str):
+        session, workspace = self._session(session_id)
+        if session.status not in self.app.sessions.ACTIVE:
+            raise ValueError(
+                f"Session {session_id} is {session.status.value}; live runtimes require an active worker"
+            )
         return session, workspace
 
     def _events(self, session_id: str, kind: RuntimeKind) -> list[Any]:
@@ -97,7 +105,10 @@ class WorkerRuntimeManager:
         return output
 
     def status(self, session_id: str, kind: RuntimeKind) -> WorkerRuntimeState:
-        session, workspace = self._session(session_id)
+        # Status remains inspectable after an accepted/stopped session has had
+        # its draft worktree removed. ARC reconstructs metadata from events and
+        # consults tmux only when an unmatched runtime-start event exists.
+        _, workspace = self._session(session_id, require_workspace=False)
         state = WorkerRuntimeState(
             session_id=session_id,
             kind=kind,
@@ -184,7 +195,7 @@ class WorkerRuntimeManager:
         )
 
     def start_terminal(self, session_id: str) -> WorkerRuntimeState:
-        session, workspace = self._session(session_id)
+        _, workspace = self._require_active_session(session_id)
         current = self.status(session_id, "terminal")
         if current.running:
             return current
@@ -254,7 +265,7 @@ class WorkerRuntimeManager:
         port: int,
         host: str = "127.0.0.1",
     ) -> WorkerRuntimeState:
-        _, workspace = self._session(session_id)
+        _, workspace = self._require_active_session(session_id)
         if host not in {"127.0.0.1", "localhost", "::1"}:
             raise ValueError("ARC previews are loopback-only")
         if not 1 <= port <= 65535:
@@ -278,7 +289,12 @@ class WorkerRuntimeManager:
             raise ValueError("Preview command did not produce an executable argv")
         name = TmuxController.safe_name("preview", session_id)
         self.tmux.start(name=name, cwd=workspace, command=command)
-        url_host = "127.0.0.1" if host == "localhost" else host
+        if host == "localhost":
+            url_host = "127.0.0.1"
+        elif host == "::1":
+            url_host = "[::1]"
+        else:
+            url_host = host
         url = f"http://{url_host}:{port}/"
         self._emit_started(
             session_id=session_id,
