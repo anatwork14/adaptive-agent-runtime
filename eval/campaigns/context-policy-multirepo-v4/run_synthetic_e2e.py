@@ -247,9 +247,7 @@ async def _timeout_task(root: Path) -> dict[str, object]:
             "status": "EXPECTED_TIMEOUT",
             "provider_execution_started": False,
             "failure_classification": failures[-1].payload["failure_classification"],
-            "configured_timeout_seconds": failures[-1].payload[
-                "configured_timeout_seconds"
-            ],
+            "configured_timeout_seconds": failures[-1].payload["configured_timeout_seconds"],
             "provider_lifecycle": failures[-1].payload["provider_lifecycle"],
             "candidate_or_measurement_created": any(
                 event.kind in {"task.submitted", "measurement.created"} for event in events

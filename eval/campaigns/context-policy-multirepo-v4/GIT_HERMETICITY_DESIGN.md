@@ -54,4 +54,3 @@ The multi-commit squash path is covered separately.
 This hardening changes only ARC's internal Git plumbing. It does not modify
 benchmark repository commits, hidden tests, campaign treatment logic, Docker
 images, provider configuration, or V1/V2 artifacts.
-

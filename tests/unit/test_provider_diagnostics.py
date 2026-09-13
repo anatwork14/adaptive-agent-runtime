@@ -197,13 +197,16 @@ def test_response_started_then_timeout_preserves_lifecycle(tmp_path: Path, monke
         "time.sleep(30)\n",
         encoding="utf-8",
     )
+
     async def force_timeout(waiters, **kwargs):
         await cli_process.asyncio.sleep(0.1)
         return set(), waiters
 
     monkeypatch.setattr(cli_process.asyncio, "wait", force_timeout)
     result = asyncio.run(
-        CodexAgentAdapter(command_override=shlex.join([sys.executable, str(script), "--json"])).run_prompt(
+        CodexAgentAdapter(
+            command_override=shlex.join([sys.executable, str(script), "--json"])
+        ).run_prompt(
             prompt="synthetic probe",
             workspace=tmp_path,
             budget=AgentBudget(timeout_seconds=600),

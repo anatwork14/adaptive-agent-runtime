@@ -433,11 +433,12 @@ def preflight_campaign(
         for repository in repository_report.values()
     )
     timeout_contract_verified = all(
-        plan.runtime.provider_execution_timeout_seconds
-        == expected_timeout
+        plan.runtime.provider_execution_timeout_seconds == expected_timeout
         for plan in plans.values()
     )
-    ready = bool(auth.installed and auth.authenticated and sandbox_ready and timeout_contract_verified)
+    ready = bool(
+        auth.installed and auth.authenticated and sandbox_ready and timeout_contract_verified
+    )
     return {
         "schema_version": "arc-campaign-preflight-v4",
         "checked_at_utc": _now(),
