@@ -96,6 +96,12 @@ def _validate_timeout_contract(contract: dict[str, Any]) -> int:
     config_digest = provider_runtime.get("codex_config_sha256")
     if not isinstance(config_digest, str) or len(config_digest) != 64:
         raise SystemExit("V4 Codex config SHA-256 must be a 64-character hex digest")
+    trusted_workspaces = provider_runtime.get("trusted_workspaces")
+    if not isinstance(trusted_workspaces, list) or not trusted_workspaces:
+        raise SystemExit("V4 Codex contract must declare trusted workspaces")
+    strategy = provider_runtime.get("invocation_home_strategy")
+    if not isinstance(strategy, dict) or strategy.get("mode") != "ephemeral_snapshot":
+        raise SystemExit("V4 Codex contract must use the qualified ephemeral snapshot strategy")
     return timeout
 
 

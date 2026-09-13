@@ -20,6 +20,21 @@ launches, and real provider subprocesses inject this home explicitly; ambient
 `CODEX_HOME` is not trusted. Authentication state and credential files remain
 outside the review bundle.
 
+The pinned Codex CLI does not recursively inherit a trusted parent for nested
+Git workspaces. The final non-secret config therefore contains prospective
+exact-path trust entries for two disposable qualification workspaces and the
+three fixed future `a001` runtime workspaces. These entries were qualified by
+two real non-benchmark probes with stable before/after hashes and no manual
+restoration. The execution loop also authenticates with the dedicated home
+before Click, HTTPX, and python-dotenv, and checks the provider config hash
+before and after each repository run.
+
+Because benchmark task worktrees are dynamically nested and named, provider
+turns use an invocation-scoped snapshot of the canonical config and vendor auth
+state. The temporary `CODEX_HOME` is explicit, private, and removed after the
+turn; mutable provider-local project state cannot reach the canonical config or
+scientific results.
+
 Before any canonical freeze, the apparatus qualification must pass the ARC
 suite, hostile Git configuration and identity-environment regressions, the
 provider-free synthetic workflow, and passive/active non-benchmark provider

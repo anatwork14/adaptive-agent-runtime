@@ -25,7 +25,12 @@ The provider runtime is additionally bound to the dedicated Codex home
 `config.toml`. ARC injects `CODEX_HOME` explicitly for authentication,
 qualification, terminals, version probes, and provider subprocesses, so a
 broken ambient home cannot silently change the frozen runtime. Credential
-state is not copied into freeze or review artifacts.
+state is not copied into freeze or review artifacts. The pinned Codex CLI was
+tested with a trusted parent and still added per-project entries for nested
+Git workspaces, so the final config prospectively trusts each fixed V4
+qualification workspace and each fixed `a001` runtime workspace. The campaign
+checks the expected and actual home, config path, and config digest immediately
+before and after every repository provider run and stops on drift.
 
 ## Diagnostic contract
 

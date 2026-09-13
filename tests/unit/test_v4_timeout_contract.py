@@ -36,8 +36,23 @@ def test_v4_contract_changes_only_the_provider_execution_timeout() -> None:
         "/Users/teobun/arc-secure/codex-v4-home/config.toml"
     )
     assert contract["provider_runtime"]["codex_config_sha256"] == (
-        "1981d54e8058aa36da3bb6a2b5e7babfd3784f3904d5dd320074426d193172d5"
+        "f94270078be62298be8a9ed92fb13fcb0a5480521943493df59108e5370bce10"
     )
+    assert contract["provider_runtime"]["trusted_workspaces"] == [
+        "/Users/teobun/arc-study/runtime/context-policy-multirepo-v4/qualification/workspace-a",
+        "/Users/teobun/arc-study/runtime/context-policy-multirepo-v4/qualification/workspace-b",
+        "/Users/teobun/arc-study/runtime/context-policy-multirepo-v4/a001/click",
+        "/Users/teobun/arc-study/runtime/context-policy-multirepo-v4/a001/httpx",
+        "/Users/teobun/arc-study/runtime/context-policy-multirepo-v4/a001/python-dotenv",
+    ]
+    assert contract["provider_runtime"]["invocation_home_strategy"] == {
+        "mode": "ephemeral_snapshot",
+        "source_files": ["config.toml", "auth.json"],
+        "mutable_state": "provider-local state in a temporary invocation directory",
+        "cleanup": "discarded in a finally block after every provider turn",
+        "canonical_config_preserved": True,
+        "credentials_persisted_by_arc": False,
+    }
     assert "CODEX_HOME" in contract["provider_runtime"]["environment_allowlist"]["observed_keys"]
     assert {
         repository["visible_test_harness"]["timeout_seconds"]
@@ -69,7 +84,15 @@ def test_v4_protocol_diff_separates_timeout_from_codex_home_apparatus_change() -
         },
         {
             "field": "provider_runtime.codex_config_sha256",
-            "reason": "cryptographically bind non-secret provider configuration",
+            "reason": "cryptographically bind the stable non-secret provider configuration after trust qualification",
+        },
+        {
+            "field": "provider_runtime.trusted_workspaces",
+            "reason": "pretrust each fixed V4 qualification and a001 runtime workspace according to pinned Codex CLI semantics",
+        },
+        {
+            "field": "provider_runtime.invocation_home_strategy",
+            "reason": "isolate mutable Codex project state for dynamic nested task worktrees while preserving the canonical home",
         },
     ]
 

@@ -31,7 +31,15 @@
     },
     {
       "field": "provider_runtime.codex_config_sha256",
-      "reason": "cryptographically bind non-secret provider configuration"
+      "reason": "cryptographically bind the stable non-secret provider configuration after trust qualification"
+    },
+    {
+      "field": "provider_runtime.trusted_workspaces",
+      "reason": "pretrust each fixed V4 qualification and a001 runtime workspace according to pinned Codex CLI semantics"
+    },
+    {
+      "field": "provider_runtime.invocation_home_strategy",
+      "reason": "isolate mutable Codex project state for dynamic nested task worktrees while preserving the canonical home"
     }
   ],
   "preserved": [

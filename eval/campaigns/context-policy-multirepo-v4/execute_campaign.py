@@ -114,6 +114,47 @@ def _validate_attempt_id(attempt_id: str) -> None:
         )
 
 
+def _provider_environment(contract: dict[str, Any]) -> dict[str, str]:
+    """Return the only provider-home override permitted by the V4 contract."""
+    return {"CODEX_HOME": str(contract["provider_runtime"]["codex_home"])}
+
+
+def _validate_provider_runtime_identity(
+    contract: dict[str, Any],
+    *,
+    phase: str,
+) -> dict[str, Any]:
+    """Fail closed if the frozen provider home or non-secret config drifts."""
+    runtime = contract["provider_runtime"]
+    expected_home = str(runtime["codex_home"])
+    expected_config = Path(str(runtime["codex_config_path"])).resolve()
+    actual_home = _provider_environment(contract)["CODEX_HOME"]
+    if actual_home != expected_home:
+        raise RuntimeError(
+            f"provider runtime CODEX_HOME drift detected at {phase}: "
+            f"expected={expected_home}, actual={actual_home}"
+        )
+    if not expected_config.is_file():
+        raise RuntimeError(f"provider config is missing at {phase}: {expected_config}")
+    actual_sha = _sha256_file(expected_config)
+    expected_sha = str(runtime["codex_config_sha256"])
+    if actual_sha != expected_sha:
+        raise RuntimeError(
+            f"provider config drift detected at {phase}: "
+            f"expected_sha256={expected_sha}, actual_sha256={actual_sha}"
+        )
+    return {
+        "phase": phase,
+        "expected_codex_home": expected_home,
+        "actual_codex_home": actual_home,
+        "expected_config_path": str(expected_config),
+        "actual_config_path": str(expected_config),
+        "expected_config_sha256": expected_sha,
+        "actual_config_sha256": actual_sha,
+        "verified": True,
+    }
+
+
 def _require_external(path: Path, protected: list[Path], *, label: str) -> Path:
     resolved = path.resolve()
     for item in protected:
@@ -313,7 +354,9 @@ def _validate_live_repository(
         provider_execution_timeout_seconds=timeout_seconds,
         provider_codex_home=profile.codex_home,
         provider_codex_config_path=profile.codex_config_path,
-        provider_codex_config_sha256=_sha256_file(Path(profile.codex_config_path)) if profile.codex_config_path else None,
+        provider_codex_config_sha256=_sha256_file(Path(profile.codex_config_path))
+        if profile.codex_config_path
+        else None,
     )
     harness = config.visible_test_harness
     if not harness:
@@ -433,8 +476,9 @@ def preflight_campaign(
         }
 
     provider = contract["provider_profile"]["provider"]
-    auth_environment = {"CODEX_HOME": contract["provider_runtime"]["codex_home"]}
-    auth = auth_status(provider, environment=auth_environment)
+    provider_environment = _provider_environment(contract)
+    provider_identity = _validate_provider_runtime_identity(contract, phase="preflight")
+    auth = auth_status(provider, environment=provider_environment)
     sandbox_ready = all(
         repository.get("sandbox", {}).get("ready") is True
         for repository in repository_report.values()
@@ -461,6 +505,9 @@ def preflight_campaign(
         "codex_home": contract["provider_runtime"]["codex_home"],
         "codex_config_path": contract["provider_runtime"]["codex_config_path"],
         "codex_config_sha256": contract["provider_runtime"]["codex_config_sha256"],
+        "provider_environment_expected": provider_environment,
+        "provider_environment_actual": provider_environment,
+        "provider_runtime_identity": provider_identity,
         "provider_auth": {
             "provider": auth.provider,
             "installed": auth.installed,
@@ -558,10 +605,15 @@ def execute_campaign(
     study_dirs: list[Path] = []
     runtime_lock_path = freeze_dir.resolve() / freeze_manifest["runtime_lock"]
     provider = contract["provider_profile"]["provider"]
+    provider_environment = _provider_environment(contract)
     try:
         for slug in REPOSITORY_ORDER:
             plan = plans[slug]
             repo_state = ledger["repositories"][slug]
+
+            repo_state["provider_runtime_before"] = _validate_provider_runtime_identity(
+                contract, phase=f"before_{slug}"
+            )
 
             # Revalidate immediately before each expensive repository study. A long
             # campaign must not assume the machine remained unchanged since the
@@ -572,7 +624,7 @@ def execute_campaign(
                 hidden_dir=hidden_root.resolve() / slug,
                 runtime_lock_path=runtime_lock_path,
             )
-            auth = auth_status(provider)
+            auth = auth_status(provider, environment=provider_environment)
             repo_state["live_revalidated_at_utc"] = _now()
             repo_state["provider_auth_state_before_run"] = auth.state
             if not (auth.installed and auth.authenticated):
@@ -612,6 +664,9 @@ def execute_campaign(
                 str(hidden_dir),
             ]
             _run_logged(command, log_path=log_path)
+            repo_state["provider_runtime_after"] = _validate_provider_runtime_identity(
+                contract, phase=f"after_{slug}"
+            )
 
             study_dir = _study_dir(repo_output_root, plan, attempt_id)
             if not (study_dir / "study.json").is_file():

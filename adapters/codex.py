@@ -1,9 +1,15 @@
 """Codex CLI coding-agent adapter."""
 
 import json
+import shutil
+import tempfile
 from collections.abc import Iterable
+from contextlib import contextmanager
+from pathlib import Path
+from typing import Iterator
 
 from adapters.cli_process import SubprocessCodingAgent
+from runtime.environment import build_execution_environment
 
 
 class CodexAgentAdapter(SubprocessCodingAgent):
@@ -22,6 +28,7 @@ class CodexAgentAdapter(SubprocessCodingAgent):
         command_override: str | None = None,
         env_allow: Iterable[str] = (),
         codex_home: str | None = None,
+        codex_config_path: str | None = None,
     ) -> None:
         command = ["codex", "exec", "--full-auto"]
         if model_name:
@@ -38,6 +45,55 @@ class CodexAgentAdapter(SubprocessCodingAgent):
             environment_overrides={"CODEX_HOME": codex_home} if codex_home else None,
         )
         self.model_name = model_name
+        self.codex_home = codex_home
+        self.codex_config_path = codex_config_path
+        self._active_invocation_home: str | None = None
+
+    def execution_environment(self) -> dict[str, str]:
+        """Use a disposable provider home for each real Codex turn."""
+        codex_home = self._active_invocation_home or self.codex_home
+        return build_execution_environment(
+            provider=self.provider,
+            extra_names=self.env_allow,
+            overrides={"CODEX_HOME": codex_home} if codex_home else None,
+        )
+
+    @contextmanager
+    def _invocation_home(self) -> Iterator[str]:
+        """Materialize config/auth state into a disposable Codex home.
+
+        Only the vendor-owned auth file and the frozen non-secret config are
+        copied. The provider may mutate the disposable copy, but it can never
+        rewrite the canonical config or fall back to the ambient Codex home.
+        """
+        if not self.codex_home:
+            raise RuntimeError("Codex invocation isolation requires codex_home")
+        source_home = Path(self.codex_home).expanduser().resolve()
+        source_config = Path(self.codex_config_path or source_home / "config.toml").resolve()
+        if not source_config.is_file():
+            raise RuntimeError(f"Codex invocation config does not exist: {source_config}")
+
+        with tempfile.TemporaryDirectory(prefix="arc-codex-v4-invocation-") as temp_home:
+            target_home = Path(temp_home)
+            target_home.chmod(0o700)
+            shutil.copy2(source_config, target_home / "config.toml")
+            auth_state = source_home / "auth.json"
+            if auth_state.is_file():
+                shutil.copy2(auth_state, target_home / "auth.json")
+                (target_home / "auth.json").chmod(0o600)
+            (target_home / "config.toml").chmod(0o600)
+            yield str(target_home)
+
+    async def run_prompt(self, **kwargs):
+        """Run one turn from a fresh, disposable provider-home snapshot."""
+        if not self.codex_home:
+            return await super().run_prompt(**kwargs)
+        with self._invocation_home() as invocation_home:
+            self._active_invocation_home = invocation_home
+            try:
+                return await super().run_prompt(**kwargs)
+            finally:
+                self._active_invocation_home = None
 
     def parse_output_events(self, stream: str, text: str) -> list[str]:
         """Map documented ``codex exec --json`` JSONL events to safe boundaries.

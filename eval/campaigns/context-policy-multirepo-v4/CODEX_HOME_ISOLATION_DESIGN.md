@@ -18,10 +18,30 @@ packaged. Provider diagnostics expose only the home path, config digest, CLI
 identity, environment key names, lifecycle boundaries, and redacted bounded
 diagnostic text.
 
-Codex may add a transient project-trust stanza when first used in a disposable
-probe workspace. The qualification procedure restores the minimal config after
-that probe and records the final digest before any V4 freeze; the transient
-workspace entry is therefore not part of the frozen provider identity.
+The pinned CLI does not inherit trust from a parent directory: a parent trust
+entry was experimentally shown to add per-project entries for nested Git
+workspaces. V4 therefore prospectively records exact trust entries for the two
+disposable qualification workspaces and the three fixed future `a001` runtime
+workspaces. The entries are non-secret, deterministic, and included in the
+final config digest. Two real non-benchmark probes completed in separate
+pretrusted workspaces with request, response, and completion boundaries while
+the hash remained unchanged and no manual restoration was performed.
+
+The runtime also checks the expected and actual `CODEX_HOME`, config path, and
+config SHA before and after every repository provider run. Any mismatch is an
+explicit apparatus failure and prevents the next repository from starting.
+
+The benchmark's actual task worktrees are nested below study and repetition
+directories and include generated names, so exact static trust entries cannot
+cover every provider working directory. The final execution strategy is thus
+an invocation-scoped snapshot: immediately before each Codex turn ARC copies
+only the canonical `config.toml` and vendor-owned `auth.json` into a mode
+`0700` temporary home, injects that temporary path explicitly, and removes the
+directory in a `finally` block. Codex may mutate this disposable copy; the
+canonical config cannot be changed by the provider. ARC never serializes,
+hashes, logs, or packages the auth file or the temporary home contents. Every
+turn starts from the same canonical config SHA, so B3/B5/B7 have identical
+provider configuration starts.
 
 The regression contract creates a broken ambient catalog and a healthy isolated
 home. The provider doctor must report the isolated home as authenticated while

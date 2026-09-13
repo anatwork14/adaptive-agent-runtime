@@ -44,16 +44,21 @@ _PROVIDER_COMMAND_ENV = {
 }
 
 _AUTH_CACHE_TTL = 30.0
-_AUTH_CACHE: dict[str, tuple[float, ProviderAuthStatus]] = {}
+_AUTH_CACHE: dict[tuple[str, str | None], tuple[float, ProviderAuthStatus]] = {}
 
 
-def _cached_auth_status(provider: str) -> ProviderAuthStatus:
+def _cached_auth_status(
+    provider: str,
+    *,
+    environment: dict[str, str] | None = None,
+) -> ProviderAuthStatus:
     now = time.monotonic()
-    cached = _AUTH_CACHE.get(provider)
+    cache_key = (provider, (environment or {}).get("CODEX_HOME"))
+    cached = _AUTH_CACHE.get(cache_key)
     if cached and now - cached[0] < _AUTH_CACHE_TTL:
         return cached[1]
-    result = auth_status(provider)
-    _AUTH_CACHE[provider] = (now, result)
+    result = auth_status(provider, environment=environment)
+    _AUTH_CACHE[cache_key] = (now, result)
     return result
 
 
@@ -75,6 +80,7 @@ def build_agent(profile: AgentProfile):
             command_override=profile.command_override,
             env_allow=profile.env_allow,
             codex_home=profile.codex_home,
+            codex_config_path=profile.codex_config_path,
         )
     if profile.provider == "claude":
         return ClaudeAgentAdapter(
@@ -98,9 +104,25 @@ def build_agent(profile: AgentProfile):
 def doctor_profile(profile: AgentProfile) -> AgentDoctorResult:
     """Check installation plus vendor-native authentication where supported."""
     if not profile.enabled:
-        return AgentDoctorResult(profile.name, profile.provider, profile.model, None, False, "DISABLED", "profile disabled")
+        return AgentDoctorResult(
+            profile.name,
+            profile.provider,
+            profile.model,
+            None,
+            False,
+            "DISABLED",
+            "profile disabled",
+        )
     if profile.provider == "mock":
-        return AgentDoctorResult(profile.name, "mock", profile.model, None, True, "READY", "deterministic local smoke-test adapter")
+        return AgentDoctorResult(
+            profile.name,
+            "mock",
+            profile.model,
+            None,
+            True,
+            "READY",
+            "deterministic local smoke-test adapter",
+        )
     if profile.provider == "openrouter":
         has_key = bool(os.environ.get("OPENROUTER_API_KEY"))
         return AgentDoctorResult(
@@ -114,7 +136,9 @@ def doctor_profile(profile: AgentProfile) -> AgentDoctorResult:
         )
 
     executable = _PROVIDER_EXECUTABLES[profile.provider]
-    override = profile.command_override or os.environ.get(_PROVIDER_COMMAND_ENV.get(profile.provider, ""), "")
+    override = profile.command_override or os.environ.get(
+        _PROVIDER_COMMAND_ENV.get(profile.provider, ""), ""
+    )
     if override:
         try:
             executable = shlex.split(override)[0]
@@ -133,7 +157,12 @@ def doctor_profile(profile: AgentProfile) -> AgentDoctorResult:
         )
 
     if profile.provider in {"codex", "claude", "antigravity"} and not override:
-        auth = _cached_auth_status(profile.provider)
+        provider_environment = (
+            {"CODEX_HOME": profile.codex_home}
+            if profile.provider == "codex" and profile.codex_home
+            else None
+        )
+        auth = _cached_auth_status(profile.provider, environment=provider_environment)
         return AgentDoctorResult(
             profile.name,
             profile.provider,

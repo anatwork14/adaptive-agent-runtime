@@ -25,7 +25,22 @@
     "provider_execution_timeout_seconds": 600,
     "codex_home": "/Users/teobun/arc-secure/codex-v4-home",
     "codex_config_path": "/Users/teobun/arc-secure/codex-v4-home/config.toml",
-    "codex_config_sha256": "1981d54e8058aa36da3bb6a2b5e7babfd3784f3904d5dd320074426d193172d5",
+    "codex_config_sha256": "f94270078be62298be8a9ed92fb13fcb0a5480521943493df59108e5370bce10",
+    "trusted_workspaces": [
+      "/Users/teobun/arc-study/runtime/context-policy-multirepo-v4/qualification/workspace-a",
+      "/Users/teobun/arc-study/runtime/context-policy-multirepo-v4/qualification/workspace-b",
+      "/Users/teobun/arc-study/runtime/context-policy-multirepo-v4/a001/click",
+      "/Users/teobun/arc-study/runtime/context-policy-multirepo-v4/a001/httpx",
+      "/Users/teobun/arc-study/runtime/context-policy-multirepo-v4/a001/python-dotenv"
+    ],
+    "invocation_home_strategy": {
+      "mode": "ephemeral_snapshot",
+      "source_files": ["config.toml", "auth.json"],
+      "mutable_state": "provider-local state in a temporary invocation directory",
+      "cleanup": "discarded in a finally block after every provider turn",
+      "canonical_config_preserved": true,
+      "credentials_persisted_by_arc": false
+    },
     "output_mode": "documented_jsonl",
     "version_policy": "diagnose and explicitly freeze before V4 execution; no upgrade during campaign",
     "environment_allowlist": {
