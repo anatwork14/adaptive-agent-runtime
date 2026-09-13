@@ -195,6 +195,14 @@ def register_study_commands(benchmark_app: typer.Typer) -> None:
             None,
             help="External hidden-test tree; must match the preregistered digest",
         ),
+        qualification_only: bool = typer.Option(
+            False,
+            "--qualification-only",
+            help=(
+                "Validate the frozen run-plan environment and stop before creating a runner "
+                "or invoking a provider."
+            ),
+        ),
     ) -> None:
         """Execute exactly the frozen preregistered repeated-study contract."""
         try:
@@ -231,6 +239,16 @@ def register_study_commands(benchmark_app: typer.Typer) -> None:
                 provider_codex_config_path=profile.codex_config_path,
                 provider_codex_config_sha256=_provider_codex_config_sha256(profile),
             )
+
+            if qualification_only:
+                console.print("run_plan_provider_environment_handoff=VERIFIED")
+                console.print(f"provider_codex_home={profile.codex_home}")
+                console.print(f"provider_codex_config_path={profile.codex_config_path}")
+                console.print(
+                    f"provider_codex_config_sha256={_provider_codex_config_sha256(profile)}"
+                )
+                console.print("provider_execution_started=false")
+                return
 
             runner = RepeatedPairedBenchmarkRunner(
                 repo,

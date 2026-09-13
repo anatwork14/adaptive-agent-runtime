@@ -125,9 +125,7 @@ def test_preregister_run_plan_and_export_mock_study(tmp_path) -> None:
     assert (export_root / "tasks.csv").is_file()
     assert (export_root / "repetitions.csv").is_file()
     assert (export_root / "pairs.csv").is_file()
-    export_manifest = json.loads(
-        (export_root / "export_manifest.json").read_text(encoding="utf-8")
-    )
+    export_manifest = json.loads((export_root / "export_manifest.json").read_text(encoding="utf-8"))
     assert export_manifest["plan_digest"] == provenance["extra"]["plan_digest"]
     assert export_manifest["row_counts"]["tasks"] == 6
 
@@ -233,9 +231,11 @@ def test_run_plan_passes_frozen_codex_identity_to_environment_validation(tmp_pat
 
     monkeypatch.setattr(study_commands, "validate_execution_environment", fake_validate)
     monkeypatch.setattr(study_commands, "_print_result", lambda _result: None)
+    runner_calls = []
 
     class FakeRunner:
         def __init__(self, *_args, **_kwargs):
+            runner_calls.append(True)
             pass
 
         async def run(self, *_args, **_kwargs):
@@ -260,3 +260,23 @@ def test_run_plan_passes_frozen_codex_identity_to_environment_validation(tmp_pat
     assert captured["provider_codex_home"] == str(home)
     assert captured["provider_codex_config_path"] == str(config_path)
     assert captured["provider_codex_config_sha256"] == config_sha
+
+    runner_calls.clear()
+    qualification = runner.invoke(
+        app,
+        [
+            "benchmark",
+            "run-plan",
+            str(plan_path),
+            "--repo",
+            str(repo),
+            "--attempt-id",
+            "qualification",
+            "--hidden-test-dir",
+            str(hidden),
+            "--qualification-only",
+        ],
+    )
+    assert qualification.exit_code == 0, qualification.output
+    assert runner_calls == []
+    assert "run_plan_provider_environment_handoff=VERIFIED" in qualification.output

@@ -1,0 +1,424 @@
+{
+  "all_checks_passed": true,
+  "apparatus_change_only": true,
+  "apparatus_changes": [
+    {
+      "change": "propagate frozen Codex provider environment into execution validation",
+      "component": "cli/study_commands.py",
+      "reason": "fix V4 run-plan bootstrap failure"
+    }
+  ],
+  "budget_changed": false,
+  "campaign": "context-policy-multirepo-v5",
+  "exclusion_policy_changed": false,
+  "grading_changed": false,
+  "model_changed": false,
+  "nine_manifest_comparisons": [
+    {
+      "baseline": "B3",
+      "equal": true,
+      "repository": "click",
+      "unexpected_differences": [],
+      "v4_normalized_sha256": "89cf1e6a3abce56fadddb7d98c82beec530e33dda3a28c93001110346feba025",
+      "v4_path": "/Users/teobun/src/adaptive-agent-runtime/eval/campaigns/context-policy-multirepo-v4/click/b3.yaml",
+      "v5_normalized_sha256": "89cf1e6a3abce56fadddb7d98c82beec530e33dda3a28c93001110346feba025",
+      "v5_path": "/Users/teobun/src/adaptive-agent-runtime/eval/campaigns/context-policy-multirepo-v5/click/b3.yaml"
+    },
+    {
+      "baseline": "B5",
+      "equal": true,
+      "repository": "click",
+      "unexpected_differences": [],
+      "v4_normalized_sha256": "c342640208f30be5c24810a2e2dd2aee9cfef61c75d1b08e4192f52f4e3670b6",
+      "v4_path": "/Users/teobun/src/adaptive-agent-runtime/eval/campaigns/context-policy-multirepo-v4/click/b5.yaml",
+      "v5_normalized_sha256": "c342640208f30be5c24810a2e2dd2aee9cfef61c75d1b08e4192f52f4e3670b6",
+      "v5_path": "/Users/teobun/src/adaptive-agent-runtime/eval/campaigns/context-policy-multirepo-v5/click/b5.yaml"
+    },
+    {
+      "baseline": "B7",
+      "equal": true,
+      "repository": "click",
+      "unexpected_differences": [],
+      "v4_normalized_sha256": "8beb2ffa77ab4145715817e7e622b94b3044f6f3d866c6a4c1cc1881bdc7692f",
+      "v4_path": "/Users/teobun/src/adaptive-agent-runtime/eval/campaigns/context-policy-multirepo-v4/click/b7.yaml",
+      "v5_normalized_sha256": "8beb2ffa77ab4145715817e7e622b94b3044f6f3d866c6a4c1cc1881bdc7692f",
+      "v5_path": "/Users/teobun/src/adaptive-agent-runtime/eval/campaigns/context-policy-multirepo-v5/click/b7.yaml"
+    },
+    {
+      "baseline": "B3",
+      "equal": true,
+      "repository": "httpx",
+      "unexpected_differences": [],
+      "v4_normalized_sha256": "fff724b504c47265a4fe4224b6d5a3cb0425f906a6f523bbc057dad42472fba0",
+      "v4_path": "/Users/teobun/src/adaptive-agent-runtime/eval/campaigns/context-policy-multirepo-v4/httpx/b3.yaml",
+      "v5_normalized_sha256": "fff724b504c47265a4fe4224b6d5a3cb0425f906a6f523bbc057dad42472fba0",
+      "v5_path": "/Users/teobun/src/adaptive-agent-runtime/eval/campaigns/context-policy-multirepo-v5/httpx/b3.yaml"
+    },
+    {
+      "baseline": "B5",
+      "equal": true,
+      "repository": "httpx",
+      "unexpected_differences": [],
+      "v4_normalized_sha256": "48ef4c630af1367fd0dcbd7f815984992fb5b9e45c82738a789cca65c0e54519",
+      "v4_path": "/Users/teobun/src/adaptive-agent-runtime/eval/campaigns/context-policy-multirepo-v4/httpx/b5.yaml",
+      "v5_normalized_sha256": "48ef4c630af1367fd0dcbd7f815984992fb5b9e45c82738a789cca65c0e54519",
+      "v5_path": "/Users/teobun/src/adaptive-agent-runtime/eval/campaigns/context-policy-multirepo-v5/httpx/b5.yaml"
+    },
+    {
+      "baseline": "B7",
+      "equal": true,
+      "repository": "httpx",
+      "unexpected_differences": [],
+      "v4_normalized_sha256": "28d55326710c2ae77353cbc65d98ac30d0d495fbb83709b87c868c3a98319172",
+      "v4_path": "/Users/teobun/src/adaptive-agent-runtime/eval/campaigns/context-policy-multirepo-v4/httpx/b7.yaml",
+      "v5_normalized_sha256": "28d55326710c2ae77353cbc65d98ac30d0d495fbb83709b87c868c3a98319172",
+      "v5_path": "/Users/teobun/src/adaptive-agent-runtime/eval/campaigns/context-policy-multirepo-v5/httpx/b7.yaml"
+    },
+    {
+      "baseline": "B3",
+      "equal": true,
+      "repository": "python-dotenv",
+      "unexpected_differences": [],
+      "v4_normalized_sha256": "0ae4a38268f87e27b1ee17caaeebf95578254b413ce1e96069b4be429920b11e",
+      "v4_path": "/Users/teobun/src/adaptive-agent-runtime/eval/campaigns/context-policy-multirepo-v4/python-dotenv/b3.yaml",
+      "v5_normalized_sha256": "0ae4a38268f87e27b1ee17caaeebf95578254b413ce1e96069b4be429920b11e",
+      "v5_path": "/Users/teobun/src/adaptive-agent-runtime/eval/campaigns/context-policy-multirepo-v5/python-dotenv/b3.yaml"
+    },
+    {
+      "baseline": "B5",
+      "equal": true,
+      "repository": "python-dotenv",
+      "unexpected_differences": [],
+      "v4_normalized_sha256": "e3f1f70324d2dfba3c175b91b3fd09c6b907e5f8e460877c7176df0daad98100",
+      "v4_path": "/Users/teobun/src/adaptive-agent-runtime/eval/campaigns/context-policy-multirepo-v4/python-dotenv/b5.yaml",
+      "v5_normalized_sha256": "e3f1f70324d2dfba3c175b91b3fd09c6b907e5f8e460877c7176df0daad98100",
+      "v5_path": "/Users/teobun/src/adaptive-agent-runtime/eval/campaigns/context-policy-multirepo-v5/python-dotenv/b5.yaml"
+    },
+    {
+      "baseline": "B7",
+      "equal": true,
+      "repository": "python-dotenv",
+      "unexpected_differences": [],
+      "v4_normalized_sha256": "7dcab91a0b079584e6e27b358b9a0a137e96020115076e5f707971cd8ced526c",
+      "v4_path": "/Users/teobun/src/adaptive-agent-runtime/eval/campaigns/context-policy-multirepo-v4/python-dotenv/b7.yaml",
+      "v5_normalized_sha256": "7dcab91a0b079584e6e27b358b9a0a137e96020115076e5f707971cd8ced526c",
+      "v5_path": "/Users/teobun/src/adaptive-agent-runtime/eval/campaigns/context-policy-multirepo-v5/python-dotenv/b7.yaml"
+    }
+  ],
+  "nine_manifest_comparisons_pass": true,
+  "normalized_contracts_equal": true,
+  "normalized_v4_sha256": "aa34b5ef6e3a95e0c358d8c7556e6f3c33ebf8d4e5a8fbc6b053e8383a5e051f",
+  "normalized_v5_sha256": "aa34b5ef6e3a95e0c358d8c7556e6f3c33ebf8d4e5a8fbc6b053e8383a5e051f",
+  "parent_campaign": "context-policy-multirepo-v4",
+  "provider_timeout_changed": false,
+  "repository_changed": false,
+  "schema_version": "arc-v4-v5-scientific-equivalence-v1",
+  "scientific_change": false,
+  "scientific_core_preserved": true,
+  "statistics_changed": false,
+  "task_definition_changed": false,
+  "treatment_definition_changed": false,
+  "treatment_equality": {
+    "click": {
+      "differences": [],
+      "fields_checked": [
+        "provider_execution_timeout_seconds",
+        "codex_home",
+        "codex_config_path",
+        "codex_config_sha256",
+        "model",
+        "reasoning",
+        "visible_test_harness"
+      ],
+      "treatment_neutral": true,
+      "v4": {
+        "codex_config_path": "/Users/teobun/arc-secure/codex-v4-home/config.toml",
+        "codex_config_sha256": "f94270078be62298be8a9ed92fb13fcb0a5480521943493df59108e5370bce10",
+        "codex_home": "/Users/teobun/arc-secure/codex-v4-home",
+        "model": "gpt-5.5",
+        "provider_execution_timeout_seconds": 600,
+        "reasoning": [
+          "--config",
+          "model_reasoning_effort=\"high\""
+        ],
+        "visible_test_harness": {
+          "backend": "docker",
+          "command": [
+            "python",
+            "-m",
+            "pytest",
+            "-q"
+          ],
+          "environment": {
+            "PYTHONPATH": "/workspace/src"
+          },
+          "hidden_command": [
+            "python",
+            "-m",
+            "pytest",
+            "-q",
+            "-p",
+            "no:cacheprovider",
+            "/arc-hidden-tests"
+          ],
+          "hidden_environment": {
+            "PYTHONPATH": "/workspace/src"
+          },
+          "image": "arc-v2-click:qualified",
+          "image_digest": "sha256:7fae74105025e759c4244de903b1385271df9ac4f8e4bfb3d1589094d2ec92a4",
+          "network_enabled": false,
+          "python_toolchain": "CPython 3.10.7; uv-locked dev/tests environment",
+          "qualification_id": "click-docker-python310-uv-locked-v2",
+          "timeout_seconds": 180,
+          "tmpfs_exec": true
+        }
+      },
+      "v5": {
+        "codex_config_path": "/Users/teobun/arc-secure/codex-v4-home/config.toml",
+        "codex_config_sha256": "f94270078be62298be8a9ed92fb13fcb0a5480521943493df59108e5370bce10",
+        "codex_home": "/Users/teobun/arc-secure/codex-v4-home",
+        "model": "gpt-5.5",
+        "provider_execution_timeout_seconds": 600,
+        "reasoning": [
+          "--config",
+          "model_reasoning_effort=\"high\""
+        ],
+        "visible_test_harness": {
+          "backend": "docker",
+          "command": [
+            "python",
+            "-m",
+            "pytest",
+            "-q"
+          ],
+          "environment": {
+            "PYTHONPATH": "/workspace/src"
+          },
+          "hidden_command": [
+            "python",
+            "-m",
+            "pytest",
+            "-q",
+            "-p",
+            "no:cacheprovider",
+            "/arc-hidden-tests"
+          ],
+          "hidden_environment": {
+            "PYTHONPATH": "/workspace/src"
+          },
+          "image": "arc-v2-click:qualified",
+          "image_digest": "sha256:7fae74105025e759c4244de903b1385271df9ac4f8e4bfb3d1589094d2ec92a4",
+          "network_enabled": false,
+          "python_toolchain": "CPython 3.10.7; uv-locked dev/tests environment",
+          "qualification_id": "click-docker-python310-uv-locked-v2",
+          "timeout_seconds": 180,
+          "tmpfs_exec": true
+        }
+      }
+    },
+    "httpx": {
+      "differences": [],
+      "fields_checked": [
+        "provider_execution_timeout_seconds",
+        "codex_home",
+        "codex_config_path",
+        "codex_config_sha256",
+        "model",
+        "reasoning",
+        "visible_test_harness"
+      ],
+      "treatment_neutral": true,
+      "v4": {
+        "codex_config_path": "/Users/teobun/arc-secure/codex-v4-home/config.toml",
+        "codex_config_sha256": "f94270078be62298be8a9ed92fb13fcb0a5480521943493df59108e5370bce10",
+        "codex_home": "/Users/teobun/arc-secure/codex-v4-home",
+        "model": "gpt-5.5",
+        "provider_execution_timeout_seconds": 600,
+        "reasoning": [
+          "--config",
+          "model_reasoning_effort=\"high\""
+        ],
+        "visible_test_harness": {
+          "backend": "docker",
+          "command": [
+            "python",
+            "-m",
+            "pytest",
+            "-q",
+            "-W",
+            "ignore::ResourceWarning",
+            "-m",
+            "not network"
+          ],
+          "environment": {
+            "PYTHONPATH": "/workspace"
+          },
+          "hidden_command": [
+            "python",
+            "-m",
+            "pytest",
+            "-q",
+            "-p",
+            "no:cacheprovider",
+            "/arc-hidden-tests"
+          ],
+          "hidden_environment": {
+            "PYTHONPATH": "/workspace"
+          },
+          "image": "arc-v2-httpx:qualified",
+          "image_digest": "sha256:1f8b4320b6d1b4ab22121442732f3f684e1fe77162de563beb841b0dc340d8cf",
+          "network_enabled": false,
+          "python_toolchain": "CPython 3.11.16; requirements.txt editable environment",
+          "qualification_id": "httpx-docker-python311-requirements-resourcewarning-filter-v2",
+          "timeout_seconds": 180,
+          "tmpfs_exec": false
+        }
+      },
+      "v5": {
+        "codex_config_path": "/Users/teobun/arc-secure/codex-v4-home/config.toml",
+        "codex_config_sha256": "f94270078be62298be8a9ed92fb13fcb0a5480521943493df59108e5370bce10",
+        "codex_home": "/Users/teobun/arc-secure/codex-v4-home",
+        "model": "gpt-5.5",
+        "provider_execution_timeout_seconds": 600,
+        "reasoning": [
+          "--config",
+          "model_reasoning_effort=\"high\""
+        ],
+        "visible_test_harness": {
+          "backend": "docker",
+          "command": [
+            "python",
+            "-m",
+            "pytest",
+            "-q",
+            "-W",
+            "ignore::ResourceWarning",
+            "-m",
+            "not network"
+          ],
+          "environment": {
+            "PYTHONPATH": "/workspace"
+          },
+          "hidden_command": [
+            "python",
+            "-m",
+            "pytest",
+            "-q",
+            "-p",
+            "no:cacheprovider",
+            "/arc-hidden-tests"
+          ],
+          "hidden_environment": {
+            "PYTHONPATH": "/workspace"
+          },
+          "image": "arc-v2-httpx:qualified",
+          "image_digest": "sha256:1f8b4320b6d1b4ab22121442732f3f684e1fe77162de563beb841b0dc340d8cf",
+          "network_enabled": false,
+          "python_toolchain": "CPython 3.11.16; requirements.txt editable environment",
+          "qualification_id": "httpx-docker-python311-requirements-resourcewarning-filter-v2",
+          "timeout_seconds": 180,
+          "tmpfs_exec": false
+        }
+      }
+    },
+    "python-dotenv": {
+      "differences": [],
+      "fields_checked": [
+        "provider_execution_timeout_seconds",
+        "codex_home",
+        "codex_config_path",
+        "codex_config_sha256",
+        "model",
+        "reasoning",
+        "visible_test_harness"
+      ],
+      "treatment_neutral": true,
+      "v4": {
+        "codex_config_path": "/Users/teobun/arc-secure/codex-v4-home/config.toml",
+        "codex_config_sha256": "f94270078be62298be8a9ed92fb13fcb0a5480521943493df59108e5370bce10",
+        "codex_home": "/Users/teobun/arc-secure/codex-v4-home",
+        "model": "gpt-5.5",
+        "provider_execution_timeout_seconds": 600,
+        "reasoning": [
+          "--config",
+          "model_reasoning_effort=\"high\""
+        ],
+        "visible_test_harness": {
+          "backend": "docker",
+          "command": [
+            "python",
+            "-m",
+            "pytest",
+            "-q"
+          ],
+          "environment": {
+            "PYTHONPATH": "/workspace/src"
+          },
+          "hidden_command": [
+            "python",
+            "-m",
+            "pytest",
+            "-q",
+            "-p",
+            "no:cacheprovider",
+            "/arc-hidden-tests"
+          ],
+          "hidden_environment": {
+            "PYTHONPATH": "/workspace/src"
+          },
+          "image": "arc-v2-python-dotenv:qualified",
+          "image_digest": "sha256:d7e1c1d915ad92a48fe0d915b9f951bd70af3bab5737d03f83d31281d84dc32b",
+          "network_enabled": false,
+          "python_toolchain": "CPython 3.10.7; requirements.txt editable environment",
+          "qualification_id": "python-dotenv-docker-python310-requirements-v2",
+          "timeout_seconds": 180,
+          "tmpfs_exec": true
+        }
+      },
+      "v5": {
+        "codex_config_path": "/Users/teobun/arc-secure/codex-v4-home/config.toml",
+        "codex_config_sha256": "f94270078be62298be8a9ed92fb13fcb0a5480521943493df59108e5370bce10",
+        "codex_home": "/Users/teobun/arc-secure/codex-v4-home",
+        "model": "gpt-5.5",
+        "provider_execution_timeout_seconds": 600,
+        "reasoning": [
+          "--config",
+          "model_reasoning_effort=\"high\""
+        ],
+        "visible_test_harness": {
+          "backend": "docker",
+          "command": [
+            "python",
+            "-m",
+            "pytest",
+            "-q"
+          ],
+          "environment": {
+            "PYTHONPATH": "/workspace/src"
+          },
+          "hidden_command": [
+            "python",
+            "-m",
+            "pytest",
+            "-q",
+            "-p",
+            "no:cacheprovider",
+            "/arc-hidden-tests"
+          ],
+          "hidden_environment": {
+            "PYTHONPATH": "/workspace/src"
+          },
+          "image": "arc-v2-python-dotenv:qualified",
+          "image_digest": "sha256:d7e1c1d915ad92a48fe0d915b9f951bd70af3bab5737d03f83d31281d84dc32b",
+          "network_enabled": false,
+          "python_toolchain": "CPython 3.10.7; requirements.txt editable environment",
+          "qualification_id": "python-dotenv-docker-python310-requirements-v2",
+          "timeout_seconds": 180,
+          "tmpfs_exec": true
+        }
+      }
+    }
+  },
+  "treatment_equality_pass": true,
+  "unexpected_contract_differences": []
+}

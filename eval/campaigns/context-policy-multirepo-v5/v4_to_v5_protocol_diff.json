@@ -1,0 +1,43 @@
+{
+  "schema": "arc-v4-to-v5-apparatus-diff-v1",
+  "parent_campaign": "context-policy-multirepo-v4",
+  "campaign": "context-policy-multirepo-v5",
+  "scientific_core_preserved": true,
+  "scientific_change": false,
+  "apparatus_change_only": true,
+  "changes": [
+    {
+      "path": "cli/study_commands.py",
+      "change": "propagate frozen Codex provider environment into nested run-plan validation",
+      "reason": "fix the V4 run-plan bootstrap failure without changing the scientific contract"
+    },
+    {
+      "path": "eval/campaigns/context-policy-multirepo-v5/run_plan_handoff_qualification.py",
+      "change": "add provider-free nested-path qualification",
+      "reason": "prove the repaired handoff through the same CLI subprocess path used by V5/a001"
+    }
+  ],
+  "preserved": [
+    "repository commits",
+    "task sequence T001 -> T002 -> T003",
+    "hidden-test digests",
+    "B3/B5/B7 treatment definitions",
+    "repeats and bootstrap settings",
+    "budgets",
+    "provider, model, and reasoning effort",
+    "Docker image identities and 180-second test harnesses",
+    "provider execution timeout of 600 seconds",
+    "verification contract",
+    "exclusions"
+  ],
+  "forbidden_changes": [
+    "per-treatment timeout",
+    "per-task timeout override",
+    "per-repetition timeout override",
+    "dynamic timeout extension",
+    "automatic retry",
+    "hidden-test exposure",
+    "V5 canonical freeze during apparatus review",
+    "V5/a001 execution"
+  ]
+}
