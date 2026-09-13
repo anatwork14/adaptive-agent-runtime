@@ -86,6 +86,16 @@ def _validate_timeout_contract(contract: dict[str, Any]) -> int:
     }
     if harness_timeouts != {180}:
         raise SystemExit("V4 Docker harness timeout must remain 180 seconds")
+    provider_runtime = contract["provider_runtime"]
+    if provider_runtime.get("codex_home") != "/Users/teobun/arc-secure/codex-v4-home":
+        raise SystemExit("V4 Codex home must be the dedicated frozen path")
+    if provider_runtime.get("codex_config_path") != (
+        "/Users/teobun/arc-secure/codex-v4-home/config.toml"
+    ):
+        raise SystemExit("V4 Codex config must be the dedicated frozen config.toml")
+    config_digest = provider_runtime.get("codex_config_sha256")
+    if not isinstance(config_digest, str) or len(config_digest) != 64:
+        raise SystemExit("V4 Codex config SHA-256 must be a 64-character hex digest")
     return timeout
 
 
@@ -112,6 +122,8 @@ def _profile(contract: dict[str, Any]) -> AgentProfile:
         capabilities=list(payload["capabilities"]),
         env_allow=list(payload["env_allow"]),
         command_override=payload["command_override"],
+        codex_home=contract["provider_runtime"]["codex_home"],
+        codex_config_path=contract["provider_runtime"]["codex_config_path"],
         max_concurrency=1,
     )
 
@@ -230,6 +242,9 @@ def freeze_campaign(
                 ci=float(protocol["ci"]),
                 exclusions=list(protocol["exclusions"]),
                 provider_execution_timeout_seconds=timeout_seconds,
+                provider_codex_home=profile.codex_home,
+                provider_codex_config_path=profile.codex_config_path,
+                provider_codex_config_sha256=contract["provider_runtime"]["codex_config_sha256"],
             )
             plan_path = tmp / f"{slug}-context-policy-v4.json"
             save_preregistration(plan_path, plan)

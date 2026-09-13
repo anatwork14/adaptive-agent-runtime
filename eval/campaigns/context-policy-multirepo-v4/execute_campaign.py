@@ -173,6 +173,9 @@ def _load_freeze_bundle(
         "provider_execution_timeout_seconds": int(
             contract["shared_protocol"]["provider_execution_timeout_seconds"]
         ),
+        "codex_home": contract["provider_runtime"]["codex_home"],
+        "codex_config_path": contract["provider_runtime"]["codex_config_path"],
+        "codex_config_sha256": contract["provider_runtime"]["codex_config_sha256"],
     }
     runtime_mismatches = [
         key for key, expected in runtime_expectations.items() if runtime_lock.get(key) != expected
@@ -308,6 +311,9 @@ def _validate_live_repository(
         hidden_test_dir=hidden_dir,
         verification_level=plan.runtime.verification_level,
         provider_execution_timeout_seconds=timeout_seconds,
+        provider_codex_home=profile.codex_home,
+        provider_codex_config_path=profile.codex_config_path,
+        provider_codex_config_sha256=_sha256_file(Path(profile.codex_config_path)) if profile.codex_config_path else None,
     )
     harness = config.visible_test_harness
     if not harness:
@@ -427,7 +433,8 @@ def preflight_campaign(
         }
 
     provider = contract["provider_profile"]["provider"]
-    auth = auth_status(provider)
+    auth_environment = {"CODEX_HOME": contract["provider_runtime"]["codex_home"]}
+    auth = auth_status(provider, environment=auth_environment)
     sandbox_ready = all(
         repository.get("sandbox", {}).get("ready") is True
         for repository in repository_report.values()
@@ -451,6 +458,9 @@ def preflight_campaign(
         "provider_cli_version": runtime_lock["provider_cli_version"],
         "meta_plan_digest": meta.plan_digest,
         "provider_execution_timeout_seconds": expected_timeout,
+        "codex_home": contract["provider_runtime"]["codex_home"],
+        "codex_config_path": contract["provider_runtime"]["codex_config_path"],
+        "codex_config_sha256": contract["provider_runtime"]["codex_config_sha256"],
         "provider_auth": {
             "provider": auth.provider,
             "installed": auth.installed,

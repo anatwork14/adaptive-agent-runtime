@@ -62,6 +62,9 @@ class StudyRuntimeContract(BaseModel):
     visible_test_harness: ExecutionHarness | None = None
     hard_project_usd: float = Field(ge=0.0)
     provider_execution_timeout_seconds: int | None = Field(default=None, ge=1)
+    provider_codex_home: str | None = None
+    provider_codex_config_path: str | None = None
+    provider_codex_config_sha256: str | None = None
     verification_level: str = "V0"
     hidden_tests_required: bool = False
     hidden_tests_digest: str | None = None
@@ -127,10 +130,17 @@ def compute_plan_digest(plan: PreregisteredStudy | dict[str, Any]) -> str:
     else:
         payload = dict(plan)
     runtime = payload.get("runtime")
-    if isinstance(runtime, dict) and runtime.get("provider_execution_timeout_seconds") is None:
-        # Preserve the digest of pre-timeout contracts that predate this
-        # optional field while binding the value whenever a campaign freezes it.
-        runtime.pop("provider_execution_timeout_seconds", None)
+    if isinstance(runtime, dict):
+        # Preserve the digest of contracts that predate these optional fields
+        # while binding each value whenever a campaign freezes it.
+        for key in (
+            "provider_execution_timeout_seconds",
+            "provider_codex_home",
+            "provider_codex_config_path",
+            "provider_codex_config_sha256",
+        ):
+            if runtime.get(key) is None:
+                runtime.pop(key, None)
     payload["plan_digest"] = ""
     return hashlib.sha256(_canonical_json(payload)).hexdigest()
 
@@ -185,6 +195,9 @@ def create_preregistration(
     ci: float = 0.95,
     exclusions: Sequence[str] = (),
     created_at_utc: str | None = None,
+    provider_codex_home: str | None = None,
+    provider_codex_config_path: str | None = None,
+    provider_codex_config_sha256: str | None = None,
 ) -> PreregisteredStudy:
     manifest_list = [manifest.model_copy(deep=True) for manifest in manifests]
     if len(manifest_list) < 2:
@@ -236,6 +249,9 @@ def create_preregistration(
             ),
             hard_project_usd=float(hard_project_usd),
             provider_execution_timeout_seconds=provider_execution_timeout_seconds,
+            provider_codex_home=provider_codex_home,
+            provider_codex_config_path=provider_codex_config_path,
+            provider_codex_config_sha256=provider_codex_config_sha256,
             verification_level=verification_level,
             hidden_tests_required=hidden_digest is not None,
             hidden_tests_digest=hidden_digest,
@@ -283,6 +299,9 @@ def validate_execution_environment(
     hidden_test_dir: str | Path | None,
     verification_level: str = "V0",
     provider_execution_timeout_seconds: int | None = None,
+    provider_codex_home: str | None = None,
+    provider_codex_config_path: str | None = None,
+    provider_codex_config_sha256: str | None = None,
 ) -> None:
     """Fail closed when the live execution contract differs from preregistration."""
     if plan.plan_digest != compute_plan_digest(plan):
@@ -311,6 +330,9 @@ def validate_execution_environment(
         ),
         "hard_project_usd": float(hard_project_usd),
         "provider_execution_timeout_seconds": provider_execution_timeout_seconds,
+        "provider_codex_home": provider_codex_home,
+        "provider_codex_config_path": provider_codex_config_path,
+        "provider_codex_config_sha256": provider_codex_config_sha256,
         "verification_level": verification_level,
         "hidden_tests_required": live_hidden is not None,
         "hidden_tests_digest": live_hidden,
@@ -322,6 +344,13 @@ def validate_execution_environment(
         # digest and runtime contract remain valid; V4 plans set this field and
         # therefore require an exact live value.
         expected.pop("provider_execution_timeout_seconds", None)
+    for key in (
+        "provider_codex_home",
+        "provider_codex_config_path",
+        "provider_codex_config_sha256",
+    ):
+        if getattr(plan.runtime, key) is None:
+            expected.pop(key, None)
     mismatches = [key for key in sorted(expected) if expected[key] != actual.get(key)]
     if mismatches:
         details = ", ".join(

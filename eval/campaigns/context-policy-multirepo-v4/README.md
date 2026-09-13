@@ -13,6 +13,13 @@ Every timeout source and its scientific scope is enumerated in
 `V4_TIMEOUT_AUDIT.md`. The machine-readable V3-to-V4 protocol diff records the
 single intended timeout change.
 
+V4 also hermetically binds the Codex provider to the dedicated home
+`/Users/teobun/arc-secure/codex-v4-home` and its non-secret `config.toml`
+digest. Authentication, version checks, provider qualification, terminal
+launches, and real provider subprocesses inject this home explicitly; ambient
+`CODEX_HOME` is not trusted. Authentication state and credential files remain
+outside the review bundle.
+
 Before any canonical freeze, the apparatus qualification must pass the ARC
 suite, hostile Git configuration and identity-environment regressions, the
 provider-free synthetic workflow, and passive/active non-benchmark provider

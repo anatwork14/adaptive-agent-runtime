@@ -31,6 +31,14 @@ def test_v4_contract_changes_only_the_provider_execution_timeout() -> None:
     assert contract["treatment_neutral"] is True
     assert contract["shared_protocol"]["provider_execution_timeout_seconds"] == 600
     assert contract["provider_runtime"]["provider_execution_timeout_seconds"] == 600
+    assert contract["provider_runtime"]["codex_home"] == "/Users/teobun/arc-secure/codex-v4-home"
+    assert contract["provider_runtime"]["codex_config_path"] == (
+        "/Users/teobun/arc-secure/codex-v4-home/config.toml"
+    )
+    assert contract["provider_runtime"]["codex_config_sha256"] == (
+        "1981d54e8058aa36da3bb6a2b5e7babfd3784f3904d5dd320074426d193172d5"
+    )
+    assert "CODEX_HOME" in contract["provider_runtime"]["environment_allowlist"]["observed_keys"]
     assert {
         repository["visible_test_harness"]["timeout_seconds"]
         for repository in contract["repositories"].values()
@@ -48,6 +56,22 @@ def test_v4_applies_one_provider_timeout_to_every_treatment_and_no_retry() -> No
         "dynamic_extension": False,
         "retry_on_timeout": False,
     }
+
+
+def test_v4_protocol_diff_separates_timeout_from_codex_home_apparatus_change() -> None:
+    diff = json.loads((CAMPAIGN_DIR / "v3_to_v4_protocol_diff.json").read_text(encoding="utf-8"))
+    assert diff["scientific_core_preserved"] is True
+    assert diff["treatment_neutral"] is True
+    assert diff["apparatus_changes"] == [
+        {
+            "field": "provider_runtime.codex_home",
+            "reason": "isolate the frozen provider CLI from mutable user-level Codex/router configuration",
+        },
+        {
+            "field": "provider_runtime.codex_config_sha256",
+            "reason": "cryptographically bind non-secret provider configuration",
+        },
+    ]
 
 
 def test_freeze_timeout_guard_rejects_drift_before_any_freeze_output() -> None:

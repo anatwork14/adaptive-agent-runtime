@@ -24,6 +24,16 @@
       "reason": "record the operational provider timeout beside the frozen CLI identity"
     }
   ],
+  "apparatus_changes": [
+    {
+      "field": "provider_runtime.codex_home",
+      "reason": "isolate the frozen provider CLI from mutable user-level Codex/router configuration"
+    },
+    {
+      "field": "provider_runtime.codex_config_sha256",
+      "reason": "cryptographically bind non-secret provider configuration"
+    }
+  ],
   "preserved": [
     "repository commits",
     "task sequence T001 -> T002 -> T003",

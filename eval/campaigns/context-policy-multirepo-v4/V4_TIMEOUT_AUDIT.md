@@ -20,6 +20,13 @@ retry on timeout.
 | Provider CLI version probe | `eval/.../runtime_lock.py` | Command-specific version check; frozen CLI `codex-cli 0.133.0-alpha.1` | Freeze/preflight only | Not benchmark inference |
 | Provider active smoke | `application/provider_doctor.py`, `run_provider_probe` | V4 qualification invokes it with explicit `600`; it remains a disposable non-benchmark probe | Non-benchmark qualification only | Scientific evidence is false; it cannot create a benchmark measurement |
 
+The provider runtime is additionally bound to the dedicated Codex home
+`/Users/teobun/arc-secure/codex-v4-home` and the SHA-256 of its non-secret
+`config.toml`. ARC injects `CODEX_HOME` explicitly for authentication,
+qualification, terminals, version probes, and provider subprocesses, so a
+broken ambient home cannot silently change the frozen runtime. Credential
+state is not copied into freeze or review artifacts.
+
 ## Diagnostic contract
 
 Every provider timeout must preserve:

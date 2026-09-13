@@ -290,6 +290,9 @@ def attach_native_terminal(
             environment = build_execution_environment(
                 provider=profile.provider if profile else session.provider,
                 extra_names=profile.env_allow if profile else [],
+                overrides=(
+                    {"CODEX_HOME": profile.codex_home} if profile and profile.codex_home else None
+                ),
             )
             arc.sessions.mark_terminal(session_id, live=True)
             console.print(

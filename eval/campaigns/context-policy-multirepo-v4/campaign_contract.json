@@ -23,12 +23,15 @@
     "cli": "codex",
     "version": "codex-cli 0.133.0-alpha.1",
     "provider_execution_timeout_seconds": 600,
+    "codex_home": "/Users/teobun/arc-secure/codex-v4-home",
+    "codex_config_path": "/Users/teobun/arc-secure/codex-v4-home/config.toml",
+    "codex_config_sha256": "1981d54e8058aa36da3bb6a2b5e7babfd3784f3904d5dd320074426d193172d5",
     "output_mode": "documented_jsonl",
     "version_policy": "diagnose and explicitly freeze before V4 execution; no upgrade during campaign",
     "environment_allowlist": {
       "profile_extra_keys": [],
       "observed_keys": [
-        "COLORTERM", "HOME", "LANG", "LC_ALL", "LC_CTYPE", "LOGNAME",
+        "CODEX_HOME", "COLORTERM", "HOME", "LANG", "LC_ALL", "LC_CTYPE", "LOGNAME",
         "PATH", "SHELL", "TERM", "TMPDIR", "USER"
       ],
       "provider_permitted_keys": [

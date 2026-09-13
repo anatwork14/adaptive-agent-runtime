@@ -32,6 +32,10 @@ class AgentProfile(BaseModel):
     role: str = "implementation"
     enabled: bool = True
     command_override: Optional[str] = None
+    # Non-secret provider-home identity. Authentication material remains owned
+    # by the vendor CLI and is never serialized by ARC.
+    codex_home: Optional[str] = None
+    codex_config_path: Optional[str] = None
     # Names only. Values are read from the live host environment when a worker
     # starts and are never serialized into ARC configuration/events.
     env_allow: List[str] = Field(default_factory=list)

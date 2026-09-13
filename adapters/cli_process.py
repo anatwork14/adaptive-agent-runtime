@@ -8,7 +8,7 @@ import os
 import shlex
 import shutil
 import signal
-from collections.abc import Awaitable, Callable, Iterable
+from collections.abc import Awaitable, Callable, Iterable, Mapping
 from pathlib import Path
 from typing import List, Optional
 
@@ -154,6 +154,7 @@ class SubprocessCodingAgent:
         provider: str | None = None,
         command_override: str | None = None,
         env_allow: Optional[Iterable[str]] = None,
+        environment_overrides: Mapping[str, str] | None = None,
     ) -> None:
         self.name = name
         self.executable = executable
@@ -162,6 +163,7 @@ class SubprocessCodingAgent:
         self.provider = provider
         self.command_override = command_override
         self.env_allow = list(env_allow or [])
+        self.environment_overrides = dict(environment_overrides or {})
 
     def build_command(self) -> List[str]:
         if self.command_override:
@@ -178,6 +180,7 @@ class SubprocessCodingAgent:
         return build_execution_environment(
             provider=self.provider,
             extra_names=self.env_allow,
+            overrides=self.environment_overrides,
         )
 
     def ensure_available(self, command: Iterable[str]) -> None:

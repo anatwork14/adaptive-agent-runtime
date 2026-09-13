@@ -74,6 +74,7 @@ def build_agent(profile: AgentProfile):
             model_name=profile.model,
             command_override=profile.command_override,
             env_allow=profile.env_allow,
+            codex_home=profile.codex_home,
         )
     if profile.provider == "claude":
         return ClaudeAgentAdapter(
@@ -97,13 +98,9 @@ def build_agent(profile: AgentProfile):
 def doctor_profile(profile: AgentProfile) -> AgentDoctorResult:
     """Check installation plus vendor-native authentication where supported."""
     if not profile.enabled:
-        return AgentDoctorResult(
-            profile.name, profile.provider, profile.model, None, False, "DISABLED", "profile disabled"
-        )
+        return AgentDoctorResult(profile.name, profile.provider, profile.model, None, False, "DISABLED", "profile disabled")
     if profile.provider == "mock":
-        return AgentDoctorResult(
-            profile.name, "mock", profile.model, None, True, "READY", "deterministic local smoke-test adapter"
-        )
+        return AgentDoctorResult(profile.name, "mock", profile.model, None, True, "READY", "deterministic local smoke-test adapter")
     if profile.provider == "openrouter":
         has_key = bool(os.environ.get("OPENROUTER_API_KEY"))
         return AgentDoctorResult(

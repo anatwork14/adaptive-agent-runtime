@@ -129,6 +129,7 @@ def build_execution_environment(
     provider: str | None = None,
     extra_names: Iterable[str] = (),
     source: Mapping[str, str] | None = None,
+    overrides: Mapping[str, str] | None = None,
 ) -> dict[str, str]:
     """Return the explicit environment passed to an ARC-managed child process.
 
@@ -142,7 +143,11 @@ def build_execution_environment(
     if provider:
         names.update(_PROVIDER_ENV_KEYS.get(provider.lower().strip(), frozenset()))
     names.update(validate_environment_name(name) for name in extra_names)
-    return {name: str(source_env[name]) for name in sorted(names) if name in source_env}
+    environment = {name: str(source_env[name]) for name in sorted(names) if name in source_env}
+    for raw_name, value in (overrides or {}).items():
+        name = validate_environment_name(raw_name)
+        environment[name] = str(value)
+    return environment
 
 
 def environment_key_manifest(environment: Mapping[str, str]) -> list[str]:

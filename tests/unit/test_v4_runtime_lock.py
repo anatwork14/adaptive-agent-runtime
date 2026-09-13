@@ -41,7 +41,7 @@ def _init_repo(repo: Path, filename: str) -> str:
     _git(repo, "config", "user.name", "ARC Test")
     (repo / filename).write_text("VALUE = 1\n", encoding="utf-8")
     _git(repo, "add", filename)
-    _git(repo, "commit", "-qm", "base")
+    _git(repo, "-c", "commit.gpgsign=false", "commit", "-qm", "base")
     return _git(repo, "rev-parse", "HEAD")
 
 
@@ -66,6 +66,10 @@ def test_v4_runtime_lock_freezes_and_verifies_provider_timeout(tmp_path: Path) -
     arc_commit = _init_repo(arc_repo, "engine.py")
     provider = tmp_path / "fake-codex"
     _fake_provider(provider)
+    codex_home = tmp_path / "dedicated-codex-home"
+    codex_home.mkdir()
+    codex_config = codex_home / "config.toml"
+    codex_config.write_text("# isolated V4 config\n", encoding="utf-8")
 
     config = ConfigStore(repo).load("v4-runtime")
     config.provider_execution_timeout_seconds = 600
@@ -74,6 +78,8 @@ def test_v4_runtime_lock_freezes_and_verifies_provider_timeout(tmp_path: Path) -
         provider="codex",
         model="gpt-5.5",
         command_override=str(provider),
+        codex_home=str(codex_home),
+        codex_config_path=str(codex_config),
         capabilities=["implementation", "test", "debug", "refactor"],
     )
     ConfigStore(repo).save(config)
@@ -89,6 +95,8 @@ def test_v4_runtime_lock_freezes_and_verifies_provider_timeout(tmp_path: Path) -
     payload = json.loads(lock.read_text(encoding="utf-8"))
     assert payload["schema_version"] == "arc-empirical-runtime-lock-v5"
     assert payload["provider_execution_timeout_seconds"] == 600
+    assert payload["codex_home"] == str(codex_home)
+    assert payload["codex_config_path"] == str(codex_config)
     assert payload["arc_commit"] == arc_commit
     module.verify(
         repo,

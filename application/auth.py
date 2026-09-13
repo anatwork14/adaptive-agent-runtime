@@ -9,6 +9,7 @@ from __future__ import annotations
 import os
 import shutil
 import subprocess
+from collections.abc import Mapping
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Literal, Optional
@@ -101,7 +102,19 @@ def _safe_detail(text: str, *, limit: int = 280) -> str:
     return " ".join(words)[:limit]
 
 
-def auth_status(provider: str, *, timeout: float = 8.0) -> ProviderAuthStatus:
+def _provider_environment(environment: Mapping[str, str] | None) -> dict[str, str]:
+    env = os.environ.copy()
+    if environment:
+        env.update({str(key): str(value) for key, value in environment.items()})
+    return env
+
+
+def auth_status(
+    provider: str,
+    *,
+    timeout: float = 8.0,
+    environment: Mapping[str, str] | None = None,
+) -> ProviderAuthStatus:
     spec = get_auth_spec(provider)
     resolved = shutil.which(spec.executable)
     if not resolved:
@@ -116,7 +129,7 @@ def auth_status(provider: str, *, timeout: float = 8.0) -> ProviderAuthStatus:
             auth_method=spec.auth_method,
         )
 
-    env = os.environ.copy()
+    env = _provider_environment(environment)
     if spec.provider == "antigravity":
         env.setdefault("TERM", "xterm-256color")
     try:
@@ -164,12 +177,17 @@ def auth_status(provider: str, *, timeout: float = 8.0) -> ProviderAuthStatus:
     )
 
 
-def login_provider(provider: str, *, cwd: str | Path = ".") -> int:
+def login_provider(
+    provider: str,
+    *,
+    cwd: str | Path = ".",
+    environment: Mapping[str, str] | None = None,
+) -> int:
     """Run the provider's native interactive login in the current terminal."""
     spec = get_auth_spec(provider)
     if shutil.which(spec.executable) is None:
         raise RuntimeError(f"{spec.display_name} CLI ({spec.executable}) is not installed")
-    env = os.environ.copy()
+    env = _provider_environment(environment)
     if spec.provider == "antigravity":
         env.setdefault("TERM", "xterm-256color")
     return subprocess.run(
@@ -180,7 +198,12 @@ def login_provider(provider: str, *, cwd: str | Path = ".") -> int:
     ).returncode
 
 
-def logout_provider(provider: str, *, cwd: str | Path = ".") -> int:
+def logout_provider(
+    provider: str,
+    *,
+    cwd: str | Path = ".",
+    environment: Mapping[str, str] | None = None,
+) -> int:
     """Delegate logout to the provider. ARC never deletes credential files."""
     spec = get_auth_spec(provider)
     if spec.logout_command is None:
@@ -193,5 +216,6 @@ def logout_provider(provider: str, *, cwd: str | Path = ".") -> int:
     return subprocess.run(
         list(spec.logout_command),
         cwd=str(Path(cwd).resolve()),
+        env=_provider_environment(environment),
         check=False,
     ).returncode

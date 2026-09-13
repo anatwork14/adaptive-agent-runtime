@@ -514,6 +514,11 @@ def provider_doctor(
         "--output",
         help="JSON result path; active probes default to a temporary external directory",
     ),
+    codex_home: Optional[Path] = typer.Option(  # noqa: B008
+        None,
+        "--codex-home",
+        help="Explicit Codex home for V4 provider qualification",
+    ),
     repo: Path = typer.Option(Path("."), help="Repository root used only to load ARC profile configuration"),
     project_id: Optional[str] = typer.Option(None, help="Project identifier"),
 ) -> None:
@@ -528,6 +533,16 @@ def provider_doctor(
         selected = config.agents.get(name)
         if not selected:
             raise typer.BadParameter(f"Agent profile {name!r} not found")
+        if codex_home is not None:
+            if selected.provider != "codex":
+                raise typer.BadParameter("--codex-home is only valid for a Codex profile")
+            home = codex_home.expanduser().resolve()
+            selected = selected.model_copy(
+                update={
+                    "codex_home": str(home),
+                    "codex_config_path": str(home / "config.toml"),
+                }
+            )
 
         if active_probe:
             if output is None:

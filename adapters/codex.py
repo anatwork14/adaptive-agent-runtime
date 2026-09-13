@@ -21,6 +21,7 @@ class CodexAgentAdapter(SubprocessCodingAgent):
         *,
         command_override: str | None = None,
         env_allow: Iterable[str] = (),
+        codex_home: str | None = None,
     ) -> None:
         command = ["codex", "exec", "--full-auto"]
         if model_name:
@@ -34,6 +35,7 @@ class CodexAgentAdapter(SubprocessCodingAgent):
             provider="codex",
             command_override=command_override,
             env_allow=env_allow,
+            environment_overrides={"CODEX_HOME": codex_home} if codex_home else None,
         )
         self.model_name = model_name
 

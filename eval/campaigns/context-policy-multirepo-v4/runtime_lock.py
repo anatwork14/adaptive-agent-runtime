@@ -36,6 +36,14 @@ def _digest_argv(argv: list[str]) -> str:
     return hashlib.sha256(_canonical(argv)).hexdigest()
 
 
+def _sha256_file(path: Path) -> str:
+    digest = hashlib.sha256()
+    with path.open("rb") as handle:
+        for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
 def _effective_argv(profile) -> list[str]:
     agent = build_agent(profile)
     builder = getattr(agent, "build_command", None)
@@ -44,7 +52,7 @@ def _effective_argv(profile) -> list[str]:
     return list(builder())
 
 
-def _provider_cli_version(argv: list[str]) -> str:
+def _provider_cli_version(argv: list[str], environment: dict[str, str]) -> str:
     if not argv:
         raise SystemExit("provider command is empty; cannot freeze CLI version")
     try:
@@ -52,6 +60,7 @@ def _provider_cli_version(argv: list[str]) -> str:
             [argv[0], "--version"],
             capture_output=True,
             text=True,
+            env=environment,
             check=False,
         )
     except FileNotFoundError as exc:
@@ -102,13 +111,39 @@ def _arc_repo(path: Path | None) -> Path:
     return (path or DEFAULT_ARC_REPO).resolve()
 
 
+def _codex_runtime_identity(profile, environment: dict[str, str]) -> dict[str, str]:
+    if profile.provider != "codex":
+        return {}
+    if not profile.codex_home or not profile.codex_config_path:
+        raise SystemExit("codex profile must declare codex_home and codex_config_path")
+    home = Path(profile.codex_home).expanduser().resolve()
+    config_path = Path(profile.codex_config_path).expanduser().resolve()
+    if not home.is_dir():
+        raise SystemExit(f"dedicated Codex home does not exist: {home}")
+    if not config_path.is_file():
+        raise SystemExit(f"dedicated Codex config does not exist: {config_path}")
+    try:
+        config_path.relative_to(home)
+    except ValueError as exc:
+        raise SystemExit("dedicated Codex config must live inside codex_home") from exc
+    if environment.get("CODEX_HOME") != str(home):
+        raise SystemExit("Codex subprocess environment does not use the configured codex_home")
+    return {
+        "codex_home": str(home),
+        "codex_config_path": str(config_path),
+        "codex_config_sha256": _sha256_file(config_path),
+    }
+
+
 def runtime_payload(repo: Path, profile_name: str) -> dict[str, Any]:
     config = ConfigStore(repo).load()
     profile = config.agents.get(profile_name)
     if profile is None:
         raise SystemExit(f"profile {profile_name!r} is not configured in {repo}")
-    argv = _effective_argv(profile)
-    return {
+    agent = build_agent(profile)
+    argv = list(agent.build_command())
+    environment = agent.execution_environment()
+    payload = {
         "schema_version": SCHEMA,
         "profile": profile.name,
         "provider": profile.provider,
@@ -116,10 +151,12 @@ def runtime_payload(repo: Path, profile_name: str) -> dict[str, Any]:
         "role": profile.role,
         "capabilities": sorted(set(profile.capabilities)),
         "effective_argv_sha256": _digest_argv(argv),
-        "provider_cli_version": _provider_cli_version(argv),
+        "provider_cli_version": _provider_cli_version(argv, environment),
         "env_allow": sorted(set(profile.env_allow)),
         "provider_execution_timeout_seconds": config.provider_execution_timeout_seconds,
     }
+    payload.update(_codex_runtime_identity(profile, environment))
+    return payload
 
 
 def lock_digest(payload: dict[str, Any]) -> str:
@@ -202,6 +239,8 @@ def verify(
         "arc_commit",
         "arc_worktree_clean",
     )
+    if frozen.get("provider") == "codex":
+        keys += ("codex_home", "codex_config_path", "codex_config_sha256")
     mismatches = [key for key in keys if frozen.get(key) != live.get(key)]
     if mismatches:
         details = ", ".join(

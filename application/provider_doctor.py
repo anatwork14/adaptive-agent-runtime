@@ -142,7 +142,7 @@ def passive_provider_doctor(profile: AgentProfile) -> PassiveProviderReport:
     auth_detail = "command override is active; authentication is provider-command-specific"
     uses_native_cli = executable == _AUTH_EXECUTABLES.get(profile.provider)
     if profile.provider in _AUTH_EXECUTABLES and uses_native_cli:
-        auth = auth_status(profile.provider)
+        auth = auth_status(profile.provider, environment=environment)
         auth_state = auth.state
         auth_detail = auth.detail
         status = "READY" if auth.authenticated else "AUTH_REQUIRED"
