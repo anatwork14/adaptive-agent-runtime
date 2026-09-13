@@ -114,3 +114,4 @@ def test_container_hidden_runner_passes_only_selected_paths(monkeypatch, tmp_pat
     assert captured["command"][-1] == "/arc-hidden-tests/test_hidden_t001_a.py"
     assert "/arc-hidden-tests" not in captured["command"][:-1]
     assert captured["read_only_mounts"] == {"/arc-hidden-tests": hidden.resolve()}
+    assert captured["workspace_read_only"] is True

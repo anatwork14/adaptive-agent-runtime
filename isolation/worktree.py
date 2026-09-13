@@ -6,6 +6,8 @@ import subprocess
 from pathlib import Path
 from typing import Optional
 
+from runtime.git import arc_git_write_args
+
 logger = logging.getLogger(__name__)
 
 
@@ -117,18 +119,18 @@ class WorktreeManager:
             cwd=worktree_path,
         ).stdout.strip()
         result = self._run_git(
-            [
-                "-c",
-                "user.name=ARC Agent",
-                "-c",
-                "user.email=arc@local",
-                "commit-tree",
-                tree_sha,
-                "-p",
-                merge_base,
-                "-m",
-                message,
-            ],
+            arc_git_write_args(
+                [
+                    "commit-tree",
+                    tree_sha,
+                    "-p",
+                    merge_base,
+                    "-m",
+                    message,
+                ],
+                user_name="ARC Agent",
+                user_email="arc@local",
+            ),
             cwd=worktree_path,
         )
         candidate_sha = result.stdout.strip()
@@ -155,15 +157,11 @@ class WorktreeManager:
             raise WorktreeError(f"cannot inspect staged changes for task {task_id}")
         if staged.returncode == 1:
             self._run_git(
-                [
-                    "-c",
-                    "user.name=ARC Agent",
-                    "-c",
-                    "user.email=arc@local",
-                    "commit",
-                    "-m",
-                    message,
-                ],
+                arc_git_write_args(
+                    ["commit", "-m", message],
+                    user_name="ARC Agent",
+                    user_email="arc@local",
+                ),
                 cwd=worktree_path,
             )
 

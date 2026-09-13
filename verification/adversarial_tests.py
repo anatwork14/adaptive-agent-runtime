@@ -107,6 +107,7 @@ class AdversarialTestRunner:
                 self.harness.get("hidden_timeout_seconds", self.harness.get("timeout_seconds", 120))
             ),
             read_only_mounts={"/arc-hidden-tests": hidden},
+            workspace_read_only=True,
         )
         output = result.stdout + "\n" + result.stderr
         return AdversarialTestResult(

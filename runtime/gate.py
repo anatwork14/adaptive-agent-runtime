@@ -6,6 +6,7 @@ import uuid
 from pathlib import Path
 from typing import Any, List, Optional
 
+from runtime.git import arc_git_write_args
 from state.events import EventStore
 from state.models import GateResult, GateStatus, PatchSubmission
 from verification.adversarial_tests import AdversarialTestRunner
@@ -199,16 +200,11 @@ class IntegrationGate:
         try:
             gate_path = self._create_gate_worktree(gate_run_id)
             apply_res = self._git(
-                [
-                    "-c",
-                    "commit.gpgsign=false",
-                    "-c",
-                    "user.name=ARC Gate",
-                    "-c",
-                    "user.email=arc-gate@local",
-                    "cherry-pick",
-                    submission.candidate_commit_sha,
-                ],
+                arc_git_write_args(
+                    ["cherry-pick", submission.candidate_commit_sha],
+                    user_name="ARC Gate",
+                    user_email="arc-gate@local",
+                ),
                 cwd=gate_path,
                 check=False,
             )
@@ -285,16 +281,11 @@ class IntegrationGate:
                 stages_passed.append("V2_reviewer")
 
             merge_res = self._git(
-                [
-                    "-c",
-                    "commit.gpgsign=false",
-                    "-c",
-                    "user.name=ARC Gate",
-                    "-c",
-                    "user.email=arc-gate@local",
-                    "cherry-pick",
-                    submission.candidate_commit_sha,
-                ],
+                arc_git_write_args(
+                    ["cherry-pick", submission.candidate_commit_sha],
+                    user_name="ARC Gate",
+                    user_email="arc-gate@local",
+                ),
                 check=False,
             )
             if merge_res.returncode != 0:

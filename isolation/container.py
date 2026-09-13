@@ -141,8 +141,13 @@ class SandboxRunner:
         env_vars: Optional[Dict[str, str]] = None,
         timeout: Optional[int] = None,
         read_only_mounts: Optional[Dict[str, str | Path]] = None,
+        workspace_read_only: bool = False,
     ) -> ExecutionResult:
-        """Execute ``command`` in a least-privilege Docker container."""
+        """Execute ``command`` in a least-privilege Docker container.
+
+        Hidden grading sets ``workspace_read_only`` so test imports and other
+        grader activity cannot dirty the integrated candidate tree.
+        """
         if not command:
             raise ValueError("sandbox command must not be empty")
         docker = self._docker()
@@ -160,7 +165,10 @@ class SandboxRunner:
             "--workdir",
             container_cwd,
             "--mount",
-            f"type=bind,src={self.workspace_path},dst=/workspace",
+            (
+                f"type=bind,src={self.workspace_path},dst=/workspace"
+                + (",readonly" if workspace_read_only else "")
+            ),
             "--cap-drop",
             "ALL",
             "--security-opt",

@@ -1,0 +1,139 @@
+{
+  "campaign_id": "context-policy-multirepo-v3",
+  "status": "PROPOSED_NOT_FROZEN",
+  "parent_campaign": "context-policy-multirepo-v2",
+  "scientific_change_from_parent": "none",
+  "apparatus_change": "ARC-created commit and cherry-pick paths use command-scoped deterministic Git identity with commit.gpgsign=false; hostile-host regression and provider-free end-to-end qualification are required before freeze.",
+  "provider_profile": {
+    "name": "builder",
+    "provider": "codex",
+    "model": "gpt-5.5",
+    "role": "implementation",
+    "capabilities": ["implementation", "test", "debug", "refactor"],
+    "env_allow": [],
+    "command_override": "codex exec --full-auto --model gpt-5.5 --config 'model_reasoning_effort=\"high\"' --json -",
+    "effective_argv": [
+      "codex", "exec", "--full-auto", "--model", "gpt-5.5",
+      "--config", "model_reasoning_effort=\"high\"", "--json", "-"
+    ],
+    "effective_argv_sha256": "da95d05df4e997d3a722d2e974af2b6ccc04ecee53474dd2dbb077ddbfbd6f5e"
+  },
+  "provider_runtime": {
+    "cli": "codex",
+    "version": "codex-cli 0.133.0-alpha.1",
+    "output_mode": "documented_jsonl",
+    "version_policy": "diagnose and explicitly freeze before V3 execution; no upgrade during campaign",
+    "environment_allowlist": {
+      "profile_extra_keys": [],
+      "provider_permitted_keys": [
+        "CODEX_HOME", "OPENAI_API_KEY", "OPENAI_BASE_URL",
+        "OPENAI_ORGANIZATION", "OPENAI_PROJECT"
+      ],
+      "values_persisted": false
+    }
+  },
+  "apparatus_qualification": {
+    "passive_doctor": "arc provider doctor --profile builder",
+    "active_probe": "arc provider doctor --profile builder --active-probe",
+    "active_probe_is_scientific_evidence": false,
+    "required_before_freeze": [
+      "ARC unit and integration tests pass",
+      "hostile-host Git regression passes",
+      "provider-free synthetic workflow reaches visible Docker G2 and hidden Docker grading",
+      "provider passive doctor passes",
+      "provider active non-benchmark probe passes",
+      "target repositories pass environment checks",
+      "visible-test commands work",
+      "hidden grader apparatus works with controlled fixture"
+    ],
+    "probe_result_storage": "external to benchmark result directories"
+  },
+  "shared_protocol": {
+    "context_token_budget": 12000,
+    "hard_task_usd": 2.0,
+    "hard_project_usd": 350.0,
+    "visible_test_harness_policy": "repository_specific_harnesses_are_frozen_under_repositories",
+    "verification_level": "V1",
+    "repeats": 6,
+    "bootstrap_samples": 2000,
+    "ci": 0.95,
+    "meta_bootstrap_samples": 5000,
+    "meta_ci": 0.95,
+    "meta_random_seed": 42,
+    "exclusions": [
+      "provider outage before the first provider turn",
+      "host failure before the first provider turn"
+    ],
+    "provider_token_measurement": "nullable observed telemetry; not a hard experimental ceiling"
+  },
+  "treatments": {
+    "B3": {"memory_policy": "static_no_memory"},
+    "B5": {"memory_policy": "naive_vector_topk", "top_k": 5, "validity_enforced": false},
+    "B7": {
+      "memory_policy": "provenance_aware_adaptive",
+      "validity_enforced": true,
+      "episodic_dependency_scope": "When dependencies are declared, TASK_SUMMARY and EPISODE memories must match a declared dependency to remain eligible for generic lexical/vector expansion; explicit dependency-linked retrieval remains eligible.",
+      "root_task_generic_episode_fallback": true
+    }
+  },
+  "identification": {
+    "progressive_sequence": "T001 -> T002 -> T003",
+    "b5_vs_b7": "On T003, B5 may retrieve broader prior episodic history such as T001 plus T002, while B7 scopes episodic history to the declared predecessor T002. This treatment distinction is frozen before provider execution.",
+    "repetitions": 6,
+    "ordering": "same frozen order/crossover design as V2"
+  },
+  "repositories": {
+    "click": {
+      "study_id": "click-context-policy-v3",
+      "benchmark_id": "context-policy-click-v3",
+      "repo": "pallets/click",
+      "commit": "6aabf099bfdd4c1e75fe8d0e0d4241372b988ab1",
+      "hidden_tree_sha256": "4e9241310067b13e36f9ecce3913dbf0bd936bab6486a42300d032575141a3ef",
+      "environment_qualification_id": "click-docker-python310-uv-locked-v2",
+      "image": "arc-v2-click:qualified",
+      "image_digest": "sha256:7fae74105025e759c4244de903b1385271df9ac4f8e4bfb3d1589094d2ec92a4",
+      "visible_test_command": ["python", "-m", "pytest", "-q"],
+      "hidden_test_command": ["python", "-m", "pytest", "-q", "-p", "no:cacheprovider", "/arc-hidden-tests"],
+      "network_enabled": false,
+      "tmpfs_exec": true,
+      "python_toolchain": "CPython 3.10.7; uv-locked dev/tests environment"
+    },
+    "httpx": {
+      "study_id": "httpx-context-policy-v3",
+      "benchmark_id": "context-policy-httpx-v3",
+      "repo": "encode/httpx",
+      "commit": "b5addb64f0161ff6bfe94c124ef76f6a1fba5254",
+      "hidden_tree_sha256": "771e5afa152bcc41676fe173aad7809485eb5cccdcaf312865b2f6dd2a798334",
+      "environment_qualification_id": "httpx-docker-python311-requirements-resourcewarning-filter-v2",
+      "image": "arc-v2-httpx:qualified",
+      "image_digest": "sha256:1f8b4320b6d1b4ab22121442732f3f684e1fe77162de563beb841b0dc340d8cf",
+      "visible_test_command": ["python", "-m", "pytest", "-q", "-W", "ignore::ResourceWarning", "-m", "not network"],
+      "hidden_test_command": ["python", "-m", "pytest", "-q", "-p", "no:cacheprovider", "/arc-hidden-tests"],
+      "network_enabled": false,
+      "tmpfs_exec": false,
+      "python_toolchain": "CPython 3.11.16; requirements.txt editable environment"
+    },
+    "python-dotenv": {
+      "study_id": "python-dotenv-context-policy-v3",
+      "benchmark_id": "context-policy-python-dotenv-v3",
+      "repo": "theskumar/python-dotenv",
+      "commit": "a00cb2eed0704cd6d2071b2004c37e95ccc86ee5",
+      "hidden_tree_sha256": "950297bdebad5f5e2560ec8406e6f80ca289e6cc6672a3e9648a814a55284bb7",
+      "environment_qualification_id": "python-dotenv-docker-python310-requirements-v2",
+      "image": "arc-v2-python-dotenv:qualified",
+      "image_digest": "sha256:d7e1c1d915ad92a48fe0d915b9f951bd70af3bab5737d03f83d31281d84dc32b",
+      "visible_test_command": ["python", "-m", "pytest", "-q"],
+      "hidden_test_command": ["python", "-m", "pytest", "-q", "-p", "no:cacheprovider", "/arc-hidden-tests"],
+      "network_enabled": false,
+      "tmpfs_exec": true,
+      "python_toolchain": "CPython 3.10.7; requirements.txt editable environment"
+    }
+  },
+  "freeze_gate": {
+    "arc_commit": "record_exact_commit_after_apparatus_qualification",
+    "provider_execution_started": false,
+    "freeze_after_qualification": true,
+    "freeze_review_required": true,
+    "v3_status": "not frozen; independent apparatus review required"
+  }
+}
