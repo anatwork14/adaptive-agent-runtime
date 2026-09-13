@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import os
+import shlex
 import sqlite3
 import subprocess
 from pathlib import Path
@@ -15,7 +16,7 @@ from adapters.mock import MockAgentAdapter
 from isolation.worktree import WorktreeManager
 from memory.lifecycle import MemoryLifecycle
 from runtime.gate import IntegrationGate
-from runtime.git import arc_git_write_args
+from runtime.git import arc_git_write_args, arc_git_write_env
 from runtime.orchestrator import Orchestrator
 from state.events import EventStore
 from state.models import GateStatus, PatchSubmission
@@ -52,10 +53,18 @@ def _create_repo(tmp_path: Path) -> Path:
 
 def _hostile_git_environment(monkeypatch: pytest.MonkeyPatch, key_path: Path) -> dict[str, str]:
     hostile = os.environ.copy()
+    marker = key_path.with_name("hostile-signer-accessed")
+    signer = key_path.with_name("hostile-signer.sh")
+    signer.write_text(
+        f"#!/bin/sh\nprintf accessed >> {shlex.quote(str(marker))}\nexit 79\n",
+        encoding="utf-8",
+    )
+    signer.chmod(0o700)
     config = {
         "commit.gpgsign": "true",
         "gpg.format": "ssh",
         "user.signingkey": str(key_path),
+        "gpg.ssh.program": str(signer),
         "user.name": "Hostile Host",
         "user.email": "hostile@local",
     }
@@ -73,12 +82,18 @@ def _commit_identity(repo: Path, commit_sha: str) -> list[str]:
     return _git(repo, "show", "-s", "--format=%an%n%ae%n%cn%n%ce", commit_sha).splitlines()
 
 
+def _signer_marker(key_path: Path) -> Path:
+    return key_path.with_name("hostile-signer-accessed")
+
+
 def _global_git_config_snapshot() -> str:
     """Read global config without allowing test-only injected config entries."""
     clean = os.environ.copy()
     for key in list(clean):
-        if key == "GIT_CONFIG_COUNT" or key.startswith("GIT_CONFIG_KEY_") or key.startswith(
-            "GIT_CONFIG_VALUE_"
+        if (
+            key == "GIT_CONFIG_COUNT"
+            or key.startswith("GIT_CONFIG_KEY_")
+            or key.startswith("GIT_CONFIG_VALUE_")
         ):
             clean.pop(key, None)
     result = subprocess.run(
@@ -95,7 +110,20 @@ def test_v2_signing_failure_reproduced_and_arc_pipeline_is_hermetic(
 ) -> None:
     repo = _create_repo(tmp_path)
     global_config_before = _global_git_config_snapshot()
-    hostile = _hostile_git_environment(monkeypatch, tmp_path / "missing-signing-key")
+    key_path = tmp_path / "missing-signing-key"
+    hostile = _hostile_git_environment(monkeypatch, key_path)
+    host_environment_after_setup = dict(os.environ)
+    write_environment = arc_git_write_env()
+    assert all(
+        key not in write_environment
+        for key in (
+            "GIT_AUTHOR_NAME",
+            "GIT_AUTHOR_EMAIL",
+            "GIT_COMMITTER_NAME",
+            "GIT_COMMITTER_EMAIL",
+        )
+    )
+    assert dict(os.environ) == host_environment_after_setup
 
     # Reproduce the V2 defect with the legacy candidate-commit operation. The
     # missing key makes signing fail deterministically without an interactive
@@ -111,14 +139,19 @@ def test_v2_signing_failure_reproduced_and_arc_pipeline_is_hermetic(
         check=False,
     )
     assert legacy.returncode != 0
-    assert "sign" in (legacy.stdout + legacy.stderr).lower()
+    legacy_output = (legacy.stdout + legacy.stderr).lower()
+    assert "sign" in legacy_output or "commit object" in legacy_output
+    assert _signer_marker(key_path).exists()
+    _signer_marker(key_path).unlink()
     _git(repo, "reset", "--", "legacy.py", env=hostile)
     (repo / "legacy.py").unlink()
 
     manager = WorktreeManager(repo, tmp_path / "worktrees")
     workspace = manager.create_worktree("T001")
     try:
-        (workspace / "candidate.py").write_text("def candidate():\n    return 1\n", encoding="utf-8")
+        (workspace / "candidate.py").write_text(
+            "def candidate():\n    return 1\n", encoding="utf-8"
+        )
         candidate_sha = manager.commit_candidate("T001", "arc(T001): candidate")
         assert _commit_identity(repo, candidate_sha) == [
             "ARC Agent",
@@ -153,9 +186,11 @@ def test_v2_signing_failure_reproduced_and_arc_pipeline_is_hermetic(
             event_kinds = [event.kind for event in store.read_all(project_id="project")]
             assert "gate.started" in event_kinds
             assert "gate.accepted" in event_kinds
+            assert not _signer_marker(key_path).exists()
         finally:
             store.close()
         assert _global_git_config_snapshot() == global_config_before
+        assert dict(os.environ) == host_environment_after_setup
     finally:
         manager.remove_worktree("T001")
 
@@ -164,7 +199,9 @@ def test_multi_commit_squash_uses_deterministic_identity_under_hostile_config(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     repo = _create_repo(tmp_path)
-    hostile = _hostile_git_environment(monkeypatch, tmp_path / "missing-signing-key")
+    key_path = tmp_path / "missing-signing-key"
+    hostile = _hostile_git_environment(monkeypatch, key_path)
+    host_environment_after_setup = dict(os.environ)
     manager = WorktreeManager(repo, tmp_path / "worktrees")
     workspace = manager.create_worktree("T002")
     try:
@@ -200,6 +237,8 @@ def test_multi_commit_squash_uses_deterministic_identity_under_hostile_config(
         ]
         assert "first.py" in manager.get_commit_diff(candidate_sha)
         assert "second.py" in manager.get_commit_diff(candidate_sha)
+        assert not _signer_marker(key_path).exists()
+        assert dict(os.environ) == host_environment_after_setup
     finally:
         manager.remove_worktree("T002")
 
@@ -208,7 +247,9 @@ def test_orchestrator_submission_and_gate_complete_under_hostile_config(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     repo = _create_repo(tmp_path)
-    _hostile_git_environment(monkeypatch, tmp_path / "missing-signing-key")
+    key_path = tmp_path / "missing-signing-key"
+    _hostile_git_environment(monkeypatch, key_path)
+    host_environment_after_setup = dict(os.environ)
     event_store = EventStore(tmp_path / "events.db")
     memory_connection = sqlite3.connect(tmp_path / "memory.db", check_same_thread=False)
     try:
@@ -260,6 +301,8 @@ def test_orchestrator_submission_and_gate_complete_under_hostile_config(
         ]
         assert (repo / "candidate.py").read_text(encoding="utf-8") == "value = 3\n"
         assert not _git(repo, "status", "--porcelain", env=os.environ.copy())
+        assert not _signer_marker(key_path).exists()
+        assert dict(os.environ) == host_environment_after_setup
     finally:
         memory_connection.close()
         event_store.close()

@@ -198,7 +198,8 @@ def _run(root: Path) -> dict[str, object]:
             "event_kinds": event_kinds,
             "task_projection_status": projection.dag.tasks["T001"].status.value,
             "gate_accepted": "gate.accepted" in event_kinds,
-            "visible_docker_g2": "G2_visible_tests" in (
+            "visible_docker_g2": "G2_visible_tests"
+            in (
                 next(
                     event.payload.get("stages_passed", [])
                     for event in events
@@ -229,9 +230,15 @@ def main() -> int:
         with tempfile.TemporaryDirectory(prefix="arc-v3-synthetic-") as directory:
             result = _run(Path(directory))
     except SandboxUnavailable as exc:
-        result = {"qualification": "provider-free synthetic end-to-end apparatus", "status": "BLOCKED", "error": str(exc)}
+        result = {
+            "qualification": "provider-free synthetic end-to-end apparatus",
+            "status": "BLOCKED",
+            "error": str(exc),
+        }
         args.output.parent.mkdir(parents=True, exist_ok=True)
-        args.output.write_text(json.dumps(result, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+        args.output.write_text(
+            json.dumps(result, indent=2, sort_keys=True) + "\n", encoding="utf-8"
+        )
         return 2
     args.output.parent.mkdir(parents=True, exist_ok=True)
     args.output.write_text(json.dumps(result, indent=2, sort_keys=True) + "\n", encoding="utf-8")

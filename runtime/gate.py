@@ -3,10 +3,11 @@
 import shutil
 import subprocess
 import uuid
+from collections.abc import Mapping
 from pathlib import Path
 from typing import Any, List, Optional
 
-from runtime.git import arc_git_write_args
+from runtime.git import arc_git_write_args, arc_git_write_env
 from state.events import EventStore
 from state.models import GateResult, GateStatus, PatchSubmission
 from verification.adversarial_tests import AdversarialTestRunner
@@ -52,6 +53,7 @@ class IntegrationGate:
         *,
         cwd: Optional[Path] = None,
         check: bool = True,
+        env: Mapping[str, str] | None = None,
     ) -> subprocess.CompletedProcess:
         try:
             return subprocess.run(
@@ -60,6 +62,7 @@ class IntegrationGate:
                 capture_output=True,
                 text=True,
                 check=check,
+                env=dict(env) if env is not None else None,
             )
         except FileNotFoundError as exc:
             raise IntegrationGateError("git executable is required for integration") from exc
@@ -207,6 +210,7 @@ class IntegrationGate:
                 ),
                 cwd=gate_path,
                 check=False,
+                env=arc_git_write_env(),
             )
             if apply_res.returncode != 0:
                 self._git(["cherry-pick", "--abort"], cwd=gate_path, check=False)
@@ -287,6 +291,7 @@ class IntegrationGate:
                     user_email="arc-gate@local",
                 ),
                 check=False,
+                env=arc_git_write_env(),
             )
             if merge_res.returncode != 0:
                 self._git(["cherry-pick", "--abort"], check=False)

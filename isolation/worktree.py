@@ -3,10 +3,11 @@
 import logging
 import shutil
 import subprocess
+from collections.abc import Mapping
 from pathlib import Path
 from typing import Optional
 
-from runtime.git import arc_git_write_args
+from runtime.git import arc_git_write_args, arc_git_write_env
 
 logger = logging.getLogger(__name__)
 
@@ -27,10 +28,7 @@ class WorktreeManager:
         self.repo_path = Path(repo_path).resolve()
         if worktree_root is None:
             self.worktree_root = (
-                self.repo_path.parent
-                / ".arc-runtime"
-                / self.repo_path.name
-                / "worktrees"
+                self.repo_path.parent / ".arc-runtime" / self.repo_path.name / "worktrees"
             )
         else:
             self.worktree_root = Path(worktree_root).resolve()
@@ -42,6 +40,7 @@ class WorktreeManager:
         cwd: Optional[Path] = None,
         *,
         check: bool = True,
+        env: Mapping[str, str] | None = None,
     ) -> subprocess.CompletedProcess:
         target_cwd = cwd or self.repo_path
         try:
@@ -51,6 +50,7 @@ class WorktreeManager:
                 capture_output=True,
                 text=True,
                 check=check,
+                env=dict(env) if env is not None else None,
             )
         except FileNotFoundError as exc:
             raise WorktreeError("git executable is required for ARC isolation") from exc
@@ -132,6 +132,7 @@ class WorktreeManager:
                 user_email="arc@local",
             ),
             cwd=worktree_path,
+            env=arc_git_write_env(),
         )
         candidate_sha = result.stdout.strip()
         if not candidate_sha:
@@ -163,6 +164,7 @@ class WorktreeManager:
                     user_email="arc@local",
                 ),
                 cwd=worktree_path,
+                env=arc_git_write_env(),
             )
 
         integration_head = self._run_git(["rev-parse", "HEAD"]).stdout.strip()
