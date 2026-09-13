@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import hashlib
 from pathlib import Path
 from typing import Optional
 
@@ -78,6 +79,14 @@ def _load_configured_profile(manifests, repo: Path, project_id: Optional[str]):
             f"manifest={declared_model!r}, profile={profile.model!r}"
         )
     return config, profile
+
+
+def _provider_codex_config_sha256(profile) -> str | None:
+    """Return the live non-secret Codex config identity for contract validation."""
+    if profile.provider != "codex" or not profile.codex_config_path:
+        return None
+    config_path = Path(profile.codex_config_path).expanduser().resolve()
+    return hashlib.sha256(config_path.read_bytes()).hexdigest()
 
 
 def register_study_commands(benchmark_app: typer.Typer) -> None:
@@ -218,6 +227,9 @@ def register_study_commands(benchmark_app: typer.Typer) -> None:
                 verification_level=plan.runtime.verification_level,
                 provider_execution_timeout_seconds=plan.runtime.provider_execution_timeout_seconds
                 or config.provider_execution_timeout_seconds,
+                provider_codex_home=profile.codex_home,
+                provider_codex_config_path=profile.codex_config_path,
+                provider_codex_config_sha256=_provider_codex_config_sha256(profile),
             )
 
             runner = RepeatedPairedBenchmarkRunner(
