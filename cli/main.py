@@ -503,6 +503,12 @@ def provider_doctor(
         "--active-probe",
         help="Send one minimal non-benchmark request in a disposable workspace",
     ),
+    timeout_seconds: Optional[int] = typer.Option(
+        None,
+        "--timeout-seconds",
+        min=1,
+        help="Provider smoke timeout; defaults to the repository ARC configuration",
+    ),
     output: Optional[Path] = typer.Option(
         None,
         "--output",
@@ -527,7 +533,11 @@ def provider_doctor(
             if output is None:
                 stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
                 output = Path(tempfile.gettempdir()) / "arc-provider-probes" / f"{name}-{stamp}.json"
-            report = run_provider_probe(selected, output_path=output)
+            report = run_provider_probe(
+                selected,
+                output_path=output,
+                timeout_seconds=timeout_seconds or config.provider_execution_timeout_seconds,
+            )
         else:
             report = {
                 "schema": "arc-provider-doctor-v1",

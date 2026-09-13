@@ -11,6 +11,7 @@ from pathlib import Path
 
 import pytest
 
+import adapters.cli_process as cli_process
 from adapters.base import AgentBudget, AgentRunResult, classify_provider_failure
 from adapters.cli_process import SubprocessCodingAgent
 from adapters.codex import CodexAgentAdapter
@@ -148,6 +149,74 @@ def test_timeout_and_empty_output_are_distinguishable(tmp_path: Path) -> None:
     assert empty_result.provider_lifecycle["completed"] == "observed"
 
 
+def test_timeout_diagnostic_records_configured_limit_and_elapsed_time(tmp_path: Path) -> None:
+    result = _run(
+        "import sys,time; sys.stdin.read(); print('response started', flush=True); time.sleep(30)",
+        tmp_path,
+        timeout=1,
+    )
+
+    assert result.failure_classification == "CLI_TIMEOUT"
+    assert result.configured_timeout_seconds == 1
+    assert result.elapsed_seconds is not None
+    assert result.elapsed_seconds >= 0
+
+
+def test_mocked_logical_timeout_uses_600_seconds_without_waiting_600_seconds(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    observed: dict[str, object] = {}
+    original_wait = cli_process.asyncio.wait
+
+    async def force_timeout(waiters, **kwargs):
+        observed.update(kwargs)
+        await cli_process.asyncio.sleep(0)
+        return set(), waiters
+
+    monkeypatch.setattr(cli_process.asyncio, "wait", force_timeout)
+    result = _run(
+        "import sys,time; sys.stdin.read(); print('logical long turn', flush=True); time.sleep(30)",
+        tmp_path,
+        timeout=600,
+    )
+
+    assert observed["timeout"] == 600
+    assert result.failure_classification == "CLI_TIMEOUT"
+    assert result.configured_timeout_seconds == 600
+    assert result.provider_lifecycle["failed"] == "observed"
+    assert result.provider_returncode is not None
+    monkeypatch.setattr(cli_process.asyncio, "wait", original_wait)
+
+
+def test_response_started_then_timeout_preserves_lifecycle(tmp_path: Path, monkeypatch) -> None:
+    script = tmp_path / "codex-timeout.py"
+    script.write_text(
+        "import json,sys,time; sys.stdin.read(); "
+        "print(json.dumps({'type':'turn.started'}), flush=True); "
+        "print(json.dumps({'type':'item.started','item':{'type':'agent_message'}}), flush=True); "
+        "time.sleep(30)\n",
+        encoding="utf-8",
+    )
+    async def force_timeout(waiters, **kwargs):
+        await cli_process.asyncio.sleep(0.1)
+        return set(), waiters
+
+    monkeypatch.setattr(cli_process.asyncio, "wait", force_timeout)
+    result = asyncio.run(
+        CodexAgentAdapter(command_override=shlex.join([sys.executable, str(script), "--json"])).run_prompt(
+            prompt="synthetic probe",
+            workspace=tmp_path,
+            budget=AgentBudget(timeout_seconds=600),
+        )
+    )
+
+    assert result.failure_classification == "CLI_TIMEOUT"
+    assert result.configured_timeout_seconds == 600
+    assert result.provider_lifecycle["request_started"] == "observed"
+    assert result.provider_lifecycle["response_started"] == "observed"
+    assert result.provider_lifecycle["completed"] == "unknown"
+
+
 def test_process_can_exit_after_prompt_before_provider_request_boundary(tmp_path: Path) -> None:
     result = _run("import sys; sys.stdin.read(); raise SystemExit(17)", tmp_path)
 
@@ -279,6 +348,39 @@ class _FailingAdapter:
         )
 
 
+class _CapturingAdapter:
+    def __init__(self) -> None:
+        self.timeout_seconds: int | None = None
+
+    async def run(self, *, context, workspace, budget) -> AgentRunResult:
+        self.timeout_seconds = budget.timeout_seconds
+        target = workspace / "README.md"
+        target.write_text("captured\n", encoding="utf-8")
+        return AgentRunResult(status="completed", summary="captured")
+
+
+@pytest.mark.asyncio
+async def test_orchestrator_passes_explicit_provider_timeout_to_agent(tmp_path: Path) -> None:
+    repo = _git_repo(tmp_path)
+    store = EventStore(tmp_path / "state.db")
+    memory = MemoryLifecycle(sqlite3_connect(tmp_path / "memory.db"))
+    adapter = _CapturingAdapter()
+    orchestrator = Orchestrator(
+        store,
+        memory,
+        repo,
+        "timeout-project",
+        provider_execution_timeout_seconds=600,
+    )
+    orchestrator.init_project(spec={"name": "timeout"})
+    orchestrator.create_task("T001", "capture timeout", files_declared=["README.md"])
+
+    result = await orchestrator.execute_task("T001", adapter, "builder")
+
+    assert result.status.value == "accepted"
+    assert adapter.timeout_seconds == 600
+
+
 @pytest.mark.asyncio
 async def test_orchestrator_persists_v1_failure_diagnostics_and_redacts_secrets(
     tmp_path: Path,
@@ -329,11 +431,13 @@ def test_active_probe_isolated_and_non_scientific(tmp_path: Path) -> None:
     )
     output = tmp_path / "probe.json"
 
-    report = run_provider_probe(profile, output_path=output)
+    report = run_provider_probe(profile, output_path=output, timeout_seconds=600)
 
     assert report["active"]["success"] is True
     assert report["benchmark_context"] is False
     assert report["scientific_evidence"] is False
     assert report["active"]["workspace_disposable"] is True
+    assert report["configured_timeout_seconds"] == 600
+    assert report["active"]["configured_timeout_seconds"] == 600
     saved = json.loads(output.read_text(encoding="utf-8"))
     assert saved["schema"] == "arc-provider-probe-v1"

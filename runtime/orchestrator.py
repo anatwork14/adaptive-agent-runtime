@@ -47,6 +47,7 @@ class Orchestrator:
         hard_project_usd: float = 500.0,
         visible_test_cmd: Optional[List[str]] = None,
         visible_test_harness: Optional[Dict[str, Any]] = None,
+        provider_execution_timeout_seconds: int = 180,
     ) -> None:
         self.event_store = event_store
         self.memory_lifecycle = memory_lifecycle
@@ -56,6 +57,9 @@ class Orchestrator:
         self.hard_task_usd = hard_task_usd
         self.visible_test_cmd = visible_test_cmd
         self.visible_test_harness = dict(visible_test_harness or {})
+        if provider_execution_timeout_seconds < 1:
+            raise ValueError("provider_execution_timeout_seconds must be positive")
+        self.provider_execution_timeout_seconds = provider_execution_timeout_seconds
 
         self.scheduler = TaskScheduler(event_store, project_id)
         self.budgets = BudgetAccountant(event_store, project_id, hard_task_usd, hard_project_usd)
@@ -258,6 +262,7 @@ class Orchestrator:
             agent_budget = AgentBudget(
                 max_usd=self.hard_task_usd,
                 max_tokens=task.token_budget,
+                timeout_seconds=self.provider_execution_timeout_seconds,
             )
             try:
                 agent_result: AgentRunResult = await agent.run(

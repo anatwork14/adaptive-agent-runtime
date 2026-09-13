@@ -109,6 +109,7 @@ def paired_benchmark(
             visible_test_harness=config.visible_test_harness or None,
             hard_project_usd=config.hard_project_usd,
             hidden_test_dir=hidden_test_dir,
+            provider_execution_timeout_seconds=config.provider_execution_timeout_seconds,
         )
         result = asyncio.run(
             runner.run(
@@ -201,6 +202,7 @@ def repeated_benchmark(
             visible_test_harness=config.visible_test_harness or None,
             hard_project_usd=config.hard_project_usd,
             hidden_test_dir=hidden_test_dir,
+            provider_execution_timeout_seconds=config.provider_execution_timeout_seconds,
         )
         result = asyncio.run(
             runner.run(

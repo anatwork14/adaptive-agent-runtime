@@ -386,6 +386,7 @@ class WorkerSessionManager:
         budget = AgentBudget(
             max_usd=self.app.config.hard_task_usd,
             max_tokens=packet.budget_remaining_tokens or 24000,
+            timeout_seconds=self.app.config.provider_execution_timeout_seconds,
         )
 
         try:

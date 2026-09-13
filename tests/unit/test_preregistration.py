@@ -87,6 +87,7 @@ def test_preregistration_digest_and_environment_fail_closed(tmp_path) -> None:
         visible_test_harness=HARNESS,
         hard_project_usd=10.0,
         hidden_test_dir=hidden,
+        provider_execution_timeout_seconds=600,
         repeats=6,
         bootstrap_samples=500,
         ci=0.95,
@@ -98,6 +99,7 @@ def test_preregistration_digest_and_environment_fail_closed(tmp_path) -> None:
     assert loaded.plan_digest == plan.plan_digest
     assert loaded.canonical_repo_commit == commit
     assert loaded.planned_comparisons == ["B3-B5", "B3-B7", "B5-B7"]
+    assert loaded.runtime.provider_execution_timeout_seconds == 600
 
     validate_execution_environment(
         loaded,
@@ -110,6 +112,7 @@ def test_preregistration_digest_and_environment_fail_closed(tmp_path) -> None:
         visible_test_harness=HARNESS,
         hard_project_usd=10.0,
         hidden_test_dir=hidden,
+        provider_execution_timeout_seconds=600,
     )
 
     (hidden / "test_hidden.py").write_text("assert False\n", encoding="utf-8")
@@ -125,6 +128,7 @@ def test_preregistration_digest_and_environment_fail_closed(tmp_path) -> None:
             visible_test_harness=HARNESS,
             hard_project_usd=10.0,
             hidden_test_dir=hidden,
+            provider_execution_timeout_seconds=600,
         )
 
     payload = json.loads(path.read_text(encoding="utf-8"))

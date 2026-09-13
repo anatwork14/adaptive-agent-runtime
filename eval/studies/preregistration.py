@@ -61,6 +61,7 @@ class StudyRuntimeContract(BaseModel):
     visible_test_cmd: list[str] = Field(default_factory=list)
     visible_test_harness: ExecutionHarness | None = None
     hard_project_usd: float = Field(ge=0.0)
+    provider_execution_timeout_seconds: int | None = Field(default=None, ge=1)
     verification_level: str = "V0"
     hidden_tests_required: bool = False
     hidden_tests_digest: str | None = None
@@ -125,6 +126,11 @@ def compute_plan_digest(plan: PreregisteredStudy | dict[str, Any]) -> str:
         payload = plan.model_dump(mode="json")
     else:
         payload = dict(plan)
+    runtime = payload.get("runtime")
+    if isinstance(runtime, dict) and runtime.get("provider_execution_timeout_seconds") is None:
+        # Preserve the digest of pre-timeout contracts that predate this
+        # optional field while binding the value whenever a campaign freezes it.
+        runtime.pop("provider_execution_timeout_seconds", None)
     payload["plan_digest"] = ""
     return hashlib.sha256(_canonical_json(payload)).hexdigest()
 
@@ -173,6 +179,7 @@ def create_preregistration(
     hard_project_usd: float,
     hidden_test_dir: str | Path | None = None,
     verification_level: str = "V0",
+    provider_execution_timeout_seconds: int | None = None,
     repeats: int = 6,
     bootstrap_samples: int = 2000,
     ci: float = 0.95,
@@ -228,6 +235,7 @@ def create_preregistration(
                 else None
             ),
             hard_project_usd=float(hard_project_usd),
+            provider_execution_timeout_seconds=provider_execution_timeout_seconds,
             verification_level=verification_level,
             hidden_tests_required=hidden_digest is not None,
             hidden_tests_digest=hidden_digest,
@@ -274,6 +282,7 @@ def validate_execution_environment(
     hard_project_usd: float,
     hidden_test_dir: str | Path | None,
     verification_level: str = "V0",
+    provider_execution_timeout_seconds: int | None = None,
 ) -> None:
     """Fail closed when the live execution contract differs from preregistration."""
     if plan.plan_digest != compute_plan_digest(plan):
@@ -301,12 +310,18 @@ def validate_execution_environment(
             else None
         ),
         "hard_project_usd": float(hard_project_usd),
+        "provider_execution_timeout_seconds": provider_execution_timeout_seconds,
         "verification_level": verification_level,
         "hidden_tests_required": live_hidden is not None,
         "hidden_tests_digest": live_hidden,
     }
     expected = plan.runtime.model_dump(mode="json")
     expected.pop("agent_profile", None)
+    if plan.runtime.provider_execution_timeout_seconds is None:
+        # Legacy plans predate the explicit provider timeout. Their historical
+        # digest and runtime contract remain valid; V4 plans set this field and
+        # therefore require an exact live value.
+        expected.pop("provider_execution_timeout_seconds", None)
     mismatches = [key for key in sorted(expected) if expected[key] != actual.get(key)]
     if mismatches:
         details = ", ".join(

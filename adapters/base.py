@@ -171,6 +171,8 @@ def sanitize_failure_diagnostics(result: "AgentRunResult") -> Dict[str, Any]:
         "failure_classification": classification,
         "provider_returncode": returncode,
         "provider_outcome": result.provider_outcome,
+        "configured_timeout_seconds": result.configured_timeout_seconds,
+        "elapsed_seconds": result.elapsed_seconds,
         "stdout_tail": redact_text_secrets(result.stdout_tail)[-_STDOUT_TAIL_LIMIT:],
         "stderr_tail": redact_text_secrets(result.stderr_tail)[-_STDERR_TAIL_LIMIT:],
         "provider_lifecycle": result.provider_lifecycle,
@@ -199,6 +201,8 @@ class AgentRunResult(BaseModel):
     failure_classification: Optional[str] = None
     provider_returncode: Optional[int] = None
     provider_outcome: Optional[str] = None
+    configured_timeout_seconds: Optional[int] = None
+    elapsed_seconds: Optional[float] = None
     stdout_tail: str = ""
     stderr_tail: str = ""
     provider_lifecycle: Dict[str, str] = Field(default_factory=dict)

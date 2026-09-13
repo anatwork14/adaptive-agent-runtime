@@ -205,8 +205,11 @@ def run_provider_probe(
     profile: AgentProfile,
     *,
     output_path: Path | None = None,
+    timeout_seconds: int = 45,
 ) -> dict[str, Any]:
     """Run one isolated active probe and persist its non-benchmark result."""
+    if timeout_seconds < 1:
+        raise ValueError("provider probe timeout_seconds must be positive")
     started_at = datetime.now(timezone.utc).isoformat()
     passive = passive_provider_doctor(profile)
     active: dict[str, Any]
@@ -229,7 +232,11 @@ def run_provider_probe(
                     adapter.run_prompt(
                         prompt=SMOKE_PROMPT,
                         workspace=workspace,
-                        budget=AgentBudget(max_usd=0.25, max_tokens=1000, timeout_seconds=45),
+                        budget=AgentBudget(
+                            max_usd=0.25,
+                            max_tokens=1000,
+                            timeout_seconds=timeout_seconds,
+                        ),
                     )
                 )
                 marker_seen = "ARC_PROVIDER_SMOKE_OK" in (result.stdout_tail + result.summary)
@@ -253,6 +260,7 @@ def run_provider_probe(
         "passive": asdict(passive),
         "active": active,
         "active_probe": True,
+        "configured_timeout_seconds": timeout_seconds,
         "benchmark_context": False,
         "scientific_evidence": False,
         "result_directory_policy": "outside benchmark result directories",

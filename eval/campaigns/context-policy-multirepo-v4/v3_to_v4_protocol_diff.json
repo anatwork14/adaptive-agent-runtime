@@ -1,0 +1,49 @@
+{
+  "schema": "arc-v3-to-v4-protocol-diff-v1",
+  "parent_campaign": "context-policy-multirepo-v3",
+  "campaign": "context-policy-multirepo-v4",
+  "scientific_core_preserved": true,
+  "treatment_neutral": true,
+  "changes": [
+    {
+      "path": "shared_protocol.provider_execution_timeout_seconds",
+      "v3": 180,
+      "v4": 600,
+      "reason": "avoid artificial right censoring of provider turns after V3 CLI_TIMEOUT"
+    },
+    {
+      "path": "provider_execution_policy.timeout_seconds",
+      "v3": 180,
+      "v4": 600,
+      "reason": "make the global provider timeout explicit and self-verifying"
+    },
+    {
+      "path": "provider_runtime.provider_execution_timeout_seconds",
+      "v3": 180,
+      "v4": 600,
+      "reason": "record the operational provider timeout beside the frozen CLI identity"
+    }
+  ],
+  "preserved": [
+    "repository commits",
+    "task sequence T001 -> T002 -> T003",
+    "hidden-test digests",
+    "B3/B5/B7 treatment definitions",
+    "repeats and bootstrap settings",
+    "budgets",
+    "provider, model, and reasoning effort",
+    "Docker image identities and 180-second test harnesses",
+    "verification contract",
+    "exclusions"
+  ],
+  "forbidden_changes": [
+    "per-treatment timeout",
+    "per-task timeout override",
+    "per-repetition timeout override",
+    "dynamic timeout extension",
+    "automatic retry",
+    "hidden-test exposure",
+    "canonical V4 freeze",
+    "V4/a001 execution"
+  ]
+}

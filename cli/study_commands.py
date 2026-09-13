@@ -216,6 +216,8 @@ def register_study_commands(benchmark_app: typer.Typer) -> None:
                 hard_project_usd=config.hard_project_usd,
                 hidden_test_dir=hidden_test_dir,
                 verification_level=plan.runtime.verification_level,
+                provider_execution_timeout_seconds=plan.runtime.provider_execution_timeout_seconds
+                or config.provider_execution_timeout_seconds,
             )
 
             runner = RepeatedPairedBenchmarkRunner(
@@ -228,6 +230,8 @@ def register_study_commands(benchmark_app: typer.Typer) -> None:
                 hard_project_usd=config.hard_project_usd,
                 hidden_test_dir=hidden_test_dir,
                 hidden_tests_required=plan.runtime.hidden_tests_required,
+                provider_execution_timeout_seconds=plan.runtime.provider_execution_timeout_seconds
+                or config.provider_execution_timeout_seconds,
             )
             executed_study_id = f"{plan.study_id}-{attempt_id}"
             result = asyncio.run(

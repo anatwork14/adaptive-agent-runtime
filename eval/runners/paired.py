@@ -136,6 +136,7 @@ class IsolatedPairedBenchmarkRunner:
         hard_project_usd: float = 500.0,
         hidden_test_dir: str | Path | None = None,
         hidden_tests_required: bool | None = None,
+        provider_execution_timeout_seconds: int = 180,
     ) -> None:
         self.source_repo = Path(source_repo).resolve()
         self.output_root = (
@@ -158,6 +159,9 @@ class IsolatedPairedBenchmarkRunner:
             if hidden_tests_required is not None
             else self.hidden_test_dir is not None
         )
+        if provider_execution_timeout_seconds < 1:
+            raise ValueError("provider_execution_timeout_seconds must be positive")
+        self.provider_execution_timeout_seconds = provider_execution_timeout_seconds
         self.output_root.mkdir(parents=True, exist_ok=True)
         self.workspace_root.mkdir(parents=True, exist_ok=True)
 
@@ -325,6 +329,7 @@ class IsolatedPairedBenchmarkRunner:
                     hard_project_usd=self.hard_project_usd,
                     visible_test_cmd=self.visible_test_cmd or None,
                     visible_test_harness=self.visible_test_harness or None,
+                    provider_execution_timeout_seconds=self.provider_execution_timeout_seconds,
                 )
                 self._materialize_manifest(orchestrator, manifest)
 

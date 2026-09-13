@@ -226,6 +226,14 @@ class SubprocessCodingAgent:
         arrive. ``cancel_event`` lets a supervisor terminate the live provider
         without treating cancellation as a successful patch or provider failure.
         """
+        loop = asyncio.get_running_loop()
+        started_monotonic = loop.time()
+
+        def build_result(**kwargs: object) -> AgentRunResult:
+            kwargs.setdefault("configured_timeout_seconds", budget.timeout_seconds)
+            kwargs.setdefault("elapsed_seconds", max(0.0, loop.time() - started_monotonic))
+            return AgentRunResult(**kwargs)
+
         command = self.build_command()
         trace_command = redact_command(command)
         structured_output = self.structured_output_mode(command)
@@ -253,7 +261,7 @@ class SubprocessCodingAgent:
         except AgentAdapterUnavailable as exc:
             detail = redact_text_secrets(str(exc))
             record_event("provider.failed")
-            return AgentRunResult(
+            return build_result(
                 status="failed",
                 summary=detail,
                 failure_classification="CLI_NOT_FOUND",
@@ -277,7 +285,7 @@ class SubprocessCodingAgent:
 
         if cancel_event is not None and cancel_event.is_set():
             record_event("provider.failed")
-            return AgentRunResult(
+            return build_result(
                 status="cancelled",
                 summary=f"{self.name} turn cancelled before launch",
                 failure_classification="CLI_CANCELLED",
@@ -309,7 +317,7 @@ class SubprocessCodingAgent:
         except FileNotFoundError as exc:
             detail = redact_text_secrets(str(exc))
             record_event("provider.failed")
-            return AgentRunResult(
+            return build_result(
                 status="failed",
                 summary=f"{self.name} could not be launched: {detail}",
                 failure_classification="CLI_NOT_FOUND",
@@ -330,7 +338,7 @@ class SubprocessCodingAgent:
         except OSError as exc:
             detail = redact_text_secrets(str(exc))
             record_event("provider.failed")
-            return AgentRunResult(
+            return build_result(
                 status="failed",
                 summary=f"{self.name} could not be launched: {detail}",
                 failure_classification="UNKNOWN_PROVIDER_FAILURE",
@@ -448,7 +456,7 @@ class SubprocessCodingAgent:
 
             if outcome == "cancelled":
                 record_event("provider.failed")
-                return AgentRunResult(
+                return build_result(
                     status="cancelled",
                     summary=f"{self.name} turn cancelled by operator",
                     failure_classification="CLI_CANCELLED",
@@ -471,7 +479,7 @@ class SubprocessCodingAgent:
                 )
             if outcome == "timeout":
                 record_event("provider.failed")
-                return AgentRunResult(
+                return build_result(
                     status="failed",
                     summary=f"{self.name} timed out after {budget.timeout_seconds}s",
                     failure_classification="CLI_TIMEOUT",
@@ -506,7 +514,7 @@ class SubprocessCodingAgent:
                         stdout_tail=stdout_tail,
                         stderr_tail=stderr_tail,
                     )
-                return AgentRunResult(
+                return build_result(
                     status="failed",
                     summary=f"{self.name} exited with code {process.returncode}: {stderr_tail[-4000:]}",
                     failure_classification=classification,
@@ -540,7 +548,7 @@ class SubprocessCodingAgent:
                         stderr_tail=stderr_tail,
                     )
                 )
-                return AgentRunResult(
+                return build_result(
                     status="failed",
                     summary=f"{self.name} emitted a provider error event",
                     failure_classification=classification,
@@ -566,7 +574,7 @@ class SubprocessCodingAgent:
                 item.get("event") == "provider.completed" for item in provider_events
             ):
                 record_event("provider.failed")
-                return AgentRunResult(
+                return build_result(
                     status="failed",
                     summary=(
                         f"{self.name} exited without a documented structured provider "
@@ -592,7 +600,7 @@ class SubprocessCodingAgent:
                 )
 
             record_event("provider.completed")
-            return AgentRunResult(
+            return build_result(
                 status="completed",
                 patch_ref="WORKTREE",
                 diff="",

@@ -67,6 +67,7 @@ class ArcConfig(BaseModel):
     default_agent: str = "mock"
     hard_task_usd: float = 5.0
     hard_project_usd: float = 500.0
+    provider_execution_timeout_seconds: int = Field(default=180, ge=1)
     visible_test_cmd: List[str] = Field(default_factory=list)
     visible_test_harness: Dict[str, Any] = Field(default_factory=dict)
     orchestration_max_parallel: int = Field(default=3, ge=1, le=32)

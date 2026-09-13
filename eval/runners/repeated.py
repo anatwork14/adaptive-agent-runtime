@@ -320,6 +320,7 @@ class RepeatedPairedBenchmarkRunner:
         hard_project_usd: float = 500.0,
         hidden_test_dir: str | Path | None = None,
         hidden_tests_required: bool | None = None,
+        provider_execution_timeout_seconds: int = 180,
     ) -> None:
         self.source_repo = Path(source_repo).resolve()
         self.output_root = (
@@ -342,6 +343,9 @@ class RepeatedPairedBenchmarkRunner:
             if hidden_tests_required is not None
             else self.hidden_test_dir is not None
         )
+        if provider_execution_timeout_seconds < 1:
+            raise ValueError("provider_execution_timeout_seconds must be positive")
+        self.provider_execution_timeout_seconds = provider_execution_timeout_seconds
         self.output_root.mkdir(parents=True, exist_ok=True)
         self.workspace_root.mkdir(parents=True, exist_ok=True)
 
@@ -445,6 +449,7 @@ class RepeatedPairedBenchmarkRunner:
                     hard_project_usd=self.hard_project_usd,
                     hidden_test_dir=self.hidden_test_dir,
                     hidden_tests_required=self.hidden_tests_required,
+                    provider_execution_timeout_seconds=self.provider_execution_timeout_seconds,
                 )
                 repeat_result = await runner.run(
                     repeated_manifests,
