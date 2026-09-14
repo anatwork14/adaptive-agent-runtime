@@ -1,0 +1,29 @@
+{
+  "schema_version": "arc-v6-capacity-forecast-v1",
+  "campaign_id": "context-policy-multirepo-v6",
+  "source_campaign": "context-policy-multirepo-v5",
+  "source_result": "/Users/teobun/arc-study/results/context-policy-multirepo-v5/a001",
+  "source_measurements": 18,
+  "source_measurements_are_v6_evidence": false,
+  "failure_acknowledged": "Click / r003 / B7 / T001 after subscription usage allowance exhaustion",
+  "provider": "codex",
+  "auth_mode": "chatgpt_subscription",
+  "model": "gpt-5.5",
+  "observed": {
+    "provider_tokens": {"min": 358673, "median": 634182.5, "mean": 628283.6666666666, "p95_sample_order_statistic": 899455, "max": 967034},
+    "context_tokens": {"min": 6167, "median": 6210, "mean": 6268.9444444444, "max": 6557},
+    "end_to_end_latency_ms": {"min": 106307.12391698034, "median": 158437.46685399674, "mean": 176546.70487027522, "p95_sample_order_statistic": 221809.93233300978, "max": 490393.1703749986},
+    "cost_observed": false,
+    "cost_usd_values": []
+  },
+  "forecast": {
+    "planned_task_count": 162,
+    "mean_provider_tokens_total": 101781954,
+    "mean_serial_hours": 7.944601719162385,
+    "p95_per_task_serial_hours": 9.981446954985442,
+    "arithmetic_task_budget_envelope_usd": 324.0,
+    "project_cap_usd": 350.0,
+    "remaining_subscription_quota": null
+  },
+  "interpretation": "Operational forecasting only; V5 rows are not V6 confirmatory observations and subscription capacity is not converted to API billing."
+}

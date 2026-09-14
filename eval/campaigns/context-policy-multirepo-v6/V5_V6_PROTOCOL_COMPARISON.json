@@ -1,0 +1,32 @@
+{
+  "schema_version": "arc-v5-v6-protocol-comparison-v1",
+  "parent_campaign": "context-policy-multirepo-v5",
+  "campaign": "context-policy-multirepo-v6",
+  "scientific_core_preserved": true,
+  "scientific_design_change": false,
+  "provider_changed": false,
+  "model_changed": false,
+  "reasoning_changed": false,
+  "auth_mode_changed": false,
+  "provider": "codex",
+  "model": "gpt-5.5",
+  "reasoning": "high",
+  "auth_mode": "chatgpt_subscription",
+  "provider_timeout_seconds": 600,
+  "repeats": 6,
+  "task_budget_usd": 2.0,
+  "project_budget_usd": 350.0,
+  "repositories": ["click", "httpx", "python-dotenv"],
+  "baselines": ["B3", "B5", "B7"],
+  "apparatus_changes": [
+    "subscription-capacity readiness artifact",
+    "canonical subscription provider-home/config stability evidence",
+    "Codex child-process environment excludes credential and endpoint override variables",
+    "one disposable non-benchmark provider qualification"
+  ],
+  "v5_data_usage": ["runtime forecasting", "token forecasting", "capacity-risk forecasting", "apparatus evidence"],
+  "v5_data_is_v6_confirmatory_evidence": false,
+  "benchmark_provider_execution": false,
+  "v6_freeze_run": false,
+  "v6_a001_created": false
+}

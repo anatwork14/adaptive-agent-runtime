@@ -1,0 +1,78 @@
+{
+  "all_checks_passed": true,
+  "comparisons": [
+    {
+      "baseline": "B3",
+      "equal": true,
+      "repository": "click",
+      "unexpected_differences": [],
+      "v5_normalized_sha256": "89cf1e6a3abce56fadddb7d98c82beec530e33dda3a28c93001110346feba025",
+      "v6_normalized_sha256": "89cf1e6a3abce56fadddb7d98c82beec530e33dda3a28c93001110346feba025"
+    },
+    {
+      "baseline": "B5",
+      "equal": true,
+      "repository": "click",
+      "unexpected_differences": [],
+      "v5_normalized_sha256": "c342640208f30be5c24810a2e2dd2aee9cfef61c75d1b08e4192f52f4e3670b6",
+      "v6_normalized_sha256": "c342640208f30be5c24810a2e2dd2aee9cfef61c75d1b08e4192f52f4e3670b6"
+    },
+    {
+      "baseline": "B7",
+      "equal": true,
+      "repository": "click",
+      "unexpected_differences": [],
+      "v5_normalized_sha256": "8beb2ffa77ab4145715817e7e622b94b3044f6f3d866c6a4c1cc1881bdc7692f",
+      "v6_normalized_sha256": "8beb2ffa77ab4145715817e7e622b94b3044f6f3d866c6a4c1cc1881bdc7692f"
+    },
+    {
+      "baseline": "B3",
+      "equal": true,
+      "repository": "httpx",
+      "unexpected_differences": [],
+      "v5_normalized_sha256": "fff724b504c47265a4fe4224b6d5a3cb0425f906a6f523bbc057dad42472fba0",
+      "v6_normalized_sha256": "fff724b504c47265a4fe4224b6d5a3cb0425f906a6f523bbc057dad42472fba0"
+    },
+    {
+      "baseline": "B5",
+      "equal": true,
+      "repository": "httpx",
+      "unexpected_differences": [],
+      "v5_normalized_sha256": "48ef4c630af1367fd0dcbd7f815984992fb5b9e45c82738a789cca65c0e54519",
+      "v6_normalized_sha256": "48ef4c630af1367fd0dcbd7f815984992fb5b9e45c82738a789cca65c0e54519"
+    },
+    {
+      "baseline": "B7",
+      "equal": true,
+      "repository": "httpx",
+      "unexpected_differences": [],
+      "v5_normalized_sha256": "28d55326710c2ae77353cbc65d98ac30d0d495fbb83709b87c868c3a98319172",
+      "v6_normalized_sha256": "28d55326710c2ae77353cbc65d98ac30d0d495fbb83709b87c868c3a98319172"
+    },
+    {
+      "baseline": "B3",
+      "equal": true,
+      "repository": "python-dotenv",
+      "unexpected_differences": [],
+      "v5_normalized_sha256": "0ae4a38268f87e27b1ee17caaeebf95578254b413ce1e96069b4be429920b11e",
+      "v6_normalized_sha256": "0ae4a38268f87e27b1ee17caaeebf95578254b413ce1e96069b4be429920b11e"
+    },
+    {
+      "baseline": "B5",
+      "equal": true,
+      "repository": "python-dotenv",
+      "unexpected_differences": [],
+      "v5_normalized_sha256": "e3f1f70324d2dfba3c175b91b3fd09c6b907e5f8e460877c7176df0daad98100",
+      "v6_normalized_sha256": "e3f1f70324d2dfba3c175b91b3fd09c6b907e5f8e460877c7176df0daad98100"
+    },
+    {
+      "baseline": "B7",
+      "equal": true,
+      "repository": "python-dotenv",
+      "unexpected_differences": [],
+      "v5_normalized_sha256": "7dcab91a0b079584e6e27b358b9a0a137e96020115076e5f707971cd8ced526c",
+      "v6_normalized_sha256": "7dcab91a0b079584e6e27b358b9a0a137e96020115076e5f707971cd8ced526c"
+    }
+  ],
+  "schema_version": "arc-v5-v6-manifest-comparisons-v1"
+}

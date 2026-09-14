@@ -1,0 +1,14 @@
+{
+  "schema_version": "arc-v6-provider-capacity-readiness-v1",
+  "provider": "codex",
+  "auth_mode": "chatgpt_subscription",
+  "model": "gpt-5.5",
+  "authenticated": true,
+  "non_benchmark_probe_passed": true,
+  "previous_v5_usage_limit_failure_acknowledged": true,
+  "campaign_task_count": 162,
+  "capacity_risk_reviewed": true,
+  "remaining_quota": null,
+  "scientific_evidence": false,
+  "benchmark_context": false
+}

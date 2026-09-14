@@ -52,8 +52,13 @@ class CodexAgentAdapter(SubprocessCodingAgent):
     def execution_environment(self) -> dict[str, str]:
         """Use a disposable provider home for each real Codex turn."""
         codex_home = self._active_invocation_home or self.codex_home
+        # An explicit Codex home is the ARC subscription-backed path. Keep its
+        # child process isolated from host API credentials and endpoint
+        # overrides; generic Codex profiles without a home retain the legacy
+        # provider environment policy.
+        environment_provider = "codex_subscription_home" if self.codex_home else self.provider
         return build_execution_environment(
-            provider=self.provider,
+            provider=environment_provider,
             extra_names=self.env_allow,
             overrides={"CODEX_HOME": codex_home} if codex_home else None,
         )

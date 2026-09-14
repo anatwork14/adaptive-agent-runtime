@@ -126,7 +126,7 @@ def _canonical_json(payload: Any) -> bytes:
 
 def compute_plan_digest(plan: PreregisteredStudy | dict[str, Any]) -> str:
     if isinstance(plan, PreregisteredStudy):
-        payload = plan.model_dump(mode="json")
+        payload = plan.model_dump(mode="json", exclude_unset=True)
     else:
         payload = dict(plan)
     runtime = payload.get("runtime")
@@ -267,7 +267,11 @@ def save_preregistration(path: str | Path, plan: PreregisteredStudy) -> Path:
     target = Path(path)
     target.parent.mkdir(parents=True, exist_ok=True)
     target.write_text(
-        json.dumps(plan.model_dump(mode="json"), indent=2, sort_keys=True) + "\n",
+        # Persist the same explicitly-set field surface used by
+        # compute_plan_digest(). This keeps a saved plan self-verifying after
+        # reload instead of reintroducing unset Pydantic defaults.
+        json.dumps(plan.model_dump(mode="json", exclude_unset=True), indent=2, sort_keys=True)
+        + "\n",
         encoding="utf-8",
     )
     return target
