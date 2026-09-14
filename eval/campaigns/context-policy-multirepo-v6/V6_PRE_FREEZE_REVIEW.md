@@ -33,11 +33,14 @@ require candidate changes before they can pass.
 
 ## Git state
 
-ARC has a pre-existing user modification in `eval/studies/preregistration.py`.
-It was preserved. V6 additionally hardens saved preregistration serialization
+The pre-qualification dirty-state evidence records a pre-existing user
+modification in `eval/studies/preregistration.py`; it was preserved rather than
+silently reverted. V6 additionally hardens saved preregistration serialization
 to keep plan digests self-verifying and narrows explicit-home Codex child
-processes to the subscription-home environment policy. Because the worktree is
-not clean, no V6 runtime lock or canonical freeze was created.
+processes to the subscription-home environment policy. Those intended changes
+are now committed in the final apparatus commit, and the ARC worktree is clean.
+The final apparatus commit is recorded in the external review evidence; no V6
+runtime lock or canonical freeze was created.
 
 ## Required final state
 
