@@ -1,6 +1,7 @@
 """Task DAG Scheduler."""
 
 from typing import List, Optional
+
 from state.events import EventStore
 from state.models import TaskState, TaskStatus
 from state.projection import TaskDAGProjector

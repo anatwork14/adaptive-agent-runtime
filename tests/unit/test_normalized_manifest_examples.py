@@ -8,7 +8,6 @@ from eval.comparison import validate_comparable_manifests
 from eval.io import load_manifest
 
 
-
 def test_packaged_normalized_manifests_are_pairwise_comparable() -> None:
     root = Path(__file__).resolve().parents[2]
     examples = root / "eval" / "examples"

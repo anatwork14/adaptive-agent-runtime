@@ -4,7 +4,6 @@ from typer.testing import CliRunner
 
 from cli.bootstrap import app
 
-
 runner = CliRunner()
 _ANSI_ESCAPE = re.compile(r"\x1b\[[0-?]*[ -/]*[@-~]")
 _BOX_CHARS = str.maketrans({char: " " for char in "│╭╮╰╯─"})

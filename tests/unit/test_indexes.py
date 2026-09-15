@@ -1,6 +1,7 @@
 """Unit tests for indexes (Lexical FTS5, Vector, Symbol)."""
 
 import sqlite3
+
 from indexes.lexical import LexicalIndex
 from indexes.symbols import SymbolIndex
 from indexes.vector import VectorIndex

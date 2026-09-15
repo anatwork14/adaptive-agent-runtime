@@ -6,7 +6,7 @@ Verify that critical architectural decisions and procedures remain retrievable.
 """
 
 import sqlite3
-import pytest
+
 from memory.lifecycle import MemoryLifecycle
 from memory.models import (
     Memory,

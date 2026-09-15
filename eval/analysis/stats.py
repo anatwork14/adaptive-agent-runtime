@@ -1,7 +1,8 @@
 """Statistical analysis utilities: Bootstrap confidence intervals and paired comparisons."""
 
 from dataclasses import dataclass
-from typing import List, Tuple
+from typing import List
+
 import numpy as np
 
 
@@ -54,5 +55,5 @@ class StatisticalAnalyzer:
         n_bootstraps: int = 1000,
     ) -> BootstrapResult:
         """Compute bootstrap CI for paired difference (treatment - control)."""
-        diffs = [t - c for t, c in zip(treatment, control)]
+        diffs = [t - c for t, c in zip(treatment, control, strict=True)]
         return StatisticalAnalyzer.bootstrap_ci(diffs, n_bootstraps=n_bootstraps)

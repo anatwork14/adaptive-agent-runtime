@@ -99,7 +99,7 @@ def test_gate_rejects_stale_patch_before_integration(tmp_path):
 def test_gate_rejects_security_violation_in_v2(tmp_path):
     repo, candidate_sha, diff = _repo_with_candidate(
         tmp_path,
-        'api_key = "ghp_123456789012345678901234567890123456"\n',
+        'api_key = "GITHUB_TOKEN_TEST_PLACEHOLDER"\n',
     )
     store = EventStore(tmp_path / "gate_sec.db")
     gate = IntegrationGate(store, "p_gate", repo, verification_level="V2")

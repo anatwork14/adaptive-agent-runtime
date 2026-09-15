@@ -1,6 +1,7 @@
 """Candidate scoring and hard filtering for memory retrieval."""
 
-from typing import Dict, List, Optional
+from typing import Dict, Optional
+
 from context.request import ContextRequest
 from memory.models import Memory, MemoryStatus, MemoryType
 

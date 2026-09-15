@@ -18,7 +18,6 @@ from eval.studies.preregistration import (
     compute_plan_digest,
 )
 
-
 BASELINES = ("B3", "B5", "B7")
 
 

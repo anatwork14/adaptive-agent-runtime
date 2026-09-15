@@ -2,9 +2,8 @@
 
 from __future__ import annotations
 
-from state.models import GateResult
-
 from application.sessions import WorkerSession, WorkerSessionManager
+from state.models import GateResult
 
 
 class RuntimeWorkerSessionManager(WorkerSessionManager):

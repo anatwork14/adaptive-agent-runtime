@@ -27,6 +27,9 @@ if str(ARC_REPO_ROOT) not in sys.path:
 if str(CAMPAIGN_DIR) not in sys.path:
     sys.path.insert(0, str(CAMPAIGN_DIR))
 
+from runtime_lock import freeze as freeze_runtime_lock  # noqa: E402
+from runtime_lock import verify as verify_runtime_lock  # noqa: E402
+
 from application.config import AgentProfile, ConfigStore  # noqa: E402
 from eval.io import load_manifest  # noqa: E402
 from eval.studies.meta import (  # noqa: E402
@@ -38,8 +41,6 @@ from eval.studies.preregistration import (  # noqa: E402
     save_preregistration,
     tree_digest,
 )
-from runtime_lock import freeze as freeze_runtime_lock  # noqa: E402
-from runtime_lock import verify as verify_runtime_lock  # noqa: E402
 
 BASELINES = ("b3", "b5", "b7")
 REPOSITORY_ORDER = ("click", "httpx", "python-dotenv")

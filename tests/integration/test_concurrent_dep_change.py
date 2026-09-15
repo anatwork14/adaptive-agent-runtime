@@ -8,7 +8,7 @@ Staleness detector must flag the submission as stale / requiring revalidation.
 """
 
 import sqlite3
-import pytest
+
 from memory.lifecycle import MemoryLifecycle
 from runtime.orchestrator import Orchestrator
 from state.events import EventStore

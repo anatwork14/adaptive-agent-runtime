@@ -1,8 +1,8 @@
 """Deterministic event replay engine."""
 
-from typing import Dict, List, Optional
+from typing import Optional
+
 from state.events import EventStore
-from state.models import Event
 from state.projection import DeterministicStateProjection
 
 

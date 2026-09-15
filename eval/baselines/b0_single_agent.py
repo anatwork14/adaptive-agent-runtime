@@ -1,7 +1,7 @@
 """Baseline B0: Single agent, full uninterrupted session."""
 
 from pathlib import Path
-from typing import Dict
+
 from adapters.base import AgentAdapter, AgentBudget, AgentRunResult
 from context.compiler import ContextPacket
 

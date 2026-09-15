@@ -59,7 +59,7 @@ def validate_comparable_manifests(a: BenchmarkManifest, b: BenchmarkManifest) ->
     if ordered_ids_a != ordered_ids_b:
         errors.append("ordered task IDs differ")
     else:
-        for left, right in zip(a.tasks, b.tasks):
+        for left, right in zip(a.tasks, b.tasks, strict=True):
             fields = (
                 "goal",
                 "task_type",

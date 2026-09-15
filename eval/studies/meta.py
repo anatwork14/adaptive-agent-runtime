@@ -5,7 +5,6 @@ from __future__ import annotations
 import csv
 import hashlib
 import json
-import random
 from dataclasses import asdict, dataclass
 from datetime import datetime, timezone
 from pathlib import Path
@@ -99,7 +98,6 @@ def compute_meta_plan_digest(plan: MetaStudyPlan | dict[str, Any]) -> str:
 
 
 def _repo_ref(plan: PreregisteredStudy) -> RepositoryPlanRef:
-    first = plan.manifests[0]
     hard_task_values = {manifest.hard_task_usd for manifest in plan.manifests}
     context_values = {manifest.context_token_budget for manifest in plan.manifests}
     if len(hard_task_values) != 1 or None in hard_task_values:
@@ -392,7 +390,7 @@ def aggregate_meta_study(
                     random_seed=plan.random_seed + pair_index * 100 + metric_index,
                 )
                 metrics[metric] = summary
-                for study, values in zip(studies, vectors):
+                for study, values in zip(studies, vectors, strict=True):
                     if not values:
                         continue
                     repo_mean = float(mean(values))

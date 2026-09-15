@@ -20,7 +20,6 @@ from textual.widgets import Footer, Input, RichLog, Static
 from application.session_app import SessionArcApplication
 from application.sessions import SessionStatus, WorkerSession
 
-
 HELP = """[bold cyan]ARC commands[/bold cyan]
 [cyan]/help[/cyan]                         show this help
 [cyan]/status[/cyan]                       project + fleet summary

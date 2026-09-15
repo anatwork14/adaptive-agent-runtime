@@ -1,8 +1,9 @@
 """Unit tests for authoritative EventStore."""
 
 import pytest
+
 from state.events import EventStore
-from state.hashing import canonical_json, compute_content_hash, compute_hash
+from state.hashing import compute_content_hash
 
 
 def test_monotonic_event_ids(tmp_path):

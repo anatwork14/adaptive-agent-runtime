@@ -17,7 +17,6 @@ from eval.studies.meta import (
     save_meta_preregistration,
 )
 
-
 console = Console()
 
 

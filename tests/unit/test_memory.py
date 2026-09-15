@@ -1,7 +1,9 @@
 """Unit tests for the Adaptive Memory Plane."""
 
 import sqlite3
+
 import pytest
+
 from memory.conflicts import ConflictClass, ConflictDetector
 from memory.lifecycle import MemoryLifecycle
 from memory.models import (
@@ -11,7 +13,6 @@ from memory.models import (
     MemoryType,
 )
 from memory.provenance import ProvenanceVerifier
-from state.models import Event
 
 
 def test_memory_without_source_event_rejected():
@@ -69,13 +70,6 @@ def test_temporal_validity_and_supersession(tmp_path):
         source_events=[200],
     )
 
-    ev = Event(
-        id=200,
-        actor="orch",
-        kind="project.spec_updated",
-        project_id="p1",
-        content_hash="abc",
-    )
     # Manually check conflict & supersession
     conflicts = ConflictDetector.detect_conflicts(fact2, [fact1])
     assert len(conflicts) == 1

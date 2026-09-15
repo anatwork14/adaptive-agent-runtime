@@ -1,7 +1,8 @@
 """Baseline B5: Vector top-k memory retrieval without versioning or supersession awareness."""
 
 from pathlib import Path
-from typing import Dict, List
+from typing import Dict
+
 from adapters.base import AgentAdapter, AgentBudget, AgentRunResult
 from context.compiler import ContextPacket
 from indexes.vector import VectorIndex

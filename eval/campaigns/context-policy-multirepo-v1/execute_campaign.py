@@ -31,6 +31,8 @@ if str(ARC_REPO_ROOT) not in sys.path:
 if str(CAMPAIGN_DIR) not in sys.path:
     sys.path.insert(0, str(CAMPAIGN_DIR))
 
+from runtime_lock import verify as verify_runtime_lock  # noqa: E402
+
 from application.auth import auth_status  # noqa: E402
 from application.config import ConfigStore  # noqa: E402
 from eval.studies.meta import load_meta_preregistration  # noqa: E402
@@ -39,7 +41,6 @@ from eval.studies.preregistration import (  # noqa: E402
     tree_digest,
     validate_execution_environment,
 )
-from runtime_lock import verify as verify_runtime_lock  # noqa: E402
 
 SCHEMA = "arc-campaign-execution-v1"
 REPOSITORY_ORDER = ("click", "httpx", "python-dotenv")

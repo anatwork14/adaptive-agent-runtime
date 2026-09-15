@@ -1,9 +1,9 @@
 """Task execution checkpoints for rollback and side-effect recovery."""
 
-import json
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Optional
+
 from pydantic import BaseModel, Field
 
 

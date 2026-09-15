@@ -5,7 +5,6 @@ from pathlib import Path
 from eval.comparison import validate_comparable_manifests
 from eval.io import load_manifest
 
-
 ROOT = Path(__file__).resolve().parents[2]
 CAMPAIGN = ROOT / "eval" / "campaigns" / "context-policy-multirepo-v1"
 EXPECTED = {

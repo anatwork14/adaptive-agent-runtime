@@ -1,7 +1,7 @@
 """Unit tests for Context Control Plane and ContextCompiler."""
 
 import sqlite3
-from context.allocator import BudgetAllocator
+
 from context.compiler import ContextCompiler
 from context.digest import compute_context_digest
 from context.request import ContextRequest
@@ -188,7 +188,7 @@ def test_staleness_detector_identifies_intervening_changes(tmp_path):
     assert assessment_clean.staleness_score == 0.0
 
     # Add 5 events modifying dependency and declared files
-    for i in range(5):
+    for _i in range(5):
         store.append(
             actor="orch",
             kind="task.updated",

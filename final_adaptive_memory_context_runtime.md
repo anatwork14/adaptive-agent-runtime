@@ -7,6 +7,22 @@
 **Implementation target:** Python 3.11+, Linux/Docker, local or API-backed coding agents  
 **Recommended development style:** build deterministic substrate first; learned policies only after the substrate produces replayable traces
 
+## Software release and research status
+
+This document describes the ARC architecture and research direction. The corresponding software release is `0.16.0`; it is an experimental/pre-alpha apparatus release, not a claim of validated scientific superiority.
+
+| Campaign or apparatus stage | Status |
+|---|---|
+| V1 | CLOSED |
+| V2 | CLOSED |
+| V3 | CLOSED |
+| V4 | CLOSED |
+| V5 | CLOSED |
+| V6 apparatus qualification | COMPLETED |
+| V7 empirical attempt | INCOMPLETE / FORENSIC CLOSURE PENDING |
+
+V7/a001 execution previously occurred on a remote execution environment. The campaign is incomplete. Original remote forensic evidence is currently unavailable locally. No final forensic classification has been independently completed from source evidence. No retry or V7/a002 has been performed. No V7 scientific conclusion is claimed.
+
 ---
 
 # 0. Executive Decision

@@ -7,7 +7,6 @@ import pytest
 
 from application.config import AgentProfile, ConfigStore
 
-
 ROOT = Path(__file__).resolve().parents[2]
 RUNTIME_LOCK_PATH = (
     ROOT

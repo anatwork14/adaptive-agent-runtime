@@ -16,7 +16,6 @@ from state.events import EventStore
 from state.models import ProjectState, TaskState
 
 
-
 def _state() -> tuple[ProjectState, TaskState]:
     return (
         ProjectState(project_id="p1", constraints=["preserve-api"]),

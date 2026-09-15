@@ -7,12 +7,11 @@ Attempt 2 context compilation includes the failure memory in C4 class.
 """
 
 import sqlite3
-import pytest
+
 from context.request import ContextRequest
 from memory.lifecycle import MemoryLifecycle
 from runtime.orchestrator import Orchestrator
 from state.events import EventStore
-from state.models import PatchSubmission
 
 
 def test_failed_attempt_generates_retrievable_memory(tmp_path):

@@ -1,6 +1,7 @@
 """Controlled forgetting and archival of low-value derived memory objects."""
 
 from typing import List, Set
+
 from memory.models import Memory, MemoryStatus, MemoryType
 
 

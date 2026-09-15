@@ -15,9 +15,10 @@ from rich.console import Console
 from rich.panel import Panel
 from rich.table import Table
 
+from application.session_app import SessionArcApplication
+
 # Importing cli.entry registers the complete v0.5 command surface on this Typer app.
 from cli.entry import app
-from application.session_app import SessionArcApplication
 from runtime.environment import build_execution_environment, environment_key_manifest
 from tui.shell import run_shell
 

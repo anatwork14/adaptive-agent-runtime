@@ -1,6 +1,5 @@
 """Provenance tracking and validity boundary verification for memories."""
 
-from typing import List
 from memory.models import Memory, MemoryStatus
 
 

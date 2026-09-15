@@ -1,7 +1,8 @@
 """Baseline B3: Static structured handoff packet without adaptive memory plane."""
 
 from pathlib import Path
-from typing import Dict, List, Optional
+from typing import List, Optional
+
 from adapters.base import AgentAdapter, AgentBudget, AgentRunResult
 from context.compiler import ContextPacket
 from state.models import TaskState

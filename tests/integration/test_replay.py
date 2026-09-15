@@ -9,7 +9,7 @@ Scenario:
 """
 
 import sqlite3
-import pytest
+
 from memory.lifecycle import MemoryLifecycle
 from runtime.orchestrator import Orchestrator
 from runtime.replay import ReplayEngine

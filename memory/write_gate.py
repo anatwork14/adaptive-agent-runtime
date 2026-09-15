@@ -1,7 +1,7 @@
 """Memory Write Gate enforcing scoring heuristics before persistence."""
 
 from dataclasses import dataclass
-from typing import Optional
+
 from memory.models import Memory, MemoryType
 
 

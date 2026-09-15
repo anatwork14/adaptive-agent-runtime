@@ -1,7 +1,7 @@
 """Memory and Runtime Fault Injector for evaluating system resilience."""
 
 from enum import Enum
-from typing import Any, Dict, List, Optional
+
 from memory.lifecycle import MemoryLifecycle
 from memory.models import Memory, MemoryRepresentation, MemoryStatus, MemoryType
 from state.events import EventStore

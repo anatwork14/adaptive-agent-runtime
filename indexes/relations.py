@@ -2,6 +2,7 @@
 
 import sqlite3
 from typing import List, Optional
+
 from memory.models import MemoryRelation, RelationType
 
 

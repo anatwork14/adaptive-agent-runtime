@@ -4,7 +4,7 @@
 
 [![CI](https://github.com/anatwork14/adaptive-agent-runtime/actions/workflows/ci.yml/badge.svg)](https://github.com/anatwork14/adaptive-agent-runtime/actions/workflows/ci.yml)
 [![Python 3.11+](https://img.shields.io/badge/python-3.11%2B-3776ab.svg)](https://www.python.org/)
-[![License: Apache-2.0](https://img.shields.io/badge/license-Apache--2.0-6b7280.svg)](LICENSE)
+[![License: MIT](https://img.shields.io/badge/license-MIT-6b7280.svg)](LICENSE)
 [![Website](https://img.shields.io/badge/site-GitHub%20Pages-88f7c5.svg)](https://anatwork14.github.io/adaptive-agent-runtime/)
 
 <p align="center">
@@ -24,15 +24,17 @@
 
 ARC coordinates Codex, Claude Code, Antigravity, OpenCode, and deterministic local workers while keeping project truth outside chat history.
 
+**Release:** `0.16.0` — software/apparatus release. ARC remains experimental/pre-alpha, and this release does not claim a successful V7 empirical result.
+
 The core rule is:
 
 > **Adaptive memory is never authoritative.**
 
 The same rule extends to external review and live processes. Authoritative project state lives in ARC's append-only event stream plus Git state. Memory, provider output, GitHub review state, runtime liveness, preview readiness, and UI projections are rebuildable or externally observable operational context.
 
-**ARC 0.10 adds supervised live provider turns to the browser Workspace.** A provider turn receives a stable `TURN_*` identity, streams redacted stdout/stderr through replayable ARC events and the existing WebSocket, can be cancelled explicitly, and shares the same per-worker action lock as review/runtime/submit operations. Provider processes remain disposable operational state: the durable continuity boundary is still ARC events plus the isolated worker worktree, and every completion path still converges on the exact-candidate IntegrationGate.
+**The 0.10-era live-turn boundary adds supervised live provider turns to the browser Workspace.** A provider turn receives a stable `TURN_*` identity, streams redacted stdout/stderr through replayable ARC events and the existing WebSocket, can be cancelled explicitly, and shares the same per-worker action lock as review/runtime/submit operations. Provider processes remain disposable operational state: the durable continuity boundary is still ARC events plus the isolated worker worktree, and every completion path still converges on the exact-candidate IntegrationGate.
 
-ARC 0.9 established least-privilege provider environments, provider-scoped credentials, preview credential exclusion, and a private single-use tmux environment handoff. ARC 0.9.1 then made both browser control planes strictly loopback-only and added browser Origin/WebSocket protections. ARC 0.10 preserves both boundaries and redacts live provider output before it becomes durable.
+Earlier releases established least-privilege provider environments, provider-scoped credentials, preview credential exclusion, and a private single-use tmux environment handoff. They also made both browser control planes strictly loopback-only and added browser Origin/WebSocket protections. The current release preserves these boundaries and redacts live provider output before it becomes durable.
 
 **Status:** experimental / pre-alpha. Persistent workers, supervised live turns, orchestration, event replay, GitHub review synchronization, tmux runtime supervision, localhost worker previews, least-privilege environment propagation, strict local browser control planes, Git isolation, and the transactional gate are implemented and covered by deterministic tests. Real provider wrappers remain experimental. Provider processes are still host-mode and do not yet have full filesystem/network sandboxing. Authenticated remote/multi-user mode, learned planning/routing, semantic retrieval, desktop packaging, and repository-scale evaluation remain active work.
 
@@ -772,6 +774,36 @@ adaptive-agent-runtime/
 └── docs/
 ```
 
+## Why adaptive context management matters
+
+Long-running coding work loses reliability when every agent receives the full transcript, a stale summary, or an unbounded retrieval result. ARC treats context as a compiled, budgeted, provenance-aware input while keeping authoritative truth in events, task state, and Git. This separation makes context policies replaceable and auditable without allowing a lossy memory projection to become the project record.
+
+## Evaluation framework and context policies
+
+ARC includes a preregistered evaluation harness for repository-scale coding studies and hierarchical meta-analysis. The context-policy labels are:
+
+| Policy | Meaning |
+|---|---|
+| B3 | static/no adaptive memory baseline |
+| B5 | naive vector/top-k retrieval baseline |
+| B7 | hierarchical/adaptive retrieval policy |
+
+These labels describe evaluation treatments, not a claim that B7 is superior. Evaluation runs must preserve their frozen tasks, budgets, repetitions, repository revisions, hidden graders, provider configuration, and exclusion policy. The V7 campaign is incomplete and is not presented as a validated result in this release.
+
+## Research and release status
+
+| Campaign or apparatus stage | Status |
+|---|---|
+| V1 | CLOSED |
+| V2 | CLOSED |
+| V3 | CLOSED |
+| V4 | CLOSED |
+| V5 | CLOSED |
+| V6 apparatus qualification | COMPLETED |
+| V7 empirical attempt | INCOMPLETE / FORENSIC CLOSURE PENDING |
+
+V7/a001 execution previously occurred on a remote execution environment. The campaign is incomplete. Original remote forensic evidence is currently unavailable locally. No final forensic classification has been independently completed from source evidence. No retry or V7/a002 has been performed. No V7 scientific conclusion is claimed.
+
 ---
 
 ## Research framing
@@ -804,6 +836,18 @@ restart/session continuity
 ```
 
 ---
+
+## Reproducibility
+
+Reproduce software behavior from the release commit and the generated release manifest, using Python 3.11 or 3.12 and the dependency declarations in `pyproject.toml`. ARC evaluation studies additionally require the exact frozen campaign artifacts, target repository commits, hidden-test digests, provider assumptions, and (where applicable) Docker image/rootfs identities recorded by the campaign. Private credentials, hidden tests, provider logs, and forensic evidence are not release inputs.
+
+## Known limitations
+
+- ARC is experimental/pre-alpha; provider adapters and long-horizon autonomous coding remain research software.
+- Provider coding CLIs run in host mode with filtered environments, not complete filesystem/network sandboxes.
+- The browser control planes are local-only and unauthenticated; remote multi-user/RBAC operation is not implemented.
+- Learned planning, routing, semantic retrieval, desktop packaging, and repository-scale evaluation remain incomplete.
+- V7/a001 is an incomplete remote empirical attempt with forensic closure pending; this release claims no V7 scientific result.
 
 ## CI and testing
 
@@ -855,7 +899,7 @@ Provider credentials remain in provider-owned credential stores/keyrings. GitHub
 
 ARC-managed coding-agent subprocesses receive explicit least-privilege environments instead of the full host environment. Provider defaults are scoped by provider, profile extensions store names only, preview servers receive no automatic provider credentials, and tmux receives secret values through a private single-use handoff rather than worker argv. Runtime traces record environment names only.
 
-ARC 0.10 applies an additional persistence boundary to provider output: credential-like values from the provider environment and common provider token forms are redacted before streamed stdout/stderr is appended to `session.turn_output`, emitted to the Workspace WebSocket, or retained in provider summaries. This is defense in depth, not complete DLP.
+The 0.10-era implementation applies an additional persistence boundary to provider output: credential-like values from the provider environment and common provider token forms are redacted before streamed stdout/stderr is appended to `session.turn_output`, emitted to the Workspace WebSocket, or retained in provider summaries. This is defense in depth, not complete DLP.
 
 The command/test execution path can use Docker isolation with network disabled, dropped capabilities, resource limits, and a read-only root filesystem. Provider coding CLIs remain experimental host-mode: environment isolation reduces ambient authority but does not prevent a provider process from accessing other files, networks, sockets, or provider-owned credential files available to the launching user.
 
@@ -881,4 +925,18 @@ GitHub Pages deploys from `docs/`. The public documentation website is separate 
 
 ## License
 
-Apache-2.0. See [LICENSE](LICENSE).
+MIT. See [LICENSE](LICENSE).
+
+## Citation
+
+If ARC contributes to published work, cite the software release and identify the exact release commit used:
+
+```bibtex
+@software{arc_adaptive_agent_runtime,
+  title = {ARC --- Adaptive Agent Runtime},
+  author = {{ARC Contributors}},
+  year = {2026},
+  version = {0.16.0},
+  url = {https://github.com/anatwork14/adaptive-agent-runtime}
+}
+```

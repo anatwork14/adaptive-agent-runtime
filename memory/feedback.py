@@ -1,8 +1,8 @@
 """Memory retrieval feedback recorder."""
 
 import sqlite3
-from pathlib import Path
-from typing import List, Optional
+from typing import List
+
 from memory.models import MemoryFeedback
 
 

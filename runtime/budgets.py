@@ -1,6 +1,7 @@
 """Financial and token budget accounting."""
 
 from typing import Optional
+
 from state.events import EventStore
 from state.projection import BudgetProjector
 

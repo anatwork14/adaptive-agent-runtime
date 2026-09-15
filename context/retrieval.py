@@ -1,7 +1,8 @@
 """Retrieval router executing ordered retrieval strategies across authoritative and derived stores."""
 
 from dataclasses import dataclass, field
-from typing import Dict, List, Optional, Tuple
+from typing import Dict, List, Optional
+
 from context.ranking import CandidateRanker
 from context.request import ContextRequest
 from memory.lifecycle import MemoryLifecycle
@@ -102,7 +103,7 @@ class MemoryRetriever:
         # 4. Lexical FTS retrieval
         search_query = f"{request.goal} {' '.join(request.symbols)} {' '.join(request.files_declared)}"
         fts_hits = self.lifecycle.lexical_index.search(search_query, limit=10)
-        for mem_id, rank in fts_hits:
+        for mem_id, _rank in fts_hits:
             if mem_id not in candidates_by_id:
                 mem = self.lifecycle.get_memory(mem_id)
                 if mem and self._eligible_for_generic_retrieval(mem, request):

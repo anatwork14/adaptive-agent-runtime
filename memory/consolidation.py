@@ -1,13 +1,14 @@
 """Memory consolidation combining redundant memories into structured procedures."""
 
 from typing import List, Optional
-from state.hashing import compute_hash
+
 from memory.models import (
     Memory,
     MemoryRepresentation,
     MemoryStatus,
     MemoryType,
 )
+from state.hashing import compute_hash
 
 
 class MemoryConsolidator:

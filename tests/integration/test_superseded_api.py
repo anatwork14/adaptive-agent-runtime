@@ -7,14 +7,13 @@ When a new agent is dispatched, the old memory must NEVER be delivered.
 """
 
 import sqlite3
-import pytest
+
 from context.request import ContextRequest
 from memory.conflicts import ConflictDetector
 from memory.lifecycle import MemoryLifecycle
 from memory.models import (
     Memory,
     MemoryRepresentation,
-    MemoryStatus,
     MemoryType,
 )
 from runtime.orchestrator import Orchestrator

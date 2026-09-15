@@ -4,7 +4,7 @@ ARC is experimental/pre-alpha software that executes code produced by AI coding 
 
 ## Supported security posture
 
-The current development line is ARC **0.10.x**. Security fixes are applied to `main`; older pre-alpha snapshots are not maintained as separate supported release branches.
+The current development line is ARC **0.16.x**. Security fixes are applied to `main`; older pre-alpha snapshots are not maintained as separate supported release branches. The `0.16.0` software/apparatus release does not represent a successful V7 scientific result; V7/a001 remains incomplete with forensic closure pending.
 
 ## Reporting a vulnerability
 
@@ -39,7 +39,7 @@ See [`docs/EXECUTION_SECURITY.md`](docs/EXECUTION_SECURITY.md) for the exact env
 
 ## Supervised live turns
 
-ARC 0.10 can start a provider subprocess from the Workspace, stream its stdout/stderr through ARC events, and cancel it explicitly. This improves observability but does **not** make the provider process authoritative or sandboxed.
+The 0.10-era live-turn implementation can start a provider subprocess from the Workspace, stream its stdout/stderr through ARC events, and cancel it explicitly. This improves observability but does **not** make the provider process authoritative or sandboxed.
 
 Before provider output becomes durable or reaches the Workspace WebSocket, ARC masks values of credential-like environment variables forwarded to that process and common provider-token forms. The final provider summary and stderr failure tail use the same redacted text. This is defense in depth, not a complete data-loss-prevention system; an agent can still intentionally emit sensitive repository content that does not match those redaction rules.
 

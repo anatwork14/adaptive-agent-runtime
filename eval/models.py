@@ -10,7 +10,6 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, Field, model_validator
 
-
 BaselineId = Literal["B0", "B2", "B3", "B5", "B7"]
 ExecutionMode = Literal["sequence"]
 
