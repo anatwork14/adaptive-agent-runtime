@@ -40,6 +40,8 @@ Completed or partial campaign artifacts are not included in this software releas
 
 The release validation covers the local source checkout, package build, CLI help/version smoke checks, deterministic tests, lint/static checks configured by the project, documentation/link sanity, secret and large-file scans, license consistency, and repository hygiene. It does not execute V7 or any benchmark-provider execution.
 
+The provider-free Docker check found the local engine available and verified all three frozen image identities and visible harnesses. The task-scoped hidden qualification did not pass in this check (Click and HTTPX exited 1; python-dotenv exited 2), so this release makes no claim of complete Docker qualification. No provider execution or benchmark attempt was created.
+
 ## Installation
 
 ```bash
