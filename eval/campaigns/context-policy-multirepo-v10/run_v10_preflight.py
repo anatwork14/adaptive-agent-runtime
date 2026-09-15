@@ -43,6 +43,7 @@ def _docker_identities(contract: dict[str, Any]) -> dict[str, Any]:
         ):
             raise RuntimeError(f"Docker identity mismatch for {slug}")
         output[slug] = {
+            "image": harness["image"],
             "image_digest": image_digest,
             "architecture": architecture,
             "os": image_os,
