@@ -1,0 +1,303 @@
+{
+  "campaign_id": "context-policy-multirepo-v11",
+  "status": "PROPOSED_NOT_FROZEN",
+  "parent_campaign": "context-policy-multirepo-v10",
+  "scientific_core_preserved": true,
+  "scientific_change": false,
+  "apparatus_change_only": true,
+  "scientific_design_change": false,
+  "provider_changed": false,
+  "model_changed": false,
+  "reasoning_changed": false,
+  "auth_mode_changed": false,
+  "execution_environment_change": "execution host changed to local macOS with native Docker Desktop images",
+  "protocol_change": "local Docker apparatus and Mac-native runtime paths",
+  "treatment_neutral": true,
+  "provider_profile": {
+    "name": "builder",
+    "provider": "codex",
+    "model": "gpt-5.5",
+    "role": "implementation",
+    "capabilities": ["implementation", "test", "debug", "refactor"],
+    "env_allow": [],
+    "command_override": "codex exec --full-auto --json -",
+    "effective_argv": [
+      "codex", "exec", "--full-auto", "--json", "-"
+    ],
+    "effective_argv_sha256": "80c442e16326a9358b797759fe8f2c90a1c19c85a6e7bd7e98d880ca26bbe420",
+    "codex_invocation_snapshot_path": "/Users/teobun/src/adaptive-agent-runtime/eval/campaigns/context-policy-multirepo-v11/codex",
+    "codex_invocation_snapshot_sha256": "a2c7992cdb0937eb35e2df7753550ad0242fc02e71675c6af519dfb28a7bd2bd",
+    "codex_invocation_snapshot_size": 50,
+    "codex_invocation_manifest_path": "/Users/teobun/src/adaptive-agent-runtime/eval/campaigns/context-policy-multirepo-v11/codex/config-manifest.json",
+    "codex_invocation_manifest_sha256": "39dee48a26712dad67b9c7ac8b96f785f8c7cf62e30cb77dcf748955059f3ce8",
+    "codex_invocation_codex_version": "codex-cli 0.133.0-alpha.1",
+    "codex_invocation_provider": "codex",
+    "codex_invocation_authentication_required": true,
+    "codex_invocation_semantic_projection": {
+      "model": "gpt-5.5",
+      "model_reasoning_effort": "high"
+    }
+  },
+  "provider_runtime": {
+    "cli": "codex",
+    "version": "codex-cli 0.133.0-alpha.1",
+    "provider_execution_timeout_seconds": 600,
+    "codex_home": "/Users/teobun/arc-secure/codex-v8-home",
+    "codex_config_path": "/Users/teobun/src/adaptive-agent-runtime/eval/campaigns/context-policy-multirepo-v11/codex/config.toml",
+    "codex_config_sha256": "a2c7992cdb0937eb35e2df7753550ad0242fc02e71675c6af519dfb28a7bd2bd",
+    "codex_config_size": 50,
+    "codex_snapshot_path": "/Users/teobun/src/adaptive-agent-runtime/eval/campaigns/context-policy-multirepo-v11/codex",
+    "codex_snapshot_sha256": "a2c7992cdb0937eb35e2df7753550ad0242fc02e71675c6af519dfb28a7bd2bd",
+    "codex_snapshot_manifest_path": "/Users/teobun/src/adaptive-agent-runtime/eval/campaigns/context-policy-multirepo-v11/codex/config-manifest.json",
+    "codex_snapshot_manifest_sha256": "39dee48a26712dad67b9c7ac8b96f785f8c7cf62e30cb77dcf748955059f3ce8",
+    "codex_snapshot_codex_version": "codex-cli 0.133.0-alpha.1",
+    "codex_snapshot_provider": "codex",
+    "codex_snapshot_authentication_required": true,
+    "codex_snapshot_semantic_projection": {
+      "model": "gpt-5.5",
+      "model_reasoning_effort": "high"
+    },
+    "auth_mode": "chatgpt_subscription",
+    "trusted_workspaces": [
+      "/Users/teobun/arc-study/runtime/context-policy-multirepo-v11/qualification/workspace-a",
+      "/Users/teobun/arc-study/runtime/context-policy-multirepo-v11/qualification/workspace-b",
+      "/Users/teobun/arc-study/runtime/context-policy-multirepo-v11/a001/click",
+      "/Users/teobun/arc-study/runtime/context-policy-multirepo-v11/a001/httpx",
+      "/Users/teobun/arc-study/runtime/context-policy-multirepo-v11/a001/python-dotenv"
+    ],
+    "invocation_home_strategy": {
+      "mode": "ephemeral_snapshot",
+      "scope": "per_provider_turn",
+      "source_files": ["config.toml", "auth.json"],
+      "mutable_state": "provider-local state in a temporary invocation directory",
+      "cleanup": "discarded in a finally block after every provider turn",
+      "canonical_config_preserved": true,
+      "credentials_persisted_by_arc": false
+    },
+    "output_mode": "documented_jsonl",
+    "version_policy": "diagnose and explicitly freeze before V11 execution; no upgrade during campaign",
+    "environment_allowlist": {
+      "profile_extra_keys": [],
+      "observed_keys": [
+        "CODEX_HOME", "COLORTERM", "HOME", "LANG", "LC_ALL", "LC_CTYPE", "LOGNAME",
+        "PATH", "SHELL", "TERM", "TMPDIR", "USER"
+      ],
+      "provider_permitted_keys": ["CODEX_HOME"],
+      "values_persisted": false
+    }
+  },
+  "provider_capacity_readiness": {
+    "artifact": "provider-capacity-readiness.json",
+    "provider": "codex",
+    "auth_mode": "chatgpt_subscription",
+    "model": "gpt-5.5",
+    "authenticated": true,
+    "non_benchmark_probe_required": true,
+    "previous_v5_usage_limit_failure_acknowledged": true,
+    "planned_campaign_task_count": 162,
+    "capacity_risk_reviewed": true,
+    "remaining_quota": null
+  },
+  "apparatus_qualification": {
+    "passive_doctor": "codex login status with CODEX_HOME=/Users/teobun/arc-secure/codex-v8-home",
+    "active_probe": null,
+    "active_probe_is_scientific_evidence": false,
+    "required_before_freeze": [
+      "ARC unit and integration tests pass",
+      "hostile-host Git regression passes",
+      "provider-free synthetic workflow reaches visible Docker G2 and hidden Docker grading",
+      "provider installation and subscription auth status are readable without inference",
+      "nested run-plan provider-environment handoff qualification passes",
+      "target repositories pass environment checks",
+      "visible-test commands work",
+      "hidden grader apparatus works with controlled fixture"
+    ],
+    "probe_result_storage": "external to benchmark result directories"
+  },
+  "codex_config_semantics": {
+    "frozen_fields": {
+      "model": "gpt-5.5",
+      "model_reasoning_effort": "high",
+      "provider": "codex"
+    },
+    "arc_controlled_fields": {
+      "approval": "full-auto noninteractive invocation",
+      "sandbox": "Docker harness plus ARC workspace isolation",
+      "tools": "Codex CLI defaults as pinned by codex-cli 0.133.0-alpha.1",
+      "network": "disabled in repository Docker harnesses"
+    },
+    "excluded_mutable_fields": {
+      "personality": "ambient UI-only preference; noninteractive run path does not use it",
+      "trust_level": "ambient path-bound project state; ARC controls workspaces and invocation home",
+      "auth": "runtime-only auth.json copied into disposable per-turn CODEX_HOME",
+      "usage": "runtime/provider telemetry, never scientific identity"
+    }
+  },
+  "v10_delta": {
+    "scientific_change": "none",
+    "operational_change": "serialize and reconstruct the complete immutable invocation contract through repository profiles",
+    "model": "unchanged",
+    "reasoning": "unchanged",
+    "provider": "unchanged",
+    "tasks": "unchanged",
+    "scoring": "unchanged",
+    "provider_censor_policy": "unchanged",
+    "docker_apparatus": "unchanged"
+  },
+  "shared_protocol": {
+    "context_token_budget": 12000,
+    "hard_task_usd": 2.0,
+    "hard_project_usd": 350.0,
+    "visible_test_harness_policy": "repository_specific_harnesses_are_frozen_under_repositories",
+    "verification_level": "V1",
+    "repeats": 6,
+    "bootstrap_samples": 2000,
+    "ci": 0.95,
+    "meta_bootstrap_samples": 5000,
+    "meta_ci": 0.95,
+    "meta_random_seed": 42,
+    "provider_execution_timeout_seconds": 600,
+    "exclusions": [
+      "provider outage before the first provider turn",
+      "host failure before the first provider turn"
+    ]
+  },
+  "provider_execution_policy": {
+    "timeout_seconds": 600,
+    "applies_to": ["B3", "B5", "B7"],
+    "per_task_override": false,
+    "per_repetition_override": false,
+    "dynamic_extension": false,
+    "retry_on_timeout": false
+  },
+  "treatments": {
+    "B3": {"memory_policy": "static_no_memory"},
+    "B5": {"memory_policy": "naive_vector_topk", "top_k": 5, "validity_enforced": false},
+    "B7": {
+      "memory_policy": "provenance_aware_adaptive",
+      "validity_enforced": true,
+      "episodic_dependency_scope": "When dependencies are declared, TASK_SUMMARY and EPISODE memories must match a declared dependency to remain eligible for generic lexical/vector expansion; explicit dependency-linked retrieval remains eligible.",
+      "root_task_generic_episode_fallback": true
+    }
+  },
+  "identification": {
+    "progressive_sequence": "T001 -> T002 -> T003",
+    "b5_vs_b7": "On T003, B5 may retrieve broader prior episodic history such as T001 plus T002, while B7 scopes episodic history to the declared predecessor T002. This treatment distinction is frozen before provider execution."
+  },
+  "repositories": {
+    "click": {
+      "study_id": "click-context-policy-v11",
+      "benchmark_id": "context-policy-click-v11",
+      "repo": "pallets/click",
+      "commit": "6aabf099bfdd4c1e75fe8d0e0d4241372b988ab1",
+      "hidden_tree_sha256": "4e9241310067b13e36f9ecce3913dbf0bd936bab6486a42300d032575141a3ef",
+      "environment_qualification_id": "click-docker-python310-uv-locked-v2",
+      "visible_test_harness": {
+        "command": ["python", "-m", "pytest", "-q"],
+        "backend": "docker",
+        "image": "arc-v8-click:qualified",
+        "image_digest": "sha256:7fae74105025e759c4244de903b1385271df9ac4f8e4bfb3d1589094d2ec92a4",
+        "architecture": "arm64",
+        "os": "linux",
+        "network_enabled": false,
+        "environment": {"PYTHONPATH": "/workspace/src"},
+        "hidden_command": ["python", "-m", "pytest", "-q", "-p", "no:cacheprovider", "/arc-hidden-tests"],
+        "hidden_environment": {"PYTHONPATH": "/workspace/src"},
+        "tmpfs_exec": true,
+        "python_toolchain": "CPython 3.10.7; uv-locked dev/tests environment",
+        "timeout_seconds": 180,
+        "qualification_id": "click-docker-python310-uv-locked-v2"
+      }
+    },
+    "httpx": {
+      "study_id": "httpx-context-policy-v11",
+      "benchmark_id": "context-policy-httpx-v11",
+      "repo": "encode/httpx",
+      "commit": "b5addb64f0161ff6bfe94c124ef76f6a1fba5254",
+      "hidden_tree_sha256": "771e5afa152bcc41676fe173aad7809485eb5cccdcaf312865b2f6dd2a798334",
+      "environment_qualification_id": "httpx-docker-python311-requirements-resourcewarning-filter-v2",
+      "visible_test_harness": {
+        "command": ["python", "-m", "pytest", "-q", "-W", "ignore::ResourceWarning", "-m", "not network"],
+        "backend": "docker",
+        "image": "arc-v8-httpx:qualified",
+        "image_digest": "sha256:1f8b4320b6d1b4ab22121442732f3f684e1fe77162de563beb841b0dc340d8cf",
+        "architecture": "arm64",
+        "os": "linux",
+        "network_enabled": false,
+        "environment": {"PYTHONPATH": "/workspace"},
+        "hidden_command": ["python", "-m", "pytest", "-q", "-p", "no:cacheprovider", "/arc-hidden-tests"],
+        "hidden_environment": {"PYTHONPATH": "/workspace"},
+        "tmpfs_exec": false,
+        "python_toolchain": "CPython 3.11.16; requirements.txt editable environment",
+        "timeout_seconds": 180,
+        "qualification_id": "httpx-docker-python311-requirements-resourcewarning-filter-v2"
+      },
+      "visible_test_harness_note": "requirements.txt is installed in a disposable editable environment; the fixed harness ignores the known Trio async-generator teardown ResourceWarning that otherwise fails pytest unraisable-warning capture"
+    },
+    "python-dotenv": {
+      "study_id": "python-dotenv-context-policy-v11",
+      "benchmark_id": "context-policy-python-dotenv-v11",
+      "repo": "theskumar/python-dotenv",
+      "commit": "a00cb2eed0704cd6d2071b2004c37e95ccc86ee5",
+      "hidden_tree_sha256": "950297bdebad5f5e2560ec8406e6f80ca289e6cc6672a3e9648a814a55284bb7",
+      "environment_qualification_id": "python-dotenv-docker-python310-requirements-v2",
+      "visible_test_harness": {
+        "command": ["python", "-m", "pytest", "-q"],
+        "backend": "docker",
+        "image": "arc-v8-python-dotenv:qualified",
+        "image_digest": "sha256:d7e1c1d915ad92a48fe0d915b9f951bd70af3bab5737d03f83d31281d84dc32b",
+        "architecture": "arm64",
+        "os": "linux",
+        "network_enabled": false,
+        "environment": {"PYTHONPATH": "/workspace/src"},
+        "hidden_command": ["python", "-m", "pytest", "-q", "-p", "no:cacheprovider", "/arc-hidden-tests"],
+        "hidden_environment": {"PYTHONPATH": "/workspace/src"},
+        "tmpfs_exec": true,
+        "python_toolchain": "CPython 3.10.7; requirements.txt editable environment",
+        "timeout_seconds": 180,
+        "qualification_id": "python-dotenv-docker-python310-requirements-v2"
+      }
+    }
+  },
+  "freeze_gate": {
+    "arc_commit": "record_exact_commit_after_apparatus_qualification",
+    "provider_execution_started": false,
+    "freeze_after_qualification": true,
+    "freeze_review_required": true,
+    "v1_status": "closed",
+    "v2_status": "closed",
+    "v3_status": "closed; no replacement attempt",
+    "v4_status": "closed; failed non-excludable apparatus attempt; no replacement",
+    "v5_status": "closed; 18 completed V5 tasks retained only for forecasting; a001 failed on provider capacity",
+    "v7_status": "closed; remote Ubuntu Bubblewrap a001 failed and remains preserved remotely; no V9 results reuse",
+    "run_plan_provider_environment_handoff_verified": false,
+    "provider_execution_started": false,
+    "benchmark_provider_execution": false
+  },
+  "operational_fault_policy": {
+    "observation_unit": ["repository", "repetition", "baseline", "task"],
+    "states": ["PENDING", "RUNNING", "COMPLETED", "PROVIDER_CENSORED", "TIMEOUT", "MODEL_FAILED", "INFRASTRUCTURE_FAILED"],
+    "execution_status_separate_from_scientific_status": true,
+    "ledger": "append_only_sqlite_atomic_task_state",
+    "max_provider_censor_retries_per_logical_task": 1,
+    "provider_censor_classes": ["USAGE_LIMIT", "QUOTA_EXCEEDED", "RATE_LIMIT", "PROVIDER_5XX", "SERVICE_UNAVAILABLE", "AUTHENTICATION_SERVICE", "SESSION_SERVICE", "TRANSPORT_BEFORE_OUTPUT"],
+    "safe_retry_requires": {
+      "model_output_generated": false,
+      "tool_execution_started": false,
+      "repository_modified": false
+    },
+    "retry_instance_policy": "new_registered_execution_instance_fresh_task_session_identical_frozen_input",
+    "known_exhausted_quota_policy": "stop_and_resume_only_after_independent_provider_availability_confirmation",
+    "sacrificial_prompt_for_availability": false,
+    "completed_task_policy": "never_rerun",
+    "model_failure_policy": "preserve_without_retry",
+    "filesystem_is_state_authority": false,
+    "scoring": {
+      "task_metrics": "persist_immediately_after_completed_task",
+      "aggregate_requires_all_required_tasks_completed": true,
+      "campaign_final_requires_all_required_logical_tasks_completed": true,
+      "provider_censored_missing_data_policy": "withhold_score_and_never_score_as_model_failure"
+    },
+    "v8_failure_regression": "18_complete_then_19th_usage_limit_provider_censored_no_premature_score_no_retry"
+  }
+}

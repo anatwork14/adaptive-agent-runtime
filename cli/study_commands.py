@@ -11,7 +11,7 @@ import typer
 from rich.console import Console
 from rich.table import Table
 
-from application.agents import build_agent, doctor_profile
+from application.agents import build_agent, doctor_profile, profile_invocation_config
 from application.config import ConfigStore
 from eval.io import load_manifest
 from eval.runners.repeated import AggregateMetric, RepeatedPairedBenchmarkRunner
@@ -216,6 +216,13 @@ def register_study_commands(benchmark_app: typer.Typer) -> None:
                     f"preregistered agent_profile {plan.runtime.agent_profile!r} "
                     "is not configured in ARC"
                 )
+            invocation_config = profile_invocation_config(
+                profile,
+                require_complete=(
+                    profile.provider == "codex"
+                    and plan.runtime.provider_codex_snapshot_path is not None
+                ),
+            )
             doctor = doctor_profile(profile)
             if doctor.status != "READY":
                 raise typer.BadParameter(
@@ -238,9 +245,35 @@ def register_study_commands(benchmark_app: typer.Typer) -> None:
                 provider_codex_home=profile.codex_home,
                 provider_codex_config_path=profile.codex_config_path,
                 provider_codex_config_sha256=_provider_codex_config_sha256(profile),
-                provider_codex_snapshot_path=plan.runtime.provider_codex_snapshot_path,
-                provider_codex_snapshot_sha256=plan.runtime.provider_codex_snapshot_sha256,
-                provider_codex_snapshot_size=plan.runtime.provider_codex_snapshot_size,
+                provider_codex_snapshot_path=(
+                    str(invocation_config.snapshot_path) if invocation_config else None
+                ),
+                provider_codex_snapshot_sha256=(
+                    invocation_config.snapshot_sha256 if invocation_config else None
+                ),
+                provider_codex_snapshot_size=(
+                    invocation_config.snapshot_size if invocation_config else None
+                ),
+                provider_codex_manifest_path=(
+                    str(invocation_config.manifest_path)
+                    if invocation_config and invocation_config.manifest_path
+                    else None
+                ),
+                provider_codex_manifest_sha256=(
+                    invocation_config.manifest_sha256 if invocation_config else None
+                ),
+                provider_codex_version=(
+                    invocation_config.codex_version if invocation_config else None
+                ),
+                provider_codex_provider=(
+                    invocation_config.provider if invocation_config else None
+                ),
+                provider_codex_authentication_required=(
+                    invocation_config.authentication_required if invocation_config else None
+                ),
+                provider_codex_semantic_projection=(
+                    dict(invocation_config.semantic_projection) if invocation_config else None
+                ),
             )
 
             if qualification_only:

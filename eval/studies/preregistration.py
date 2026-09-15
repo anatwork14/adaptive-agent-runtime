@@ -81,6 +81,12 @@ class StudyRuntimeContract(BaseModel):
     provider_codex_snapshot_path: str | None = None
     provider_codex_snapshot_sha256: str | None = None
     provider_codex_snapshot_size: int | None = Field(default=None, ge=1)
+    provider_codex_manifest_path: str | None = None
+    provider_codex_manifest_sha256: str | None = None
+    provider_codex_version: str | None = None
+    provider_codex_provider: str | None = None
+    provider_codex_authentication_required: bool | None = None
+    provider_codex_semantic_projection: dict[str, Any] | None = None
     verification_level: str = "V0"
     hidden_tests_required: bool = False
     hidden_tests_digest: str | None = None
@@ -217,6 +223,12 @@ def create_preregistration(
     provider_codex_snapshot_path: str | None = None,
     provider_codex_snapshot_sha256: str | None = None,
     provider_codex_snapshot_size: int | None = None,
+    provider_codex_manifest_path: str | None = None,
+    provider_codex_manifest_sha256: str | None = None,
+    provider_codex_version: str | None = None,
+    provider_codex_provider: str | None = None,
+    provider_codex_authentication_required: bool | None = None,
+    provider_codex_semantic_projection: dict[str, Any] | None = None,
     hidden_test_digest: str | None = None,
 ) -> PreregisteredStudy:
     manifest_list = [manifest.model_copy(deep=True) for manifest in manifests]
@@ -281,6 +293,12 @@ def create_preregistration(
             provider_codex_snapshot_path=provider_codex_snapshot_path,
             provider_codex_snapshot_sha256=provider_codex_snapshot_sha256,
             provider_codex_snapshot_size=provider_codex_snapshot_size,
+            provider_codex_manifest_path=provider_codex_manifest_path,
+            provider_codex_manifest_sha256=provider_codex_manifest_sha256,
+            provider_codex_version=provider_codex_version,
+            provider_codex_provider=provider_codex_provider,
+            provider_codex_authentication_required=provider_codex_authentication_required,
+            provider_codex_semantic_projection=provider_codex_semantic_projection,
             verification_level=verification_level,
             hidden_tests_required=hidden_digest is not None,
             hidden_tests_digest=hidden_digest,
@@ -338,6 +356,12 @@ def validate_execution_environment(
     provider_codex_snapshot_path: str | None = None,
     provider_codex_snapshot_sha256: str | None = None,
     provider_codex_snapshot_size: int | None = None,
+    provider_codex_manifest_path: str | None = None,
+    provider_codex_manifest_sha256: str | None = None,
+    provider_codex_version: str | None = None,
+    provider_codex_provider: str | None = None,
+    provider_codex_authentication_required: bool | None = None,
+    provider_codex_semantic_projection: dict[str, Any] | None = None,
 ) -> None:
     """Fail closed when the live execution contract differs from preregistration."""
     if plan.plan_digest != compute_plan_digest(plan):
@@ -347,11 +371,23 @@ def validate_execution_environment(
         plan.runtime.provider_codex_snapshot_path,
         plan.runtime.provider_codex_snapshot_sha256,
         plan.runtime.provider_codex_snapshot_size,
+        plan.runtime.provider_codex_manifest_path,
+        plan.runtime.provider_codex_manifest_sha256,
+        plan.runtime.provider_codex_version,
+        plan.runtime.provider_codex_provider,
+        plan.runtime.provider_codex_authentication_required,
+        plan.runtime.provider_codex_semantic_projection,
     )
     actual_snapshot = (
         provider_codex_snapshot_path,
         provider_codex_snapshot_sha256,
         provider_codex_snapshot_size,
+        provider_codex_manifest_path,
+        provider_codex_manifest_sha256,
+        provider_codex_version,
+        provider_codex_provider,
+        provider_codex_authentication_required,
+        provider_codex_semantic_projection,
     )
     if expected_snapshot != actual_snapshot:
         raise ValueError("provider Codex snapshot identity differs from preregistration")
@@ -385,6 +421,12 @@ def validate_execution_environment(
         "provider_codex_snapshot_path": provider_codex_snapshot_path,
         "provider_codex_snapshot_sha256": provider_codex_snapshot_sha256,
         "provider_codex_snapshot_size": provider_codex_snapshot_size,
+        "provider_codex_manifest_path": provider_codex_manifest_path,
+        "provider_codex_manifest_sha256": provider_codex_manifest_sha256,
+        "provider_codex_version": provider_codex_version,
+        "provider_codex_provider": provider_codex_provider,
+        "provider_codex_authentication_required": provider_codex_authentication_required,
+        "provider_codex_semantic_projection": provider_codex_semantic_projection,
         "verification_level": verification_level,
         "hidden_tests_required": live_hidden is not None,
         "hidden_tests_digest": live_hidden,
@@ -406,6 +448,12 @@ def validate_execution_environment(
         "provider_codex_snapshot_path",
         "provider_codex_snapshot_sha256",
         "provider_codex_snapshot_size",
+        "provider_codex_manifest_path",
+        "provider_codex_manifest_sha256",
+        "provider_codex_version",
+        "provider_codex_provider",
+        "provider_codex_authentication_required",
+        "provider_codex_semantic_projection",
     ):
         if getattr(plan.runtime, key) is None:
             expected.pop(key, None)

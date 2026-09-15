@@ -40,6 +40,13 @@ class AgentProfile(BaseModel):
     # never represented by these fields and remain runtime-only.
     codex_invocation_snapshot_path: Optional[str] = None
     codex_invocation_snapshot_sha256: Optional[str] = None
+    codex_invocation_snapshot_size: Optional[int] = Field(default=None, ge=1)
+    codex_invocation_manifest_path: Optional[str] = None
+    codex_invocation_manifest_sha256: Optional[str] = None
+    codex_invocation_codex_version: Optional[str] = None
+    codex_invocation_provider: Optional[str] = None
+    codex_invocation_authentication_required: Optional[bool] = None
+    codex_invocation_semantic_projection: Dict[str, Any] = Field(default_factory=dict)
     # Names only. Values are read from the live host environment when a worker
     # starts and are never serialized into ARC configuration/events.
     env_allow: List[str] = Field(default_factory=list)

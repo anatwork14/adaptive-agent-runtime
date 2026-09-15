@@ -54,6 +54,8 @@ class CodexInvocationConfig:
     semantic_projection: Mapping[str, Any]
     provider: str = "codex"
     authentication_required: bool = True
+    manifest_path: Path | None = None
+    manifest_sha256: str | None = None
 
     @property
     def config_path(self) -> Path:
@@ -98,6 +100,8 @@ def load_snapshot(
         semantic_projection=projection,
         provider=str(manifest.get("provider", "")),
         authentication_required=bool(manifest.get("authentication_required", True)),
+        manifest_path=manifest_path,
+        manifest_sha256=_sha256(manifest_path.read_bytes()),
     )
     verify_snapshot(contract)
     return contract
@@ -185,6 +189,8 @@ def create_snapshot(
         semantic_projection=dict(manifest["semantic_projection"]),
         provider=provider,
         authentication_required=authentication_required,
+        manifest_path=manifest_path,
+        manifest_sha256=_sha256(manifest_bytes),
     )
 
 
@@ -216,6 +222,12 @@ def verify_snapshot(contract: CodexInvocationConfig) -> SnapshotVerification:
     except (OSError, json.JSONDecodeError) as exc:
         raise ConfigContractError("snapshot manifest is invalid") from exc
     expected_projection = dict(contract.semantic_projection)
+    if contract.manifest_path is not None:
+        if manifest_path != contract.manifest_path.expanduser().resolve():
+            raise ConfigContractError("snapshot manifest path mismatch")
+        actual_manifest_sha256 = _sha256(manifest_path.read_bytes())
+        if actual_manifest_sha256 != contract.manifest_sha256:
+            raise ConfigContractError("snapshot manifest digest mismatch")
     if manifest.get("schema_version") != SCHEMA_VERSION:
         raise ConfigContractError("unsupported snapshot manifest schema")
     if manifest.get("codex_version") != contract.codex_version:

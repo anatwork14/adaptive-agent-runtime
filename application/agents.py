@@ -18,7 +18,11 @@ from adapters.opencode import OpenCodeAgentAdapter
 from adapters.openrouter import OpenRouterAgentAdapter
 from application.auth import ProviderAuthStatus, auth_status
 from application.config import AgentProfile
-from runtime.codex_invocation_config import load_snapshot
+from runtime.codex_invocation_config import (
+    CodexInvocationConfig,
+    ConfigContractError,
+    verify_snapshot,
+)
 
 
 @dataclass(frozen=True)
@@ -64,6 +68,57 @@ def _cached_auth_status(
     return result
 
 
+def profile_invocation_config(
+    profile: AgentProfile,
+    *,
+    require_complete: bool = False,
+) -> CodexInvocationConfig | None:
+    """Reconstruct the one canonical Codex contract stored in a profile.
+
+    A campaign-bound profile must carry every field.  No ambient environment
+    value is eligible to complete a persisted contract.
+    """
+    if profile.provider != "codex":
+        return None
+    fields = {
+        "codex_invocation_snapshot_path": profile.codex_invocation_snapshot_path,
+        "codex_invocation_snapshot_sha256": profile.codex_invocation_snapshot_sha256,
+        "codex_invocation_snapshot_size": profile.codex_invocation_snapshot_size,
+        "codex_invocation_manifest_path": profile.codex_invocation_manifest_path,
+        "codex_invocation_manifest_sha256": profile.codex_invocation_manifest_sha256,
+        "codex_invocation_codex_version": profile.codex_invocation_codex_version,
+        "codex_invocation_provider": profile.codex_invocation_provider,
+        "codex_invocation_authentication_required": profile.codex_invocation_authentication_required,
+        "codex_invocation_semantic_projection": profile.codex_invocation_semantic_projection,
+    }
+    present = any(value not in (None, "", {}) for value in fields.values())
+    if not present and not require_complete:
+        return None
+    missing = [name for name, value in fields.items() if value in (None, "", {})]
+    if missing:
+        raise ConfigContractError(
+            "codex profile invocation contract is incomplete: " + ", ".join(missing)
+        )
+    try:
+        contract = CodexInvocationConfig(
+            snapshot_path=Path(str(fields["codex_invocation_snapshot_path"])).expanduser().resolve(),
+            snapshot_sha256=str(fields["codex_invocation_snapshot_sha256"]),
+            snapshot_size=int(fields["codex_invocation_snapshot_size"]),
+            codex_version=str(fields["codex_invocation_codex_version"]),
+            semantic_projection=dict(fields["codex_invocation_semantic_projection"]),
+            provider=str(fields["codex_invocation_provider"]),
+            authentication_required=bool(fields["codex_invocation_authentication_required"]),
+            manifest_path=Path(str(fields["codex_invocation_manifest_path"])).expanduser().resolve(),
+            manifest_sha256=str(fields["codex_invocation_manifest_sha256"]),
+        )
+        verify_snapshot(contract)
+        return contract
+    except (OSError, TypeError, ValueError) as exc:
+        if isinstance(exc, ConfigContractError):
+            raise
+        raise ConfigContractError("codex profile invocation contract is invalid") from exc
+
+
 def build_agent(profile: AgentProfile):
     """Instantiate a concrete adapter from a named profile.
 
@@ -77,18 +132,9 @@ def build_agent(profile: AgentProfile):
     if profile.provider == "mock":
         return MockAgentAdapter(profile.name)
     if profile.provider == "codex":
-        invocation_config = None
-        snapshot_path = profile.codex_invocation_snapshot_path or os.environ.get(
-            "ARC_CODEX_INVOCATION_SNAPSHOT_PATH"
+        invocation_config = profile_invocation_config(
+            profile, require_complete=profile.codex_invocation_snapshot_path is not None
         )
-        snapshot_sha256 = profile.codex_invocation_snapshot_sha256 or os.environ.get(
-            "ARC_CODEX_INVOCATION_SNAPSHOT_SHA256"
-        )
-        if snapshot_path:
-            invocation_config = load_snapshot(
-                snapshot_path,
-                expected_sha256=snapshot_sha256,
-            )
         return CodexAgentAdapter(
             model_name=profile.model,
             command_override=profile.command_override,
