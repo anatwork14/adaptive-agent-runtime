@@ -70,6 +70,39 @@ class StagedInvocationHome:
     environment: Mapping[str, str]
 
 
+def load_snapshot(
+    snapshot_path: str | Path,
+    *,
+    expected_sha256: str | None = None,
+) -> CodexInvocationConfig:
+    """Load and verify a campaign-owned snapshot without reconstructing it."""
+    root = Path(snapshot_path).expanduser().resolve()
+    manifest_path = root / MANIFEST_FILENAME
+    if not manifest_path.is_file():
+        raise ConfigContractError("snapshot manifest is missing")
+    try:
+        manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as exc:
+        raise ConfigContractError("snapshot manifest is invalid") from exc
+    digest = manifest.get("config_sha256")
+    projection = manifest.get("semantic_projection")
+    if not isinstance(digest, str) or not isinstance(projection, dict):
+        raise ConfigContractError("snapshot manifest has no usable config identity")
+    if expected_sha256 is not None and digest != expected_sha256:
+        raise ConfigContractError("snapshot digest does not match the campaign contract")
+    contract = CodexInvocationConfig(
+        snapshot_path=root,
+        snapshot_sha256=digest,
+        snapshot_size=int(manifest.get("config_size", -1)),
+        codex_version=str(manifest.get("codex_version", "")),
+        semantic_projection=projection,
+        provider=str(manifest.get("provider", "")),
+        authentication_required=bool(manifest.get("authentication_required", True)),
+    )
+    verify_snapshot(contract)
+    return contract
+
+
 def _sha256(data: bytes) -> str:
     return hashlib.sha256(data).hexdigest()
 

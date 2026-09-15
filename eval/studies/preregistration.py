@@ -78,6 +78,9 @@ class StudyRuntimeContract(BaseModel):
     provider_codex_home: str | None = None
     provider_codex_config_path: str | None = None
     provider_codex_config_sha256: str | None = None
+    provider_codex_snapshot_path: str | None = None
+    provider_codex_snapshot_sha256: str | None = None
+    provider_codex_snapshot_size: int | None = Field(default=None, ge=1)
     verification_level: str = "V0"
     hidden_tests_required: bool = False
     hidden_tests_digest: str | None = None
@@ -211,6 +214,9 @@ def create_preregistration(
     provider_codex_home: str | None = None,
     provider_codex_config_path: str | None = None,
     provider_codex_config_sha256: str | None = None,
+    provider_codex_snapshot_path: str | None = None,
+    provider_codex_snapshot_sha256: str | None = None,
+    provider_codex_snapshot_size: int | None = None,
     hidden_test_digest: str | None = None,
 ) -> PreregisteredStudy:
     manifest_list = [manifest.model_copy(deep=True) for manifest in manifests]
@@ -272,6 +278,9 @@ def create_preregistration(
             provider_codex_home=provider_codex_home,
             provider_codex_config_path=provider_codex_config_path,
             provider_codex_config_sha256=provider_codex_config_sha256,
+            provider_codex_snapshot_path=provider_codex_snapshot_path,
+            provider_codex_snapshot_sha256=provider_codex_snapshot_sha256,
+            provider_codex_snapshot_size=provider_codex_snapshot_size,
             verification_level=verification_level,
             hidden_tests_required=hidden_digest is not None,
             hidden_tests_digest=hidden_digest,
@@ -326,10 +335,26 @@ def validate_execution_environment(
     provider_codex_home: str | None = None,
     provider_codex_config_path: str | None = None,
     provider_codex_config_sha256: str | None = None,
+    provider_codex_snapshot_path: str | None = None,
+    provider_codex_snapshot_sha256: str | None = None,
+    provider_codex_snapshot_size: int | None = None,
 ) -> None:
     """Fail closed when the live execution contract differs from preregistration."""
     if plan.plan_digest != compute_plan_digest(plan):
         raise ValueError("preregistration plan_digest is invalid")
+
+    expected_snapshot = (
+        plan.runtime.provider_codex_snapshot_path,
+        plan.runtime.provider_codex_snapshot_sha256,
+        plan.runtime.provider_codex_snapshot_size,
+    )
+    actual_snapshot = (
+        provider_codex_snapshot_path,
+        provider_codex_snapshot_sha256,
+        provider_codex_snapshot_size,
+    )
+    if expected_snapshot != actual_snapshot:
+        raise ValueError("provider Codex snapshot identity differs from preregistration")
 
     repo = Path(source_repo).resolve()
     for manifest in plan.manifests:
@@ -357,6 +382,9 @@ def validate_execution_environment(
         "provider_codex_home": provider_codex_home,
         "provider_codex_config_path": provider_codex_config_path,
         "provider_codex_config_sha256": provider_codex_config_sha256,
+        "provider_codex_snapshot_path": provider_codex_snapshot_path,
+        "provider_codex_snapshot_sha256": provider_codex_snapshot_sha256,
+        "provider_codex_snapshot_size": provider_codex_snapshot_size,
         "verification_level": verification_level,
         "hidden_tests_required": live_hidden is not None,
         "hidden_tests_digest": live_hidden,
@@ -375,6 +403,9 @@ def validate_execution_environment(
         "provider_codex_home",
         "provider_codex_config_path",
         "provider_codex_config_sha256",
+        "provider_codex_snapshot_path",
+        "provider_codex_snapshot_sha256",
+        "provider_codex_snapshot_size",
     ):
         if getattr(plan.runtime, key) is None:
             expected.pop(key, None)

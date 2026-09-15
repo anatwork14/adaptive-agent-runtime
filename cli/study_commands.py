@@ -238,6 +238,9 @@ def register_study_commands(benchmark_app: typer.Typer) -> None:
                 provider_codex_home=profile.codex_home,
                 provider_codex_config_path=profile.codex_config_path,
                 provider_codex_config_sha256=_provider_codex_config_sha256(profile),
+                provider_codex_snapshot_path=plan.runtime.provider_codex_snapshot_path,
+                provider_codex_snapshot_sha256=plan.runtime.provider_codex_snapshot_sha256,
+                provider_codex_snapshot_size=plan.runtime.provider_codex_snapshot_size,
             )
 
             if qualification_only:

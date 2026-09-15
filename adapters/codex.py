@@ -9,6 +9,10 @@ from pathlib import Path
 from typing import Iterator
 
 from adapters.cli_process import SubprocessCodingAgent
+from runtime.codex_invocation_config import (
+    CodexInvocationConfig,
+    stage_invocation_home,
+)
 from runtime.environment import build_execution_environment
 
 
@@ -29,6 +33,8 @@ class CodexAgentAdapter(SubprocessCodingAgent):
         env_allow: Iterable[str] = (),
         codex_home: str | None = None,
         codex_config_path: str | None = None,
+        invocation_config: CodexInvocationConfig | None = None,
+        auth_source: str | Path | None = None,
     ) -> None:
         command = ["codex", "exec", "--full-auto"]
         if model_name:
@@ -47,6 +53,8 @@ class CodexAgentAdapter(SubprocessCodingAgent):
         self.model_name = model_name
         self.codex_home = codex_home
         self.codex_config_path = codex_config_path
+        self.invocation_config = invocation_config
+        self.auth_source = Path(auth_source).expanduser().resolve() if auth_source else None
         self._active_invocation_home: str | None = None
 
     def execution_environment(self) -> dict[str, str]:
@@ -73,6 +81,14 @@ class CodexAgentAdapter(SubprocessCodingAgent):
         """
         if not self.codex_home:
             raise RuntimeError("Codex invocation isolation requires codex_home")
+        if self.invocation_config is not None:
+            auth_source = self.auth_source or (Path(self.codex_home) / "auth.json")
+            with stage_invocation_home(
+                self.invocation_config,
+                auth_source=auth_source,
+            ) as staged:
+                yield str(staged.home)
+            return
         source_home = Path(self.codex_home).expanduser().resolve()
         source_config = Path(self.codex_config_path or source_home / "config.toml").resolve()
         if not source_config.is_file():

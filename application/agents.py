@@ -7,6 +7,7 @@ import shlex
 import shutil
 import time
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Optional
 
 from adapters.antigravity import AntigravityAgentAdapter
@@ -17,6 +18,7 @@ from adapters.opencode import OpenCodeAgentAdapter
 from adapters.openrouter import OpenRouterAgentAdapter
 from application.auth import ProviderAuthStatus, auth_status
 from application.config import AgentProfile
+from runtime.codex_invocation_config import load_snapshot
 
 
 @dataclass(frozen=True)
@@ -75,12 +77,30 @@ def build_agent(profile: AgentProfile):
     if profile.provider == "mock":
         return MockAgentAdapter(profile.name)
     if profile.provider == "codex":
+        invocation_config = None
+        snapshot_path = profile.codex_invocation_snapshot_path or os.environ.get(
+            "ARC_CODEX_INVOCATION_SNAPSHOT_PATH"
+        )
+        snapshot_sha256 = profile.codex_invocation_snapshot_sha256 or os.environ.get(
+            "ARC_CODEX_INVOCATION_SNAPSHOT_SHA256"
+        )
+        if snapshot_path:
+            invocation_config = load_snapshot(
+                snapshot_path,
+                expected_sha256=snapshot_sha256,
+            )
         return CodexAgentAdapter(
             model_name=profile.model,
             command_override=profile.command_override,
             env_allow=profile.env_allow,
             codex_home=profile.codex_home,
             codex_config_path=profile.codex_config_path,
+            invocation_config=invocation_config,
+            auth_source=(
+                str(Path(profile.codex_home) / "auth.json")
+                if profile.codex_home
+                else None
+            ),
         )
     if profile.provider == "claude":
         return ClaudeAgentAdapter(
