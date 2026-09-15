@@ -10,7 +10,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Literal, Sequence
 
-from pydantic import BaseModel, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from eval.comparison import validate_comparable_manifests
 from eval.models import BenchmarkManifest
@@ -38,10 +38,14 @@ class StudyDesign(BaseModel):
 class ExecutionHarness(BaseModel):
     """Immutable identity for the repository test backend."""
 
+    model_config = ConfigDict(extra="forbid")
+
     command: list[str] = Field(min_length=1)
     backend: Literal["docker"] = "docker"
     image: str = Field(min_length=1)
     image_digest: str = Field(min_length=71, max_length=71, pattern=r"^sha256:[0-9a-f]{64}$")
+    architecture: str | None = None
+    os: str | None = None
     network_enabled: bool = False
     environment: dict[str, str] = Field(default_factory=dict)
     hidden_command: list[str] = Field(default_factory=list)
@@ -50,6 +54,15 @@ class ExecutionHarness(BaseModel):
     python_toolchain: str = Field(min_length=1)
     timeout_seconds: int = Field(default=120, ge=1)
     qualification_id: str = Field(min_length=1)
+
+
+def canonical_visible_test_harness(
+    harness: ExecutionHarness | dict[str, Any] | None,
+) -> dict[str, Any] | None:
+    """Serialize every frozen harness field through one strict schema."""
+    if harness is None:
+        return None
+    return ExecutionHarness.model_validate(harness).model_dump(mode="json", exclude_none=True)
 
 
 class StudyRuntimeContract(BaseModel):
@@ -243,7 +256,7 @@ def create_preregistration(
             profile_capabilities=sorted(set(profile_capabilities)),
             visible_test_cmd=list(visible_test_cmd),
             visible_test_harness=(
-                ExecutionHarness.model_validate(visible_test_harness)
+                canonical_visible_test_harness(visible_test_harness)
                 if visible_test_harness
                 else None
             ),
@@ -328,7 +341,7 @@ def validate_execution_environment(
         "profile_capabilities": sorted(set(profile_capabilities)),
         "visible_test_cmd": list(visible_test_cmd),
         "visible_test_harness": (
-            ExecutionHarness.model_validate(visible_test_harness).model_dump(mode="json")
+            canonical_visible_test_harness(visible_test_harness)
             if visible_test_harness
             else None
         ),
@@ -341,7 +354,10 @@ def validate_execution_environment(
         "hidden_tests_required": live_hidden is not None,
         "hidden_tests_digest": live_hidden,
     }
-    expected = plan.runtime.model_dump(mode="json")
+    expected = plan.runtime.model_dump(mode="json", exclude_none=True)
+    expected["visible_test_harness"] = canonical_visible_test_harness(
+        plan.runtime.visible_test_harness
+    )
     expected.pop("agent_profile", None)
     if plan.runtime.provider_execution_timeout_seconds is None:
         # Legacy plans predate the explicit provider timeout. Their historical

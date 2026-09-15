@@ -1,0 +1,30 @@
+{
+  "schema": "arc-provider-probe-v1",
+  "profile": "builder",
+  "provider": "codex",
+  "model": "gpt-5.5",
+  "role": "implementation",
+  "auth_mode": "chatgpt_subscription",
+  "codex_home": "/Users/teobun/arc-secure/codex-v4-home",
+  "provider_cli_version": "codex-cli 0.133.0-alpha.1",
+  "effective_argv": ["codex", "exec", "--full-auto", "--model", "gpt-5.5", "--config", "model_reasoning_effort=high", "--json", "-"],
+  "environment_keys": ["CODEX_HOME", "COLORTERM", "HOME", "LANG", "LC_ALL", "LC_CTYPE", "LOGNAME", "PATH", "SHELL", "TERM", "TMPDIR", "USER"],
+  "passive_authentication_state": "AUTHENTICATED",
+  "passive_authentication_detail": "Logged in using ChatGPT",
+  "active_probe": {
+    "benchmark_context": false,
+    "scientific_evidence": false,
+    "process_started": true,
+    "prompt_written": true,
+    "request_started": true,
+    "response_started": true,
+    "completed": true,
+    "returncode": 0,
+    "marker_seen": true,
+    "workspace_disposable": true,
+    "configured_timeout_seconds": 600,
+    "provider_tokens": 16379
+  },
+  "provider_execution_started": false,
+  "benchmark_attempt_created": false
+}

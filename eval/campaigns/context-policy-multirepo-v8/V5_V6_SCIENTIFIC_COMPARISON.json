@@ -1,0 +1,335 @@
+{
+  "all_checks_passed": true,
+  "campaign": "context-policy-multirepo-v8",
+  "nine_manifest_comparisons": [
+    {
+      "baseline": "B3",
+      "equal": true,
+      "repository": "click",
+      "unexpected_differences": [],
+      "v5_normalized_sha256": "89cf1e6a3abce56fadddb7d98c82beec530e33dda3a28c93001110346feba025",
+      "v8_normalized_sha256": "89cf1e6a3abce56fadddb7d98c82beec530e33dda3a28c93001110346feba025"
+    },
+    {
+      "baseline": "B5",
+      "equal": true,
+      "repository": "click",
+      "unexpected_differences": [],
+      "v5_normalized_sha256": "c342640208f30be5c24810a2e2dd2aee9cfef61c75d1b08e4192f52f4e3670b6",
+      "v8_normalized_sha256": "c342640208f30be5c24810a2e2dd2aee9cfef61c75d1b08e4192f52f4e3670b6"
+    },
+    {
+      "baseline": "B7",
+      "equal": true,
+      "repository": "click",
+      "unexpected_differences": [],
+      "v5_normalized_sha256": "8beb2ffa77ab4145715817e7e622b94b3044f6f3d866c6a4c1cc1881bdc7692f",
+      "v8_normalized_sha256": "8beb2ffa77ab4145715817e7e622b94b3044f6f3d866c6a4c1cc1881bdc7692f"
+    },
+    {
+      "baseline": "B3",
+      "equal": true,
+      "repository": "httpx",
+      "unexpected_differences": [],
+      "v5_normalized_sha256": "fff724b504c47265a4fe4224b6d5a3cb0425f906a6f523bbc057dad42472fba0",
+      "v8_normalized_sha256": "fff724b504c47265a4fe4224b6d5a3cb0425f906a6f523bbc057dad42472fba0"
+    },
+    {
+      "baseline": "B5",
+      "equal": true,
+      "repository": "httpx",
+      "unexpected_differences": [],
+      "v5_normalized_sha256": "48ef4c630af1367fd0dcbd7f815984992fb5b9e45c82738a789cca65c0e54519",
+      "v8_normalized_sha256": "48ef4c630af1367fd0dcbd7f815984992fb5b9e45c82738a789cca65c0e54519"
+    },
+    {
+      "baseline": "B7",
+      "equal": true,
+      "repository": "httpx",
+      "unexpected_differences": [],
+      "v5_normalized_sha256": "28d55326710c2ae77353cbc65d98ac30d0d495fbb83709b87c868c3a98319172",
+      "v8_normalized_sha256": "28d55326710c2ae77353cbc65d98ac30d0d495fbb83709b87c868c3a98319172"
+    },
+    {
+      "baseline": "B3",
+      "equal": true,
+      "repository": "python-dotenv",
+      "unexpected_differences": [],
+      "v5_normalized_sha256": "0ae4a38268f87e27b1ee17caaeebf95578254b413ce1e96069b4be429920b11e",
+      "v8_normalized_sha256": "0ae4a38268f87e27b1ee17caaeebf95578254b413ce1e96069b4be429920b11e"
+    },
+    {
+      "baseline": "B5",
+      "equal": true,
+      "repository": "python-dotenv",
+      "unexpected_differences": [],
+      "v5_normalized_sha256": "e3f1f70324d2dfba3c175b91b3fd09c6b907e5f8e460877c7176df0daad98100",
+      "v8_normalized_sha256": "e3f1f70324d2dfba3c175b91b3fd09c6b907e5f8e460877c7176df0daad98100"
+    },
+    {
+      "baseline": "B7",
+      "equal": true,
+      "repository": "python-dotenv",
+      "unexpected_differences": [],
+      "v5_normalized_sha256": "7dcab91a0b079584e6e27b358b9a0a137e96020115076e5f707971cd8ced526c",
+      "v8_normalized_sha256": "7dcab91a0b079584e6e27b358b9a0a137e96020115076e5f707971cd8ced526c"
+    }
+  ],
+  "nine_manifest_comparisons_pass": true,
+  "normalized_contracts_equal": true,
+  "normalized_v5_sha256": "d52fb750339f5dfcd0ceee881b7bd29ccf710c86439de9caf0d8469f4fff7761",
+  "normalized_v8_sha256": "d52fb750339f5dfcd0ceee881b7bd29ccf710c86439de9caf0d8469f4fff7761",
+  "parent_campaign": "context-policy-multirepo-v5",
+  "schema_version": "arc-v5-v8-scientific-comparison-v1",
+  "scientific_core_preserved": true,
+  "scientific_design_change": false,
+  "treatment_comparisons": {
+    "click": {
+      "differences": [],
+      "equal": true,
+      "fields_checked": [
+        "model",
+        "provider_execution_timeout_seconds",
+        "visible_test_harness"
+      ],
+      "v5": {
+        "model": "gpt-5.5",
+        "provider_execution_timeout_seconds": 600,
+        "visible_test_harness": {
+          "backend": "docker",
+          "command": [
+            "python",
+            "-m",
+            "pytest",
+            "-q"
+          ],
+          "environment": {
+            "PYTHONPATH": "/workspace/src"
+          },
+          "hidden_command": [
+            "python",
+            "-m",
+            "pytest",
+            "-q",
+            "-p",
+            "no:cacheprovider",
+            "/arc-hidden-tests"
+          ],
+          "hidden_environment": {
+            "PYTHONPATH": "/workspace/src"
+          },
+          "image": "arc-v2-click:qualified",
+          "image_digest": "sha256:7fae74105025e759c4244de903b1385271df9ac4f8e4bfb3d1589094d2ec92a4",
+          "network_enabled": false,
+          "python_toolchain": "CPython 3.10.7; uv-locked dev/tests environment",
+          "qualification_id": "click-docker-python310-uv-locked-v2",
+          "timeout_seconds": 180,
+          "tmpfs_exec": true
+        }
+      },
+      "v8": {
+        "model": "gpt-5.5",
+        "provider_execution_timeout_seconds": 600,
+        "visible_test_harness": {
+          "backend": "docker",
+          "command": [
+            "python",
+            "-m",
+            "pytest",
+            "-q"
+          ],
+          "environment": {
+            "PYTHONPATH": "/workspace/src"
+          },
+          "hidden_command": [
+            "python",
+            "-m",
+            "pytest",
+            "-q",
+            "-p",
+            "no:cacheprovider",
+            "/arc-hidden-tests"
+          ],
+          "hidden_environment": {
+            "PYTHONPATH": "/workspace/src"
+          },
+          "image": "arc-v2-click:qualified",
+          "image_digest": "sha256:7fae74105025e759c4244de903b1385271df9ac4f8e4bfb3d1589094d2ec92a4",
+          "network_enabled": false,
+          "python_toolchain": "CPython 3.10.7; uv-locked dev/tests environment",
+          "qualification_id": "click-docker-python310-uv-locked-v2",
+          "timeout_seconds": 180,
+          "tmpfs_exec": true
+        }
+      }
+    },
+    "httpx": {
+      "differences": [],
+      "equal": true,
+      "fields_checked": [
+        "model",
+        "provider_execution_timeout_seconds",
+        "visible_test_harness"
+      ],
+      "v5": {
+        "model": "gpt-5.5",
+        "provider_execution_timeout_seconds": 600,
+        "visible_test_harness": {
+          "backend": "docker",
+          "command": [
+            "python",
+            "-m",
+            "pytest",
+            "-q",
+            "-W",
+            "ignore::ResourceWarning",
+            "-m",
+            "not network"
+          ],
+          "environment": {
+            "PYTHONPATH": "/workspace"
+          },
+          "hidden_command": [
+            "python",
+            "-m",
+            "pytest",
+            "-q",
+            "-p",
+            "no:cacheprovider",
+            "/arc-hidden-tests"
+          ],
+          "hidden_environment": {
+            "PYTHONPATH": "/workspace"
+          },
+          "image": "arc-v2-httpx:qualified",
+          "image_digest": "sha256:1f8b4320b6d1b4ab22121442732f3f684e1fe77162de563beb841b0dc340d8cf",
+          "network_enabled": false,
+          "python_toolchain": "CPython 3.11.16; requirements.txt editable environment",
+          "qualification_id": "httpx-docker-python311-requirements-resourcewarning-filter-v2",
+          "timeout_seconds": 180,
+          "tmpfs_exec": false
+        }
+      },
+      "v8": {
+        "model": "gpt-5.5",
+        "provider_execution_timeout_seconds": 600,
+        "visible_test_harness": {
+          "backend": "docker",
+          "command": [
+            "python",
+            "-m",
+            "pytest",
+            "-q",
+            "-W",
+            "ignore::ResourceWarning",
+            "-m",
+            "not network"
+          ],
+          "environment": {
+            "PYTHONPATH": "/workspace"
+          },
+          "hidden_command": [
+            "python",
+            "-m",
+            "pytest",
+            "-q",
+            "-p",
+            "no:cacheprovider",
+            "/arc-hidden-tests"
+          ],
+          "hidden_environment": {
+            "PYTHONPATH": "/workspace"
+          },
+          "image": "arc-v2-httpx:qualified",
+          "image_digest": "sha256:1f8b4320b6d1b4ab22121442732f3f684e1fe77162de563beb841b0dc340d8cf",
+          "network_enabled": false,
+          "python_toolchain": "CPython 3.11.16; requirements.txt editable environment",
+          "qualification_id": "httpx-docker-python311-requirements-resourcewarning-filter-v2",
+          "timeout_seconds": 180,
+          "tmpfs_exec": false
+        }
+      }
+    },
+    "python-dotenv": {
+      "differences": [],
+      "equal": true,
+      "fields_checked": [
+        "model",
+        "provider_execution_timeout_seconds",
+        "visible_test_harness"
+      ],
+      "v5": {
+        "model": "gpt-5.5",
+        "provider_execution_timeout_seconds": 600,
+        "visible_test_harness": {
+          "backend": "docker",
+          "command": [
+            "python",
+            "-m",
+            "pytest",
+            "-q"
+          ],
+          "environment": {
+            "PYTHONPATH": "/workspace/src"
+          },
+          "hidden_command": [
+            "python",
+            "-m",
+            "pytest",
+            "-q",
+            "-p",
+            "no:cacheprovider",
+            "/arc-hidden-tests"
+          ],
+          "hidden_environment": {
+            "PYTHONPATH": "/workspace/src"
+          },
+          "image": "arc-v2-python-dotenv:qualified",
+          "image_digest": "sha256:d7e1c1d915ad92a48fe0d915b9f951bd70af3bab5737d03f83d31281d84dc32b",
+          "network_enabled": false,
+          "python_toolchain": "CPython 3.10.7; requirements.txt editable environment",
+          "qualification_id": "python-dotenv-docker-python310-requirements-v2",
+          "timeout_seconds": 180,
+          "tmpfs_exec": true
+        }
+      },
+      "v8": {
+        "model": "gpt-5.5",
+        "provider_execution_timeout_seconds": 600,
+        "visible_test_harness": {
+          "backend": "docker",
+          "command": [
+            "python",
+            "-m",
+            "pytest",
+            "-q"
+          ],
+          "environment": {
+            "PYTHONPATH": "/workspace/src"
+          },
+          "hidden_command": [
+            "python",
+            "-m",
+            "pytest",
+            "-q",
+            "-p",
+            "no:cacheprovider",
+            "/arc-hidden-tests"
+          ],
+          "hidden_environment": {
+            "PYTHONPATH": "/workspace/src"
+          },
+          "image": "arc-v2-python-dotenv:qualified",
+          "image_digest": "sha256:d7e1c1d915ad92a48fe0d915b9f951bd70af3bab5737d03f83d31281d84dc32b",
+          "network_enabled": false,
+          "python_toolchain": "CPython 3.10.7; requirements.txt editable environment",
+          "qualification_id": "python-dotenv-docker-python310-requirements-v2",
+          "timeout_seconds": 180,
+          "tmpfs_exec": true
+        }
+      }
+    }
+  },
+  "treatment_comparisons_pass": true,
+  "unexpected_contract_differences": []
+}
