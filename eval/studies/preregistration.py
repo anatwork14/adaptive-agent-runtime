@@ -211,6 +211,7 @@ def create_preregistration(
     provider_codex_home: str | None = None,
     provider_codex_config_path: str | None = None,
     provider_codex_config_sha256: str | None = None,
+    hidden_test_digest: str | None = None,
 ) -> PreregisteredStudy:
     manifest_list = [manifest.model_copy(deep=True) for manifest in manifests]
     if len(manifest_list) < 2:
@@ -233,7 +234,13 @@ def create_preregistration(
         if _resolve_commit(repo, manifest.repo_commit) != canonical_commit:
             raise ValueError("preregistered manifests do not resolve to one canonical commit")
 
-    hidden_digest = tree_digest(hidden_test_dir) if hidden_test_dir is not None else None
+    if hidden_test_dir is not None and hidden_test_digest is not None:
+        raise ValueError("provide hidden_test_dir or hidden_test_digest, not both")
+    hidden_digest = (
+        tree_digest(hidden_test_dir)
+        if hidden_test_dir is not None
+        else hidden_test_digest
+    )
     baselines = sorted(manifest.baseline for manifest in manifest_list)
     comparisons = [f"{left}-{right}" for left, right in itertools.combinations(baselines, 2)]
     plan = PreregisteredStudy(
