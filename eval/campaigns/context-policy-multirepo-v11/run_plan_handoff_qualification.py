@@ -1,4 +1,4 @@
-"""Provider-free qualification of the V9 nested run-plan handoff.
+"""Provider-free qualification of the V11 nested run-plan handoff.
 
 This deliberately invokes the same ``cli.bootstrap benchmark run-plan``
 subprocess used by the campaign.  The CLI validates the frozen provider
@@ -47,6 +47,13 @@ def qualify(repo: Path, hidden_dir: Path) -> dict[str, Any]:
             "codex_config_path": contract["provider_runtime"]["codex_config_path"],
             "codex_invocation_snapshot_path": contract["provider_runtime"]["codex_snapshot_path"],
             "codex_invocation_snapshot_sha256": contract["provider_runtime"]["codex_snapshot_sha256"],
+            "codex_invocation_snapshot_size": contract["provider_runtime"]["codex_config_size"],
+            "codex_invocation_manifest_path": contract["provider_runtime"]["codex_snapshot_manifest_path"],
+            "codex_invocation_manifest_sha256": contract["provider_runtime"]["codex_snapshot_manifest_sha256"],
+            "codex_invocation_codex_version": contract["provider_runtime"]["codex_snapshot_codex_version"],
+            "codex_invocation_provider": contract["provider_runtime"]["codex_snapshot_provider"],
+            "codex_invocation_authentication_required": contract["provider_runtime"]["codex_snapshot_authentication_required"],
+            "codex_invocation_semantic_projection": contract["provider_runtime"]["codex_snapshot_semantic_projection"],
         }
     )
     manifests = [
@@ -76,10 +83,16 @@ def qualify(repo: Path, hidden_dir: Path) -> dict[str, Any]:
         provider_codex_config_sha256=contract["provider_runtime"]["codex_config_sha256"],
         provider_codex_snapshot_path=profile.codex_invocation_snapshot_path,
         provider_codex_snapshot_sha256=profile.codex_invocation_snapshot_sha256,
-        provider_codex_snapshot_size=contract["provider_runtime"]["codex_config_size"],
+        provider_codex_snapshot_size=profile.codex_invocation_snapshot_size,
+        provider_codex_manifest_path=profile.codex_invocation_manifest_path,
+        provider_codex_manifest_sha256=profile.codex_invocation_manifest_sha256,
+        provider_codex_version=profile.codex_invocation_codex_version,
+        provider_codex_provider=profile.codex_invocation_provider,
+        provider_codex_authentication_required=profile.codex_invocation_authentication_required,
+        provider_codex_semantic_projection=profile.codex_invocation_semantic_projection,
     )
 
-    with tempfile.TemporaryDirectory(prefix="arc-v9-run-plan-handoff-") as directory:
+    with tempfile.TemporaryDirectory(prefix="arc-v11-run-plan-handoff-") as directory:
         root = Path(directory)
         temp_repo = root / "repo"
         shutil.copytree(repo, temp_repo)
@@ -118,7 +131,7 @@ def qualify(repo: Path, hidden_dir: Path) -> dict[str, Any]:
             and "provider_execution_started=false" in combined
         )
         report = {
-            "schema_version": "arc-v9-run-plan-provider-handoff-qualification-v1",
+            "schema_version": "arc-v11-run-plan-provider-handoff-qualification-v1",
             "campaign_id": contract["campaign_id"],
             "repository": "click",
             "command": command,
