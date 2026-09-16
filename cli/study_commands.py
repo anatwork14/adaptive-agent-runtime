@@ -32,6 +32,7 @@ _PRODUCTION_STATE_CAMPAIGN_MAP = {
     "context-policy-multirepo-v14": "v14",
     "context-policy-multirepo-v15": "v15",
     "context-policy-multirepo-v16": "v16",
+    "context-policy-multirepo-v17": "v17",
 }
 
 

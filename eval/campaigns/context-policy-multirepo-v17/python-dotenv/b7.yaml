@@ -1,0 +1,42 @@
+benchmark_id: context-policy-python-dotenv-v17
+baseline: B7
+execution_mode: sequence
+seed: 20260912
+agent_profile: builder
+model: gpt-5.5
+repo_commit: a00cb2eed0704cd6d2071b2004c37e95ccc86ee5
+context_token_budget: 12000
+hard_task_usd: 2.0
+faults: []
+project_constraints: [Preserve existing dotenv parsing and interpolation semantics., Do not add third-party runtime dependencies., Do not weaken or delete existing tests.]
+notes: Proposed adaptive-context treatment for the python-dotenv progressive maintenance sequence.
+tasks:
+  - task_id: T001
+    goal: Add immutable public DotEnvEntry(key, value, line) provenance and DotEnv.entries() yielding valid keyed bindings before interpolation while preserving existing parsing semantics.
+    files: [src/dotenv/parser.py, src/dotenv/main.py, src/dotenv/__init__.py, tests/test_parser.py, tests/test_main.py]
+    symbols: [Binding, Original, DotEnv, DotEnvEntry]
+    acceptance: [DotEnvEntry is public and immutable with key value and 1-based line fields., DotEnv.entries yields DotEnvEntry objects for valid keyed bindings before interpolation., Comments blank lines and error-only bindings do not appear as keyed entries., Existing visible parsing tests pass unchanged.]
+    risk: 0.45
+    token_budget: 12000
+    hidden_test_pattern: test_hidden_dotenv_t001_*.py
+    metadata: {category: progressive-parser-maintenance}
+  - task_id: T002
+    dependencies: [T001]
+    goal: Add and export dotenv_values_with_metadata(...) returning an OrderedDict from key to DotEnvEntry with the same discovery encoding interpolation and override semantics as dotenv_values while retaining the winning source line.
+    files: [src/dotenv/main.py, src/dotenv/__init__.py, src/dotenv/variables.py, tests/test_main.py, tests/test_variables.py]
+    symbols: [DotEnv, DotEnvEntry, dotenv_values, dotenv_values_with_metadata, resolve_variables]
+    acceptance: [dotenv_values_with_metadata is importable from dotenv and mirrors dotenv_values arguments where applicable., Resolved entry values match dotenv_values under equivalent arguments., Duplicate keys retain the winning binding source line and keys without a value remain distinct from empty strings., T001 behavior and existing visible tests remain compatible.]
+    risk: 0.60
+    token_budget: 12000
+    hidden_test_pattern: test_hidden_dotenv_t002_*.py
+    metadata: {category: progressive-parser-maintenance}
+  - task_id: T003
+    dependencies: [T002]
+    goal: Extend dotenv list --format with exact choice json-meta that reuses dotenv_values_with_metadata and emits deterministic JSON mapping each key to its value and source line while leaving existing formats unchanged.
+    files: [src/dotenv/cli.py, src/dotenv/main.py, src/dotenv/__init__.py, tests/test_cli.py, tests/test_main.py]
+    symbols: [list_values, dotenv_values_with_metadata]
+    acceptance: [--format json-meta emits valid sorted JSON mapping every key to an object with value and line., The CLI reuses dotenv_values_with_metadata rather than reparsing independently., simple json shell and export formats keep their previous behavior., T001 and T002 behavior plus existing visible tests remain compatible.]
+    risk: 0.50
+    token_budget: 12000
+    hidden_test_pattern: test_hidden_dotenv_t003_*.py
+    metadata: {category: progressive-parser-maintenance}
