@@ -144,6 +144,9 @@ def _build_pre_execution_manifest(
         "timestamp": _now(),
         "V14_head": _run_git(ARC_REPO_ROOT, "rev-parse", "HEAD"),
         "codex_version": runtime["version"],
+        "codex_executable_path": runtime["codex_executable_path"],
+        "codex_executable_sha256": runtime["codex_executable_sha256"],
+        "codex_executable_architecture": runtime["codex_executable_architecture"],
         "model": provider["model"],
         "reasoning": runtime["codex_snapshot_semantic_projection"].get("model_reasoning_effort"),
         "provider": provider["provider"],
@@ -302,6 +305,12 @@ def _validate_provider_runtime_identity(
 ) -> dict[str, Any]:
     """Fail closed if the frozen provider home or non-secret config drifts."""
     runtime = contract["provider_runtime"]
+    executable = inspect_codex_executable(
+        runtime["codex_executable_path"],
+        expected_version=runtime["codex_executable_version"],
+        expected_sha256=runtime["codex_executable_sha256"],
+        expected_architecture=runtime["codex_executable_architecture"],
+    )
     expected_home = str(runtime["codex_home"])
     expected_snapshot = Path(str(runtime["codex_snapshot_path"])).resolve()
     actual_home = _provider_environment(contract)["CODEX_HOME"]
@@ -338,6 +347,10 @@ def _validate_provider_runtime_identity(
         "config_size": snapshot.snapshot_size,
         "snapshot_path": str(snapshot.snapshot_path),
         "verified": True,
+        "executable_path": str(executable.path),
+        "executable_version": executable.version,
+        "executable_sha256": executable.sha256,
+        "executable_architecture": executable.architecture,
     }
 
 
@@ -397,6 +410,11 @@ def _load_freeze_bundle(
         "env_allow": sorted(provider_profile["env_allow"]),
         "effective_argv_sha256": provider_profile["effective_argv_sha256"],
         "provider_cli_version": contract["provider_runtime"]["version"],
+        "codex_executable_path": contract["provider_runtime"]["codex_executable_path"],
+        "codex_executable_version": contract["provider_runtime"]["codex_executable_version"],
+        "codex_executable_sha256": contract["provider_runtime"]["codex_executable_sha256"],
+        "codex_executable_architecture": contract["provider_runtime"]["codex_executable_architecture"],
+        "codex_release_asset_sha256": contract["provider_runtime"]["codex_release_asset_sha256"],
         "provider_execution_timeout_seconds": int(
             contract["shared_protocol"]["provider_execution_timeout_seconds"]
         ),
@@ -762,7 +780,11 @@ def preflight_campaign(
     provider = contract["provider_profile"]["provider"]
     provider_environment = _provider_environment(contract)
     provider_identity = _validate_provider_runtime_identity(contract, phase="preflight")
-    auth = auth_status(provider, environment=provider_environment)
+    auth = auth_status(
+        provider,
+        environment=provider_environment,
+        executable=contract["provider_runtime"]["codex_executable_path"],
+    )
     sandbox_ready = all(
         repository.get("sandbox", {}).get("ready") is True
         for repository in repository_report.values()
@@ -972,7 +994,11 @@ def execute_campaign(
                 profile_path=staged_profile_paths[slug],
                 frozen_profile=frozen_profiles[slug],
             )
-            auth = auth_status(provider, environment=provider_environment)
+            auth = auth_status(
+                provider,
+                environment=provider_environment,
+                executable=contract["provider_runtime"]["codex_executable_path"],
+            )
             repo_state["live_revalidated_at_utc"] = _now()
             repo_state["provider_auth_state_before_run"] = auth.state
             if not (auth.installed and auth.authenticated):

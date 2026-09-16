@@ -23,6 +23,7 @@ REPOSITORIES = ("click", "httpx", "python-dotenv")
 if str(CAMPAIGN_DIR) not in sys.path:
     sys.path.insert(0, str(CAMPAIGN_DIR))
 from profile_staging import build_frozen_profile_payload, frozen_profile_digest  # noqa: E402
+from codex_executable import inspect_codex_executable  # noqa: E402
 
 
 def _sha256(path: Path) -> str:
@@ -86,9 +87,12 @@ def freeze(output: Path = V14_FREEZE) -> Path:
     contract = json.loads((CAMPAIGN_DIR / "campaign_contract.json").read_text(encoding="utf-8"))
     snapshot = load_snapshot(CAMPAIGN_DIR / "codex", expected_sha256=contract["provider_runtime"]["codex_snapshot_sha256"])
     docker = _verify_docker(contract)
-    cli_version = subprocess.run(["codex", "--version"], capture_output=True, text=True, check=False)
-    if cli_version.returncode or cli_version.stdout.strip() != contract["provider_runtime"]["version"]:
-        raise SystemExit("pinned Codex CLI version mismatch")
+    executable = inspect_codex_executable(
+        contract["provider_runtime"]["codex_executable_path"],
+        expected_version=contract["provider_runtime"]["codex_executable_version"],
+        expected_sha256=contract["provider_runtime"]["codex_executable_sha256"],
+        expected_architecture=contract["provider_runtime"]["codex_executable_architecture"],
+    )
 
     output.mkdir(parents=True)
     (output / "campaign-contract.json").write_text(json.dumps(contract, indent=2, sort_keys=True) + "\n", encoding="utf-8")
@@ -151,6 +155,11 @@ def freeze(output: Path = V14_FREEZE) -> Path:
         "capabilities": sorted(contract["provider_profile"]["capabilities"]),
         "effective_argv_sha256": contract["provider_profile"]["effective_argv_sha256"],
         "provider_cli_version": runtime["version"],
+        "codex_executable_path": str(executable.path),
+        "codex_executable_version": executable.version,
+        "codex_executable_sha256": executable.sha256,
+        "codex_executable_architecture": executable.architecture,
+        "codex_release_asset_sha256": runtime["codex_release_asset_sha256"],
         "env_allow": [],
         "provider_execution_timeout_seconds": 600,
         "auth_mode": runtime["auth_mode"],
@@ -188,6 +197,13 @@ def freeze(output: Path = V14_FREEZE) -> Path:
         "campaign_contract": "campaign-contract.json",
         "campaign_contract_sha256": _sha256(output / "campaign-contract.json"),
         "codex_snapshot": {"source_path": str(CAMPAIGN_DIR / "codex"), "archive_path": "codex", "config_path": "codex/config.toml", "config_sha256": snapshot.snapshot_sha256, "config_size": snapshot.snapshot_size, "semantic_projection": dict(snapshot.semantic_projection), "credentials_in_archive": False},
+        "codex_executable": {
+            "path": str(executable.path),
+            "version": executable.version,
+            "sha256": executable.sha256,
+            "architecture": executable.architecture,
+            "release_asset_sha256": runtime["codex_release_asset_sha256"],
+        },
         "docker_identities": docker,
         "repository_plans": {slug: {"path": f"{slug}-context-policy-v14.json", "plan_digest": plans[slug].plan_digest, "hidden_tests_digest": plans[slug].runtime.hidden_tests_digest} for slug in REPOSITORIES},
         "repository_profiles": repository_profiles,

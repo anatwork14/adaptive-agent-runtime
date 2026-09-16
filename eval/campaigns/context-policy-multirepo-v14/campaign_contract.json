@@ -20,11 +20,11 @@
     "role": "implementation",
     "capabilities": ["implementation", "test", "debug", "refactor"],
     "env_allow": [],
-    "command_override": "codex exec --full-auto --json -",
+    "command_override": "/Users/teobun/arc-secure/codex-v0.133.0-alpha.1/codex-aarch64-apple-darwin exec --full-auto --json -",
     "effective_argv": [
       "codex", "exec", "--full-auto", "--json", "-"
     ],
-    "effective_argv_sha256": "80c442e16326a9358b797759fe8f2c90a1c19c85a6e7bd7e98d880ca26bbe420",
+    "effective_argv_sha256": "6ca01e97d5e3644f6f51d4598dfea258c518bb603d5a964e054874004bab04fb",
     "codex_invocation_snapshot_path": "/Users/teobun/src/adaptive-agent-runtime/eval/campaigns/context-policy-multirepo-v14/codex",
     "codex_invocation_snapshot_sha256": "a2c7992cdb0937eb35e2df7753550ad0242fc02e71675c6af519dfb28a7bd2bd",
     "codex_invocation_snapshot_size": 50,
@@ -41,6 +41,11 @@
   "provider_runtime": {
     "cli": "codex",
     "version": "codex-cli 0.133.0-alpha.1",
+    "codex_executable_path": "/Users/teobun/arc-secure/codex-v0.133.0-alpha.1/codex-aarch64-apple-darwin",
+    "codex_executable_version": "codex-cli 0.133.0-alpha.1",
+    "codex_executable_sha256": "fcde55f63e03b1d0d368789007c709f629a118c959c25eec5db15235b8b312af",
+    "codex_executable_architecture": "arm64",
+    "codex_release_asset_sha256": "541bb4a21f0607dbb87dd309e39e55ef3e40fee589700d8e2188bc7501f744ea",
     "provider_execution_timeout_seconds": 600,
     "codex_home": "/Users/teobun/arc-secure/codex-v8-home",
     "codex_config_path": "/Users/teobun/src/adaptive-agent-runtime/eval/campaigns/context-policy-multirepo-v14/codex/config.toml",

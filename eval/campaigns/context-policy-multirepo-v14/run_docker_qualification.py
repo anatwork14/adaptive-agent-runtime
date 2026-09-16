@@ -64,7 +64,27 @@ def _assert_probe(result, *, label: str, expected_exit: int = 0, timed_out: bool
     }
 
 
-def qualify(hidden_root: Path, repo_root: Path = REPO_ROOT) -> dict[str, Any]:
+def _hidden_harness_health(result) -> bool:
+    """Classify evaluator health without requiring the candidate to pass tasks."""
+    output = (result.stdout + "\n" + result.stderr).lower()
+    collection_or_runner_failure = any(
+        marker in output
+        for marker in (
+            "error collecting",
+            "importerror",
+            "modulenotfounderror",
+            "internalerror",
+            "no tests ran",
+        )
+    )
+    return not result.timed_out and result.exit_code in (0, 1) and not collection_or_runner_failure
+
+
+def qualify(
+    hidden_root: Path,
+    repo_root: Path = REPO_ROOT,
+    repo_overrides: dict[str, Path] | None = None,
+) -> dict[str, Any]:
     contract = _contract()
     results: dict[str, Any] = {}
     with tempfile.TemporaryDirectory(prefix="arc-v14-docker-qualification-") as directory:
@@ -73,7 +93,8 @@ def qualify(hidden_root: Path, repo_root: Path = REPO_ROOT) -> dict[str, Any]:
             repository = contract["repositories"][slug]
             harness = repository["visible_test_harness"]
             clone = disposable_root / slug
-            _clone(repo_root / slug, clone)
+            source_repo = (repo_overrides or {}).get(slug, repo_root / slug)
+            _clone(source_repo, clone)
             runner = SandboxRunner(
                 clone,
                 network_enabled=bool(harness["network_enabled"]),
@@ -183,7 +204,8 @@ def qualify(hidden_root: Path, repo_root: Path = REPO_ROOT) -> dict[str, Any]:
                     "exit_code": hidden.exit_code,
                     "timed_out": hidden.timed_out,
                     "duration_ms": hidden.duration_ms,
-                    "passed": hidden.exit_code == 0 and not hidden.timed_out,
+                    "task_passed": hidden.exit_code == 0 and not hidden.timed_out,
+                    "harness_health": _hidden_harness_health(hidden),
                     "workspace_read_only": True,
                 },
                 "workspace_write": True,
@@ -202,7 +224,13 @@ def qualify(hidden_root: Path, repo_root: Path = REPO_ROOT) -> dict[str, Any]:
             item["sandbox_identity_verified"] for item in results.values()
         ),
         "all_visible_passed": all(item["visible"]["passed"] for item in results.values()),
-        "all_hidden_passed": all(item["hidden"]["passed"] for item in results.values()),
+        "all_hidden_task_results_passed": all(
+            item["hidden"]["task_passed"] for item in results.values()
+        ),
+        "all_hidden_harness_health_passed": all(
+            item["hidden"]["harness_health"] for item in results.values()
+        ),
+        "qualification_semantics": "HARNESS_HEALTH",
         "all_security_probes_passed": all(
             all(
                 item[key] is True
@@ -225,9 +253,15 @@ def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--hidden-root", type=Path, required=True)
     parser.add_argument("--repo-root", type=Path, default=REPO_ROOT)
+    parser.add_argument("--python-dotenv-repo", type=Path)
     parser.add_argument("--output", type=Path, required=True)
     args = parser.parse_args()
-    result = qualify(args.hidden_root.resolve(), args.repo_root.resolve())
+    overrides = (
+        {"python-dotenv": args.python_dotenv_repo.resolve()}
+        if args.python_dotenv_repo is not None
+        else None
+    )
+    result = qualify(args.hidden_root.resolve(), args.repo_root.resolve(), overrides)
     args.output.parent.mkdir(parents=True, exist_ok=True)
     args.output.write_text(json.dumps(result, indent=2, sort_keys=True) + "\n", encoding="utf-8")
     print(json.dumps(result, indent=2, sort_keys=True))

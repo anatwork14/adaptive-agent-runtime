@@ -114,9 +114,11 @@ def auth_status(
     *,
     timeout: float = 8.0,
     environment: Mapping[str, str] | None = None,
+    executable: str | Path | None = None,
 ) -> ProviderAuthStatus:
     spec = get_auth_spec(provider)
-    resolved = shutil.which(spec.executable)
+    executable_name = str(executable) if executable is not None else spec.executable
+    resolved = shutil.which(executable_name)
     if not resolved:
         return ProviderAuthStatus(
             provider=spec.provider,
@@ -124,7 +126,7 @@ def auth_status(
             installed=False,
             authenticated=False,
             state="MISSING",
-            detail=f"{spec.executable!r} is not installed or not on PATH",
+            detail=f"{executable_name!r} is not installed or not on PATH",
             executable=None,
             auth_method=spec.auth_method,
         )
@@ -134,7 +136,7 @@ def auth_status(
         env.setdefault("TERM", "xterm-256color")
     try:
         result = subprocess.run(
-            list(spec.status_command),
+            (executable_name, *spec.status_command[1:]),
             capture_output=True,
             text=True,
             timeout=timeout,

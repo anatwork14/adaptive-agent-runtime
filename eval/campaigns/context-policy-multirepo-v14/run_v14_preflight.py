@@ -24,6 +24,7 @@ if str(CAMPAIGN_DIR) not in sys.path:
     sys.path.insert(0, str(CAMPAIGN_DIR))
 from production_state import ProductionLedger, build_campaign_identities  # noqa: E402
 from profile_staging import build_frozen_profile_payload, frozen_profile_digest  # noqa: E402
+from codex_executable import inspect_codex_executable  # noqa: E402
 
 REPOSITORIES = ("click", "httpx", "python-dotenv")
 
@@ -60,7 +61,7 @@ def _docker_identities(contract: dict[str, Any]) -> dict[str, Any]:
     return output
 
 
-def _ambient_independence(snapshot) -> bool:
+def _ambient_independence(snapshot, executable: Path) -> bool:
     """Exercise Codex non-inference startup against a disposable ambient home."""
     with tempfile.TemporaryDirectory(prefix="arc-v14-ambient-") as raw:
         ambient = Path(raw)
@@ -69,7 +70,7 @@ def _ambient_independence(snapshot) -> bool:
         env = dict(os.environ)
         env["CODEX_HOME"] = str(ambient)
         result = subprocess.run(
-            ["codex", "--help"],
+            [str(executable), "--help"],
             env=env,
             capture_output=True,
             text=True,
@@ -128,13 +129,28 @@ def preflight(freeze_dir: Path) -> dict[str, Any]:
     if meta.plan_digest != manifest["meta_plan_digest"]:
         raise RuntimeError("meta plan digest mismatch")
 
-    version = subprocess.run(["codex", "--version"], capture_output=True, text=True, check=False)
-    auth = auth_status("codex", environment={"CODEX_HOME": runtime["codex_home"]})
+    executable = inspect_codex_executable(
+        runtime["codex_executable_path"],
+        expected_version=runtime["codex_executable_version"],
+        expected_sha256=runtime["codex_executable_sha256"],
+        expected_architecture=runtime["codex_executable_architecture"],
+    )
+    if manifest.get("codex_executable") != {
+        "path": str(executable.path),
+        "version": executable.version,
+        "sha256": executable.sha256,
+        "architecture": executable.architecture,
+        "release_asset_sha256": runtime["codex_release_asset_sha256"],
+    }:
+        raise RuntimeError("frozen Codex executable identity differs from live identity")
+    auth = auth_status(
+        "codex",
+        environment={"CODEX_HOME": runtime["codex_home"]},
+        executable=runtime["codex_executable_path"],
+    )
     docker = _docker_identities(contract)
     if docker != manifest["docker_identities"]:
         raise RuntimeError("frozen Docker identities differ from live identities")
-    if version.returncode or version.stdout.strip() != runtime["version"]:
-        raise RuntimeError("pinned Codex version is unavailable")
 
     with tempfile.TemporaryDirectory(prefix="arc-v14-ledger-preflight-") as directory:
         with ProductionLedger(
@@ -158,9 +174,14 @@ def preflight(freeze_dir: Path) -> dict[str, Any]:
         "semantic_projection_pass": True,
         "auth_gate": bool(auth.installed and auth.authenticated),
         "auth_state": auth.state,
-        "codex_version": version.stdout.strip(),
+        "codex_version": executable.version,
+        "codex_executable_path": str(executable.path),
+        "codex_executable_sha256": executable.sha256,
+        "codex_executable_architecture": executable.architecture,
         "docker_identities_verified": True,
-        "ambient_config_independence": _ambient_independence(source),
+        "ambient_config_independence": _ambient_independence(
+            source, Path(runtime["codex_executable_path"])
+        ),
         "runtime_contract_verified": True,
         "timeout_contract_verified": True,
         "provider_censor_contract_verified": True,
