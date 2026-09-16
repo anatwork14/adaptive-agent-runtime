@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import hashlib
 import importlib.util
+import sys
 from pathlib import Path
 from typing import Optional
 
@@ -26,6 +27,19 @@ from eval.studies.preregistration import (
 
 console = Console()
 VALID_VERIFICATION_LEVELS = {"V0", "V1", "V2", "V3"}
+_PRODUCTION_STATE_CAMPAIGN_MAP = {
+    "context-policy-multirepo-v13": "v13",
+    "context-policy-multirepo-v14": "v14",
+    "context-policy-multirepo-v15": "v15",
+    "context-policy-multirepo-v16": "v16",
+}
+
+
+def _production_state_version(campaign_id: str) -> str:
+    try:
+        return _PRODUCTION_STATE_CAMPAIGN_MAP[campaign_id]
+    except KeyError as exc:
+        raise ValueError(f"no production-state mapping for campaign {campaign_id!r}") from exc
 
 
 def _load_production_state(campaign_version: str = "v13"):
@@ -35,8 +49,14 @@ def _load_production_state(campaign_version: str = "v13"):
     )
     if spec is None or spec.loader is None:
         raise RuntimeError(f"unable to load {campaign_version} production state: {path}")
+    module_name = spec.name
     module = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(module)
+    sys.modules[module_name] = module
+    try:
+        spec.loader.exec_module(module)
+    except Exception:
+        sys.modules.pop(module_name, None)
+        raise
     return module
 
 
@@ -353,9 +373,7 @@ def register_study_commands(benchmark_app: typer.Typer) -> None:
                     raise typer.BadParameter(
                         "production integration options are incomplete: " + ", ".join(missing)
                     )
-                campaign_version = (
-                    "v14" if str(production_campaign_id).startswith("context-policy-multirepo-v14") else "v13"
-                )
+                campaign_version = _production_state_version(str(production_campaign_id))
                 production_state = _load_production_state(campaign_version)
                 production_ledger_handle = production_state.ProductionLedger(
                     production_ledger,
@@ -376,12 +394,12 @@ def register_study_commands(benchmark_app: typer.Typer) -> None:
                     repetition=repetition,
                     baseline=manifest.baseline,
                     plan_digest=plan.plan_digest,
-                    hidden_test_digest=manifest.runtime.hidden_tests_digest,
+                    hidden_test_digest=plan.runtime.hidden_tests_digest,
                     measurement_dir=production_ledger.parent / "measurements",
                     provider_model=str(manifest.model),
                     config_identity=_provider_codex_config_sha256(profile),
                     execution_mode=manifest.execution_mode,
-                    timeout_seconds=int(manifest.runtime.provider_execution_timeout_seconds or 600),
+                    timeout_seconds=int(plan.runtime.provider_execution_timeout_seconds or 600),
                 )
 
             runner = RepeatedPairedBenchmarkRunner(
