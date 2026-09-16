@@ -748,6 +748,39 @@ If deleting an index, summary, transcript projection, review cache, runtime proc
 | Repository-scale iso-cost benchmark | 🚧 research |
 | Desktop packaging | 🚧 future |
 
+## Experimental validation
+
+The latest preregistered multirepository validation campaign (V17/a001)
+executed 82 registered provider requests before a campaign-fatal infrastructure
+cleanup failure.
+
+At closure:
+
+- 32 tasks completed;
+- 48 ended in registered model-failure states;
+- 1 timed out;
+- 1 encountered an infrastructure failure;
+- 80 remained pending.
+
+The campaign therefore did not produce a complete aggregate score. Completed
+observations and execution evidence were retained, but the campaign is treated
+as partial validation rather than a complete benchmark result. These results do
+not support claims of full 162-task completion, a final cross-repository
+aggregate score, a complete baseline comparison, or complete statistical
+conclusions from the preregistered campaign.
+
+### Known limitations
+
+- The full 162-task campaign has not completed successfully.
+- No final V17 aggregate campaign score is available.
+- Historical hidden-artifact portability limitations may apply to the
+  preregistered benchmark environment; campaign artifacts are evidence, not a
+  requirement for ordinary ARC use.
+- Provider quotas or service failures may interrupt long-running campaigns.
+- Long-running benchmark execution has substantial token and resource cost.
+- Real provider wrappers remain experimental and are host-mode processes; ARC
+  does not yet provide full provider filesystem/network sandboxing.
+
 ---
 
 ## Repository structure
