@@ -124,6 +124,21 @@ class ConfigStore:
             mock.max_concurrency = max(mock.max_concurrency, 4)
         return config
 
+    @staticmethod
+    def load_explicit(path: str | Path) -> ArcConfig:
+        """Load an explicit profile/config file without consulting repository state.
+
+        Campaign execution uses this boundary for attempt-scoped staged profiles.
+        Unlike :meth:`load`, it does not synthesize the ambient ``mock`` profile
+        or apply a project override, so missing frozen fields cannot be filled
+        from defaults.
+        """
+        config_path = Path(path).expanduser().resolve()
+        if not config_path.is_file():
+            raise FileNotFoundError(f"explicit ARC profile does not exist: {config_path}")
+        raw = yaml.safe_load(config_path.read_text(encoding="utf-8")) or {}
+        return ArcConfig.model_validate(raw)
+
     def _ensure_runtime_ignored(self) -> None:
         """Keep `.arc/` local without mutating a user's committed .gitignore."""
         result = subprocess.run(

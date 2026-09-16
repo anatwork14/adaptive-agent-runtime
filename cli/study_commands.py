@@ -28,11 +28,13 @@ console = Console()
 VALID_VERIFICATION_LEVELS = {"V0", "V1", "V2", "V3"}
 
 
-def _load_v13_production_state():
-    path = Path(__file__).parents[1] / "eval" / "campaigns" / "context-policy-multirepo-v13" / "production_state.py"
-    spec = importlib.util.spec_from_file_location("context_policy_v13_production_state", path)
+def _load_production_state(campaign_version: str = "v13"):
+    path = Path(__file__).parents[1] / "eval" / "campaigns" / f"context-policy-multirepo-{campaign_version}" / "production_state.py"
+    spec = importlib.util.spec_from_file_location(
+        f"context_policy_{campaign_version}_production_state", path
+    )
     if spec is None or spec.loader is None:
-        raise RuntimeError(f"unable to load V13 production state: {path}")
+        raise RuntimeError(f"unable to load {campaign_version} production state: {path}")
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
     return module
@@ -217,17 +219,17 @@ def register_study_commands(benchmark_app: typer.Typer) -> None:
         production_ledger: Optional[Path] = typer.Option(
             None,
             "--production-ledger",
-            help="Authoritative V13 SQLite ledger for the real production path",
+            help="Authoritative production SQLite ledger for the real production path",
         ),
         production_manifest: Optional[Path] = typer.Option(
             None,
             "--production-manifest",
-            help="V13 pre-execution manifest paired with the authoritative ledger",
+            help="Pre-execution manifest paired with the authoritative ledger",
         ),
         production_checkpoint: Optional[Path] = typer.Option(
             None,
             "--production-checkpoint",
-            help="V13 checkpoint export paired with the authoritative ledger",
+            help="Checkpoint export paired with the authoritative ledger",
         ),
         production_campaign_id: Optional[str] = typer.Option(
             None,
@@ -241,13 +243,21 @@ def register_study_commands(benchmark_app: typer.Typer) -> None:
             None,
             "--production-repository",
         ),
+        production_profile: Optional[Path] = typer.Option(
+            None,
+            "--production-profile",
+            help="Explicit attempt-scoped ARC profile; campaign mode never falls back to repo-local state",
+        ),
     ) -> None:
         """Execute exactly the frozen preregistered repeated-study contract."""
         try:
             if not attempt_id or any(ch.isspace() for ch in attempt_id):
                 raise typer.BadParameter("attempt_id must be a non-empty token without whitespace")
             plan = load_preregistration(plan_file)
-            config = ConfigStore(repo).load(project_id)
+            if production_profile is not None:
+                config = ConfigStore.load_explicit(production_profile)
+            else:
+                config = ConfigStore(repo).load(project_id)
             profile = config.agents.get(plan.runtime.agent_profile)
             if profile is None:
                 raise typer.BadParameter(
@@ -327,6 +337,10 @@ def register_study_commands(benchmark_app: typer.Typer) -> None:
             production_state = None
             production_ledger_handle = None
             if production_ledger is not None:
+                if production_profile is None:
+                    raise typer.BadParameter(
+                        "production-profile is required for production ledger execution"
+                    )
                 required = {
                     "production-manifest": production_manifest,
                     "production-checkpoint": production_checkpoint,
@@ -339,7 +353,10 @@ def register_study_commands(benchmark_app: typer.Typer) -> None:
                     raise typer.BadParameter(
                         "production integration options are incomplete: " + ", ".join(missing)
                     )
-                production_state = _load_v13_production_state()
+                campaign_version = (
+                    "v14" if str(production_campaign_id).startswith("context-policy-multirepo-v14") else "v13"
+                )
+                production_state = _load_production_state(campaign_version)
                 production_ledger_handle = production_state.ProductionLedger(
                     production_ledger,
                     campaign_id=str(production_campaign_id),
@@ -348,7 +365,7 @@ def register_study_commands(benchmark_app: typer.Typer) -> None:
                     checkpoint_path=production_checkpoint,
                 )
                 if production_ledger_handle.logical_task_count() != 162:
-                    raise typer.BadParameter("V13 production ledger must contain exactly 162 tasks")
+                    raise typer.BadParameter("production ledger must contain exactly 162 tasks")
 
             def task_observer_factory(repetition: int, manifest):
                 if production_ledger_handle is None or production_state is None:
