@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import hashlib
+import importlib.util
 from pathlib import Path
 from typing import Optional
 
@@ -25,6 +26,16 @@ from eval.studies.preregistration import (
 
 console = Console()
 VALID_VERIFICATION_LEVELS = {"V0", "V1", "V2", "V3"}
+
+
+def _load_v13_production_state():
+    path = Path(__file__).parents[1] / "eval" / "campaigns" / "context-policy-multirepo-v13" / "production_state.py"
+    spec = importlib.util.spec_from_file_location("context_policy_v13_production_state", path)
+    if spec is None or spec.loader is None:
+        raise RuntimeError(f"unable to load V13 production state: {path}")
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
 
 
 def _fmt_metric(metric: AggregateMetric, digits: int = 4) -> str:
@@ -203,6 +214,33 @@ def register_study_commands(benchmark_app: typer.Typer) -> None:
                 "or invoking a provider."
             ),
         ),
+        production_ledger: Optional[Path] = typer.Option(
+            None,
+            "--production-ledger",
+            help="Authoritative V13 SQLite ledger for the real production path",
+        ),
+        production_manifest: Optional[Path] = typer.Option(
+            None,
+            "--production-manifest",
+            help="V13 pre-execution manifest paired with the authoritative ledger",
+        ),
+        production_checkpoint: Optional[Path] = typer.Option(
+            None,
+            "--production-checkpoint",
+            help="V13 checkpoint export paired with the authoritative ledger",
+        ),
+        production_campaign_id: Optional[str] = typer.Option(
+            None,
+            "--production-campaign-id",
+        ),
+        production_attempt_id: Optional[str] = typer.Option(
+            None,
+            "--production-attempt-id",
+        ),
+        production_repository: Optional[str] = typer.Option(
+            None,
+            "--production-repository",
+        ),
     ) -> None:
         """Execute exactly the frozen preregistered repeated-study contract."""
         try:
@@ -286,6 +324,49 @@ def register_study_commands(benchmark_app: typer.Typer) -> None:
                 console.print("provider_execution_started=false")
                 return
 
+            production_state = None
+            production_ledger_handle = None
+            if production_ledger is not None:
+                required = {
+                    "production-manifest": production_manifest,
+                    "production-checkpoint": production_checkpoint,
+                    "production-campaign-id": production_campaign_id,
+                    "production-attempt-id": production_attempt_id,
+                    "production-repository": production_repository,
+                }
+                missing = [name for name, value in required.items() if value in (None, "")]
+                if missing:
+                    raise typer.BadParameter(
+                        "production integration options are incomplete: " + ", ".join(missing)
+                    )
+                production_state = _load_v13_production_state()
+                production_ledger_handle = production_state.ProductionLedger(
+                    production_ledger,
+                    campaign_id=str(production_campaign_id),
+                    attempt_id=str(production_attempt_id),
+                    expected_tasks=162,
+                    checkpoint_path=production_checkpoint,
+                )
+                if production_ledger_handle.logical_task_count() != 162:
+                    raise typer.BadParameter("V13 production ledger must contain exactly 162 tasks")
+
+            def task_observer_factory(repetition: int, manifest):
+                if production_ledger_handle is None or production_state is None:
+                    return None
+                return production_state.ProductionTaskObserver(
+                    production_ledger_handle,
+                    repository=str(production_repository),
+                    repetition=repetition,
+                    baseline=manifest.baseline,
+                    plan_digest=plan.plan_digest,
+                    hidden_test_digest=manifest.runtime.hidden_tests_digest,
+                    measurement_dir=production_ledger.parent / "measurements",
+                    provider_model=str(manifest.model),
+                    config_identity=_provider_codex_config_sha256(profile),
+                    execution_mode=manifest.execution_mode,
+                    timeout_seconds=int(manifest.runtime.provider_execution_timeout_seconds or 600),
+                )
+
             runner = RepeatedPairedBenchmarkRunner(
                 repo,
                 output_root=output_root,
@@ -298,10 +379,12 @@ def register_study_commands(benchmark_app: typer.Typer) -> None:
                 hidden_tests_required=plan.runtime.hidden_tests_required,
                 provider_execution_timeout_seconds=plan.runtime.provider_execution_timeout_seconds
                 or config.provider_execution_timeout_seconds,
+                task_observer_factory=task_observer_factory if production_ledger is not None else None,
             )
             executed_study_id = f"{plan.study_id}-{attempt_id}"
-            result = asyncio.run(
-                runner.run(
+            try:
+                result = asyncio.run(
+                    runner.run(
                     plan.manifests,
                     lambda: build_agent(profile),
                     repeats=plan.design.repeats,
@@ -318,8 +401,11 @@ def register_study_commands(benchmark_app: typer.Typer) -> None:
                         "plan_digest": plan.plan_digest,
                         "predeclared_exclusions": list(plan.design.exclusions),
                     },
+                    )
                 )
-            )
+            finally:
+                if production_ledger_handle is not None:
+                    production_ledger_handle.close()
             _print_result(result)
             console.print(f"plan_digest={plan.plan_digest}")
             console.print(

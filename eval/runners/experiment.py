@@ -6,7 +6,7 @@ import math
 import subprocess
 import time
 from statistics import fmean
-from typing import List, Optional
+from typing import Any, List, Optional
 
 from adapters.base import AgentAdapter
 from context.policy import ContextPolicy
@@ -96,8 +96,14 @@ class ExperimentRunner:
     trace-derived measurement are shared.
     """
 
-    def __init__(self, grader: Optional[HiddenTestGrader] = None) -> None:
+    def __init__(
+        self,
+        grader: Optional[HiddenTestGrader] = None,
+        *,
+        task_observer: Any | None = None,
+    ) -> None:
         self.grader = grader
+        self.task_observer = task_observer
         self.last_measurements: list[TaskMeasurement] = []
 
     @staticmethod
@@ -235,12 +241,24 @@ class ExperimentRunner:
         for task_id in task_ids:
             event_start = orchestrator.event_store.current_version(orchestrator.project_id)
             started = time.perf_counter()
-            gate_result = await orchestrator.execute_task(
-                task_id,
-                agent,
-                agent_id,
-                context_policy=context_policy,
-            )
+            ticket = self.task_observer.begin_task(task_id) if self.task_observer else None
+            try:
+                gate_result = await orchestrator.execute_task(
+                    task_id,
+                    agent,
+                    agent_id,
+                    context_policy=context_policy,
+                    before_provider=(
+                        (lambda ticket=ticket: self.task_observer.before_provider(ticket))
+                        if self.task_observer and ticket is not None
+                        else None
+                    ),
+                    continue_on_agent_failure=self.task_observer is not None,
+                )
+            except BaseException:
+                if self.task_observer and ticket is not None:
+                    self.task_observer.fail_unexpected(ticket)
+                raise
             end_to_end_ms = (time.perf_counter() - started) * 1000.0
             event_end = orchestrator.event_store.current_version(orchestrator.project_id)
             events = orchestrator.event_store.read_range(
@@ -263,8 +281,7 @@ class ExperimentRunner:
                 hidden_passed = grade.passed
                 hidden_count = grade.total_hidden_tests
 
-            measurements.append(
-                TaskMeasurement(
+            measurement = TaskMeasurement(
                     benchmark_id=benchmark_id,
                     baseline=baseline,
                     task_id=task_id,
@@ -303,7 +320,14 @@ class ExperimentRunner:
                     event_end=event_end,
                     candidate_commit_sha=trace.candidate_commit_sha,
                 )
-            )
+            measurements.append(measurement)
+            if self.task_observer and ticket is not None:
+                self.task_observer.finish(
+                    ticket,
+                    result=orchestrator.last_agent_result,
+                    completed=gate_result.status == GateStatus.ACCEPTED,
+                    measurement=measurement.model_dump(mode="json"),
+                )
 
         self.last_measurements = measurements
         return summarize_measurements(measurements)

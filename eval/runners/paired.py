@@ -52,6 +52,7 @@ class IsolatedPairedBenchmarkResult:
 
 
 AgentFactory = Callable[[], AgentAdapter]
+TaskObserverFactory = Callable[[BenchmarkManifest], Any]
 
 
 def blind_context_for_provider(context: ContextPacket) -> ContextPacket:
@@ -137,6 +138,7 @@ class IsolatedPairedBenchmarkRunner:
         hidden_test_dir: str | Path | None = None,
         hidden_tests_required: bool | None = None,
         provider_execution_timeout_seconds: int = 180,
+        task_observer_factory: TaskObserverFactory | None = None,
     ) -> None:
         self.source_repo = Path(source_repo).resolve()
         self.output_root = (
@@ -162,6 +164,7 @@ class IsolatedPairedBenchmarkRunner:
         if provider_execution_timeout_seconds < 1:
             raise ValueError("provider_execution_timeout_seconds must be positive")
         self.provider_execution_timeout_seconds = provider_execution_timeout_seconds
+        self.task_observer_factory = task_observer_factory
         self.output_root.mkdir(parents=True, exist_ok=True)
         self.workspace_root.mkdir(parents=True, exist_ok=True)
 
@@ -356,7 +359,12 @@ class IsolatedPairedBenchmarkRunner:
                     if self.hidden_test_dir
                     else None
                 )
-                runner = ExperimentRunner(grader=grader)
+                observer = (
+                    self.task_observer_factory(manifest)
+                    if self.task_observer_factory is not None
+                    else None
+                )
+                runner = ExperimentRunner(grader=grader, task_observer=observer)
                 summary = await runner.run_manifest(
                     orchestrator,
                     manifest,

@@ -66,6 +66,7 @@ class RepeatedPairedBenchmarkResult:
 
 
 AgentFactory = Callable[[], AgentAdapter]
+TaskObserverFactory = Callable[[int, BenchmarkManifest], Any]
 
 
 def balanced_execution_orders(
@@ -321,6 +322,7 @@ class RepeatedPairedBenchmarkRunner:
         hidden_test_dir: str | Path | None = None,
         hidden_tests_required: bool | None = None,
         provider_execution_timeout_seconds: int = 180,
+        task_observer_factory: TaskObserverFactory | None = None,
     ) -> None:
         self.source_repo = Path(source_repo).resolve()
         self.output_root = (
@@ -346,6 +348,7 @@ class RepeatedPairedBenchmarkRunner:
         if provider_execution_timeout_seconds < 1:
             raise ValueError("provider_execution_timeout_seconds must be positive")
         self.provider_execution_timeout_seconds = provider_execution_timeout_seconds
+        self.task_observer_factory = task_observer_factory
         self.output_root.mkdir(parents=True, exist_ok=True)
         self.workspace_root.mkdir(parents=True, exist_ok=True)
 
@@ -450,6 +453,11 @@ class RepeatedPairedBenchmarkRunner:
                     hidden_test_dir=self.hidden_test_dir,
                     hidden_tests_required=self.hidden_tests_required,
                     provider_execution_timeout_seconds=self.provider_execution_timeout_seconds,
+                    task_observer_factory=(
+                        (lambda manifest, index=index: self.task_observer_factory(index, manifest))
+                        if self.task_observer_factory is not None
+                        else None
+                    ),
                 )
                 repeat_result = await runner.run(
                     repeated_manifests,

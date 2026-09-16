@@ -1,0 +1,17 @@
+{
+  "authentication_required": true,
+  "codex_version": "codex-cli 0.133.0-alpha.1",
+  "config_sha256": "a2c7992cdb0937eb35e2df7753550ad0242fc02e71675c6af519dfb28a7bd2bd",
+  "config_size": 50,
+  "credentials_in_snapshot": false,
+  "provider": "codex",
+  "schema_version": 1,
+  "scientific_fields": [
+    "model",
+    "model_reasoning_effort"
+  ],
+  "semantic_projection": {
+    "model": "gpt-5.5",
+    "model_reasoning_effort": "high"
+  }
+}

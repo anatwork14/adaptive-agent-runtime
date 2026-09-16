@@ -3,7 +3,7 @@
 import asyncio
 import uuid
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Callable, Dict, List, Optional
 
 from adapters.base import (
     AgentAdapter,
@@ -80,6 +80,7 @@ class Orchestrator:
         # Agent work may be concurrent. Verification/integration remains a
         # single-writer critical section by construction rather than by event-loop accident.
         self._integration_lock = asyncio.Lock()
+        self.last_agent_result: AgentRunResult | None = None
 
     def init_project(self, spec: Dict[str, Any], constraints: Optional[List[str]] = None) -> int:
         return self.event_store.append(
@@ -196,6 +197,8 @@ class Orchestrator:
         agent_id: str,
         *,
         context_policy: ContextPolicy | None = None,
+        before_provider: Callable[[], None] | None = None,
+        continue_on_agent_failure: bool = False,
     ) -> GateResult:
         """Run one task from a selected context policy through one shared gate path.
 
@@ -265,6 +268,8 @@ class Orchestrator:
                 timeout_seconds=self.provider_execution_timeout_seconds,
             )
             try:
+                if before_provider is not None:
+                    before_provider()
                 agent_result: AgentRunResult = await agent.run(
                     context=packet,
                     workspace=worktree_path,
@@ -284,6 +289,8 @@ class Orchestrator:
                     else "launch_error",
                     stderr_tail=detail[-4000:],
                 )
+
+            self.last_agent_result = agent_result
 
             self._persist_provider_telemetry(
                 task_id=task_id,
@@ -316,6 +323,19 @@ class Orchestrator:
                     task_id=task_id,
                     payload=diagnostics,
                 )
+                if continue_on_agent_failure:
+                    return GateResult(
+                        gate_run_id=f"provider-failure-{uuid.uuid4().hex[:8]}",
+                        patch_id="",
+                        task_id=task_id,
+                        agent_id=agent_id,
+                        dispatch_state_version=dispatch_v,
+                        gate_state_version=self.event_store.current_version(self.project_id),
+                        status=GateStatus.REJECTED,
+                        rejection_stage="provider",
+                        error_detail=agent_result.summary or agent_result.status,
+                        verification_level=self.gate.verification_level,
+                    )
                 raise RuntimeError(
                     f"agent {agent_id} did not complete task {task_id}: {agent_result.status}"
                 )
