@@ -52,6 +52,7 @@ from profile_staging import (  # noqa: E402
     load_staged_profile,
     stage_frozen_repository_profiles,
 )
+from codex_executable import inspect_codex_executable  # noqa: E402
 
 SCHEMA = "arc-campaign-execution-v14"
 REPOSITORY_ORDER = ("click", "httpx", "python-dotenv")
