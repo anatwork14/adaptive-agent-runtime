@@ -13,6 +13,7 @@ from integrations.agent_bridge import (
     AgentBridgeClient,
     BridgeIntegrationError,
 )
+from state.events import EventStore
 
 
 RUN_PROJECTION = {
@@ -435,3 +436,28 @@ def test_invalid_idempotency_key_is_rejected_before_network(
             idempotency_key="contains spaces",
         )
     assert bridge_server.submission_requests == []
+
+
+def test_completed_bridge_run_does_not_mutate_arc_authoritative_state(
+    bridge_server: _BridgeFixtureServer,
+    tmp_path,
+) -> None:
+    store = EventStore(tmp_path / "bridge_authority.db")
+    store.append(
+        actor="operator",
+        kind="task.created",
+        project_id="arc-project",
+        task_id="T001",
+        payload={"goal": "authoritative ARC task"},
+    )
+    version_before = store.current_version("arc-project")
+
+    run = _client(bridge_server).get_dag_run("rrun_arc_1")
+
+    assert run.status == "completed"
+    assert store.current_version("arc-project") == version_before
+    assert all(
+        event.kind != "gate.accepted"
+        for event in store.read_all(project_id="arc-project")
+    )
+    store.close()
